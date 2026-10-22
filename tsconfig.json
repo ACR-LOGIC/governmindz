@@ -1,0 +1,31 @@
+{
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"strict": true,
+		"noImplicitAny": false,
+		"noUnusedLocals": false,
+		"noUnusedParameters": false,
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"forceConsistentCasingInFileNames": true,
+		"lib": ["ES2022", "DOM"],
+		"noEmit": true,
+		"allowJs": false,
+		"checkJs": false,
+		"resolveJsonModule": true,
+		"paths": {
+			"@governmindz/core": ["./libs/core/src/index.ts"],
+			"@governmindz/core/*": ["./libs/core/src/*"],
+			"@governmindz/mcp-core": ["./libs/mcp-core/src/index.ts"],
+			"@governmindz/mcp-core/*": ["./libs/mcp-core/src/*"]
+		}
+	},
+	"include": [
+		"libs/**/src/**/*.ts",
+		"libs/**/test/**/*.ts",
+		"apps/**/src/**/*.ts",
+		"src/types/environment.d.ts"
+	]
+}

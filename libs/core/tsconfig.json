@@ -1,0 +1,19 @@
+{
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"strict": true,
+		"noUnusedLocals": false,
+		"noUnusedParameters": false,
+		"outDir": "./dist",
+		"rootDir": "./src",
+		"composite": true,
+		"isolatedDeclarations": false,
+		"declaration": true,
+		"allowJs": false,
+		"checkJs": false,
+		"noEmit": true
+	},
+	"include": ["src/**/*"]
+}

@@ -1,0 +1,14 @@
+{
+	"name": "@governmindz/gateway",
+	"private": true,
+	"version": "0.1.0",
+	"type": "module",
+	"scripts": {
+		"build": "tsc --noEmit",
+		"start": "node --env-file=../../.env.local --import tsx src/main.ts",
+		"demo": "node --env-file=../../.env.local --import tsx src/main.ts",
+		"demo:dry": "node --env-file=../../.env.local --import tsx src/main.ts --dry-run",
+		"smoke": "node --env-file=../../.env.local --import tsx src/smoke.ts",
+		"typecheck": "tsc --noEmit"
+	}
+}

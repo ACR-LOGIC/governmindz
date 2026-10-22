@@ -1,0 +1,18 @@
+{
+	"name": "governmindz",
+	"private": true,
+	"version": "0.1.0",
+	"description": "GOVERNMINDZ — role-based multi-agent debate with Zetaris Lightning and Meterless Runtime integrations.",
+	"type": "module",
+	"scripts": {
+		"typecheck": "tsc --noEmit",
+		"test": "node --test --import tsx libs/core/test/gravity.test.ts libs/core/test/meterless.test.ts libs/core/test/zetaris.test.ts",
+		"demo": "node --env-file=.env.local --import tsx apps/gateway/src/main.ts",
+		"demo:dry": "node --env-file=.env.local --import tsx apps/gateway/src/main.ts --dry-run",
+		"smoke": "node --env-file=.env.local --import tsx apps/gateway/src/smoke.ts"
+	},
+	"devDependencies": {
+		"tsx": "^4.20.6",
+		"typescript": "^6.0.3"
+	}
+}
