@@ -48,12 +48,22 @@ flowchart LR
 
 The sample path uses the same `DebateLoop`, seats, prompts, consensus logic, and audit emitter as the live path. It replaces only the two external dependencies: cached Zetaris rows and cached seat replies.
 
+### Visual walkthrough
+
+These animated traces are generated from the same JSONL artifacts produced by the CLI.
+
+![Sample run](assets/sample-run.gif)
+
+![Audit chain](assets/audit-chain.gif)
+
+![Consensus](assets/consensus.gif)
+
 ## Installation & Setup
 
 Requirements: Node.js 22 or later, npm, and (for a live run) a local Meterless Runtime plus access to a Zetaris Lightning instance.
 
 ```bash
-git clone <this-repository-url>
+git clone https://github.com/ACR-LOGIC/governmindz.git
 cd governmindz
 npm ci
 ```
@@ -61,7 +71,7 @@ npm ci
 Windows PowerShell:
 
 ```powershell
-git clone <this-repository-url>
+git clone https://github.com/ACR-LOGIC/governmindz.git
 Set-Location governmindz
 npm ci
 ```
