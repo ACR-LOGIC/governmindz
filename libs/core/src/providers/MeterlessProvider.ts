@@ -1,4 +1,3 @@
-// Copyright (c) 2026 ACR Logic.
 
 import type { ProviderRequestOptions } from "../interfaces/IProvider";
 import type { ProviderResponse } from "../types";

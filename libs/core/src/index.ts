@@ -1,4 +1,3 @@
-// Copyright (c) 2026 ACR Logic.
 
 // GOVERNMINDZ core kernel — baseline exports only.
 // Excluded from baseline: multi-provider failover/router/key-router,

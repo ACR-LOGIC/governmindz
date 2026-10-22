@@ -1,5 +1,4 @@
 // biome-ignore-all lint/style/noNonNullAssertion: legacy code pending refactor
-// Copyright (c) 2026 ACR Logic.
 
 // packages/core/src/debate/DebateLoop.ts — v1.3 TRANSCRIPT-PERSISTENCE
 

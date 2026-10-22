@@ -1,4 +1,3 @@
-// Copyright (c) 2026 ACR Logic.
 
 import { createHash } from "node:crypto";
 import { Logger } from "../kernel/Logger";

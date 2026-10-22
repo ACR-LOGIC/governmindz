@@ -1,4 +1,3 @@
-// Copyright (c) 2026 ACR Logic.
 
 /**
  * GravityFormula — role-based gravity weighting for the GOVERNMINDZ debate baseline.

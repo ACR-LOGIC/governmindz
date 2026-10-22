@@ -1,5 +1,4 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: legacy untyped interfaces pending refactor
-// Copyright (c) 2026 ACR Logic.
 
 import { randomUUID } from "node:crypto";
 import { Logger } from "../kernel/Logger";

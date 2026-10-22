@@ -1,4 +1,3 @@
-// Copyright (c) 2026 ACR Logic.
 
 import { MeterlessProvider } from "../providers/MeterlessProvider.js";
 

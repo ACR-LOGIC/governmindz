@@ -1,5 +1,4 @@
 // biome-ignore-all lint/style/noNonNullAssertion: legacy code pending refactor
-// Copyright (c) 2026 ACR Logic.
 
 import type { IAgent } from "../interfaces/IAgent";
 import { ProviderFactory } from "../providers/ProviderFactory.js";

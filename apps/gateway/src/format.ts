@@ -1,4 +1,3 @@
-// Copyright (c) 2026 ACR Logic.
 
 import type { ZetarisQueryResult } from "@governmindz/core/integrations/zetarisClient";
 

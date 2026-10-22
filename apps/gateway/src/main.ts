@@ -1,4 +1,3 @@
-// Copyright (c) 2026 ACR Logic.
 
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";

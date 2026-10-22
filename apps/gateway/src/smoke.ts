@@ -1,4 +1,3 @@
-// Copyright (c) 2026 ACR Logic.
 
 import { randomUUID } from "node:crypto";
 import { MeterlessProvider } from "@governmindz/core/providers/MeterlessProvider";

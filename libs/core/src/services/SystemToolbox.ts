@@ -1,6 +1,5 @@
 // TODO(build-window): SystemToolbox real capabilities (Vision/Translation/Language/Speech/Linter)
 // backed by Google Cloud client libraries are not installed in baseline.
-// Copyright (c) 2026 ACR Logic.
 
 /**
  * SystemToolbox — minimal baseline placeholder.

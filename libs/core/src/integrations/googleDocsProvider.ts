@@ -1,4 +1,3 @@
-// Copyright (c) 2026 ACR Logic.
 
 const STORAGE_KEY = "governmindz_gdocs";
 const AUTH_STORAGE_KEY = "governmindz_auth_token";

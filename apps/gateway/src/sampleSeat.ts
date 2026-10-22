@@ -1,4 +1,3 @@
-// Copyright (c) 2026 ACR Logic.
 
 import type { ILLMClient, LLMResult } from "@governmindz/core/debate/AgentSeat";
 import type { SampleReply } from "./sampleScenario.js";

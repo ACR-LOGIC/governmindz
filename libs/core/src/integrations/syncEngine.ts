@@ -1,6 +1,5 @@
 // biome-ignore-all lint/suspicious/useIterableCallbackReturn: legacy code pending refactor
 // biome-ignore-all lint/suspicious/noExplicitAny: legacy untyped interfaces pending refactor
-// Copyright (c) 2026 ACR Logic.
 
 import { GoogleDocsProvider } from "./googleDocsProvider";
 import { NotionProvider } from "./notionProvider";

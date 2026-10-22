@@ -1,4 +1,3 @@
-// Copyright (c) 2026 ACR Logic.
 
 import type { ILLMClient, LLMResult } from "../debate/AgentSeat.js";
 import { MeterlessProvider } from "./MeterlessProvider.js";

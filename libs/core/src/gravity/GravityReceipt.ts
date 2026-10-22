@@ -1,4 +1,3 @@
-// Copyright (c) 2026 ACR Logic.
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { GravitySignals } from "./GravityFormula";

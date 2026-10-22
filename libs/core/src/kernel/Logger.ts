@@ -1,4 +1,3 @@
-// Copyright (c) 2026 ACR Logic.
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 

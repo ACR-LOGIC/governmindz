@@ -1,5 +1,4 @@
 // biome-ignore-all lint/style/noNonNullAssertion: legacy code pending refactor
-// Copyright (c) 2026 ACR Logic.
 
 import fs from "node:fs";
 import path from "node:path";

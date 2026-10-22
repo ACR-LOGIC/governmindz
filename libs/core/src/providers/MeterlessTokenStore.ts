@@ -1,4 +1,3 @@
-// Copyright (c) 2026 ACR Logic.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";

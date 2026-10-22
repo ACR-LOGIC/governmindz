@@ -1,6 +1,5 @@
 // biome-ignore-all lint/style/noNonNullAssertion: legacy code pending refactor
 // biome-ignore-all lint/suspicious/noExplicitAny: legacy untyped interfaces pending refactor
-// Copyright (c) 2026 ACR Logic.
 
 const STORAGE_KEY = "governmindz_notion";
 const AUTH_STORAGE_KEY = "governmindz_auth_token";

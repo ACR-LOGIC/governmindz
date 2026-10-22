@@ -1,4 +1,3 @@
-// Copyright (c) 2026 ACR Logic.
 
 import type { MessageType } from "../debate/AgentMessage";
 import type { PromptPayload } from "../prompt-cache/types";

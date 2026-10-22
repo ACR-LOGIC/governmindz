@@ -1,4 +1,3 @@
-// Copyright (c) 2026 ACR Logic.
 
 import type { GravitySignals } from "../gravity/GravityFormula";
 import { type MCPToolDefinition, mcpToolRouter } from "../mcp/MCPToolRouter";

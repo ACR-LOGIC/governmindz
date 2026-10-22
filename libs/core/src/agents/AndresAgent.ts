@@ -1,4 +1,3 @@
-// Copyright (c) 2026 ACR Logic.
 
 import type { AgentContext, AgentResult } from "../interfaces/IAgent.js";
 import { ADKAgent } from "./adk/ADKAgent.js";

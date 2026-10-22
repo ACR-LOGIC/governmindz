@@ -1,4 +1,3 @@
-// Copyright (c) 2026 ACR Logic.
 
 // packages/core/src/scoring/ConfidenceScorer.ts — v1.1 ENHANCED
 import type { AgentMessage } from "../debate/AgentMessage";

@@ -1,5 +1,4 @@
 // TODO(build-window): zod schema validation removed from baseline (zod not installed).
-// Copyright (c) 2026 ACR Logic.
 
 import type { AgentContext, AgentResult } from "../../interfaces/IAgent.js";
 

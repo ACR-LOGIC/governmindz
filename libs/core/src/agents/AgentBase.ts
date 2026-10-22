@@ -1,4 +1,3 @@
-// Copyright (c) 2026 ACR Logic.
 
 import type { AgentContext, AgentResult, IAgent } from "../interfaces/IAgent";
 import { renderPromptPayloadMessages } from "../prompt-cache/PromptPayloadBuilder";

@@ -1,4 +1,3 @@
-// Copyright (c) 2026 ACR Logic.
 // Plain (non-zod) type declarations for the GOVERNMINDZ baseline.
 // zod was excluded from baseline (no new installs); schemas are expressed as
 // plain TypeScript interfaces instead.

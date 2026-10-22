@@ -1,4 +1,3 @@
-// Copyright (c) 2026 ACR Logic.
 
 // packages/core/src/debate/AgentSeat.ts — v1.1 ENHANCED
 
