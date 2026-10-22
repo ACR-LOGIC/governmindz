@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/governmindz-title.png" alt="GOVERNMINDZ" width="100%"></p>
+
 # GOVERNMINDZ
 
 **A governed multi-agent debate system that explains its answer and shows the evidence behind it.**
