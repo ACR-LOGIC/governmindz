@@ -209,7 +209,7 @@ NVIDIA Nemotron is reached indirectly through Meterless. In the verified run, th
 
 ### Cursor (with Space XAI)
 
-Cursor and SpaceXAI were **not used** for this build. Development and review were performed in OpenCode, and there is no Cursor- or SpaceXAI-specific runtime dependency, configuration, or integration in the repository. This disclosure is included so the submission does not overstate sponsor usage.
+Cursor was integrated at the start of the project and remained in use. The project is now developed with Cursor as the primary editor while OpenCode is used in the terminal side panel. Cursor/SpaceXAI are development workflow tools, not runtime dependencies: there is no Cursor- or SpaceXAI-specific runtime dependency, configuration, or integration in the repository.
 
 ## Data Sources & Licensing
 
