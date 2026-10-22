@@ -1,0 +1,278 @@
+{
+  "mode": "sample",
+  "generated_at": "2026-10-22T13:00:15.407Z",
+  "scenario_id": "federated-evidence",
+  "scenario_file": "02-federated-evidence.json",
+  "topic": "How should an agent combine fragmented Zetaris sources into an evidence-backed answer without inventing missing data?",
+  "zetaris": {
+    "query": "SHOW LIGHTNING DATABASES",
+    "columns": [
+      "database",
+      "source_type",
+      "freshness"
+    ],
+    "rows": [
+      [
+        "crm_lightning",
+        "postgres",
+        "15m"
+      ],
+      [
+        "billing_lightning",
+        "api",
+        "1h"
+      ],
+      [
+        "support_lightning",
+        "parquet",
+        "24h"
+      ]
+    ],
+    "total": 3
+  },
+  "result": {
+    "session_id": "d4004561-9e8c-4075-b03c-be3542fdb461",
+    "query_hash": "qh_mvjjtmzv",
+    "transcript": [
+      {
+        "id": "3bb2c10b-a99a-49c4-b115-80724a20832a",
+        "fromSeat": "FactChecker",
+        "toSeat": "all",
+        "type": "proposal",
+        "content": "Name the source and freshness beside every claim. The cached evidence lists three sources with different freshness windows, so a combined answer must not imply they were observed at the same time.",
+        "confidence": 0.8,
+        "structured": {
+          "position": "Name the source and freshness beside every claim. The cached evidence lists three sources with different freshness windows, so a combined answer must not imply they were observed at the same time.",
+          "confidenceSelf": 0.8,
+          "confidence_self": 0.8,
+          "confidenceExpertAgreement": 0.77,
+          "confidence_expert_agreement": 0.77,
+          "evidence": [
+            "crm_lightning freshness 15m",
+            "billing_lightning freshness 1h",
+            "support_lightning freshness 24h"
+          ],
+          "caveats": [
+            "Freshness labels do not prove row-level completeness."
+          ],
+          "outputs": [],
+          "dissentsFrom": [],
+          "dissents_from": [],
+          "supports": []
+        },
+        "round": 0,
+        "timestamp": 1792674015399,
+        "latency_ms": 2,
+        "token_count": 71
+      },
+      {
+        "id": "eb9f5644-05dd-4a50-9237-ac7eba2b5be4",
+        "fromSeat": "CloudArchitect",
+        "toSeat": "all",
+        "type": "proposal",
+        "content": "Build an evidence envelope: source id, query, timestamp, freshness, columns, and row counts. The debate should consume that envelope instead of raw disconnected rows.",
+        "confidence": 0.81,
+        "structured": {
+          "position": "Build an evidence envelope: source id, query, timestamp, freshness, columns, and row counts. The debate should consume that envelope instead of raw disconnected rows.",
+          "confidenceSelf": 0.81,
+          "confidence_self": 0.81,
+          "confidenceExpertAgreement": 0.78,
+          "confidence_expert_agreement": 0.78,
+          "evidence": [
+            "The demo formats Zetaris results into a bounded context",
+            "The audit trail records the session result"
+          ],
+          "caveats": [
+            "The current context formatter does not include freshness metadata automatically."
+          ],
+          "outputs": [],
+          "dissentsFrom": [],
+          "dissents_from": [],
+          "supports": []
+        },
+        "round": 0,
+        "timestamp": 1792674015400,
+        "latency_ms": 1,
+        "token_count": 66
+      },
+      {
+        "id": "dff2b7aa-1e5c-4583-9c52-0a64be5073f4",
+        "fromSeat": "Synthesizer",
+        "toSeat": "all",
+        "type": "proposal",
+        "content": "The safe answer is to present source-level findings, label freshness, and separate observed facts from cross-source inferences.",
+        "confidence": 0.84,
+        "structured": {
+          "position": "The safe answer is to present source-level findings, label freshness, and separate observed facts from cross-source inferences.",
+          "confidenceSelf": 0.84,
+          "confidence_self": 0.84,
+          "confidenceExpertAgreement": 0.82,
+          "confidence_expert_agreement": 0.82,
+          "evidence": [
+            "Three sources with distinct freshness windows",
+            "No common key is visible"
+          ],
+          "caveats": [
+            "The sample is synthetic and does not include source schemas."
+          ],
+          "outputs": [],
+          "dissentsFrom": [],
+          "dissents_from": [],
+          "supports": []
+        },
+        "round": 0,
+        "timestamp": 1792674015400,
+        "latency_ms": 0,
+        "token_count": 49
+      },
+      {
+        "id": "41814b76-eda3-469f-85ec-8e96a00480c6",
+        "fromSeat": "FactChecker",
+        "toSeat": "all",
+        "type": "consensus",
+        "content": "The evidence supports a provenance-first answer: cite each source separately, state its freshness, and mark any cross-source conclusion as an inference rather than a directly observed fact.",
+        "confidence": 0.89,
+        "structured": {
+          "position": "The evidence supports a provenance-first answer: cite each source separately, state its freshness, and mark any cross-source conclusion as an inference rather than a directly observed fact.",
+          "confidenceSelf": 0.89,
+          "confidence_self": 0.89,
+          "confidenceExpertAgreement": 0.87,
+          "confidence_expert_agreement": 0.87,
+          "evidence": [
+            "Three sources have different freshness values",
+            "No shared join key is present in the sample"
+          ],
+          "caveats": [
+            "A real join may require keys that are not in this evidence."
+          ],
+          "outputs": [],
+          "dissentsFrom": [],
+          "dissents_from": [],
+          "supports": [
+            "CloudArchitect"
+          ]
+        },
+        "round": 1,
+        "timestamp": 1792674015402,
+        "latency_ms": 1,
+        "token_count": 70
+      },
+      {
+        "id": "3124df76-3872-4be4-803c-5e5595aeba9e",
+        "fromSeat": "CloudArchitect",
+        "toSeat": "all",
+        "type": "consensus",
+        "content": "Use a source-aware context builder, preserve per-source attribution in the transcript, and make the synthesizer return explicit gaps. Do not merge sources unless a documented key and freshness window support the join.",
+        "confidence": 0.9,
+        "structured": {
+          "position": "Use a source-aware context builder, preserve per-source attribution in the transcript, and make the synthesizer return explicit gaps. Do not merge sources unless a documented key and freshness window support the join.",
+          "confidenceSelf": 0.9,
+          "confidence_self": 0.9,
+          "confidenceExpertAgreement": 0.88,
+          "confidence_expert_agreement": 0.88,
+          "evidence": [
+            "Three heterogeneous sources are listed",
+            "No join key is included in the sample evidence"
+          ],
+          "caveats": [
+            "Schema-level key discovery is a next step, not part of this demo."
+          ],
+          "outputs": [],
+          "dissentsFrom": [],
+          "dissents_from": [],
+          "supports": [
+            "FactChecker"
+          ]
+        },
+        "round": 1,
+        "timestamp": 1792674015402,
+        "latency_ms": 0,
+        "token_count": 76
+      },
+      {
+        "id": "c428b899-db1c-46f8-a72f-a1b82d24d6f0",
+        "fromSeat": "Synthesizer",
+        "toSeat": "all",
+        "type": "consensus",
+        "content": "Recommended pattern: attribute every claim to a source, include freshness and query metadata, and return a gaps section when a join key or source is missing. The debate can still recommend a direction, but it must not fabricate a unified record.",
+        "confidence": 0.91,
+        "structured": {
+          "position": "Recommended pattern: attribute every claim to a source, include freshness and query metadata, and return a gaps section when a join key or source is missing. The debate can still recommend a direction, but it must not fabricate a unified record.",
+          "confidenceSelf": 0.91,
+          "confidence_self": 0.91,
+          "confidenceExpertAgreement": 0.89,
+          "confidence_expert_agreement": 0.89,
+          "evidence": [
+            "Source-aware evidence is available",
+            "The transcript preserves per-seat positions",
+            "The audit record captures the final confidence"
+          ],
+          "caveats": [
+            "Production joins need schema discovery and data-quality checks."
+          ],
+          "outputs": [],
+          "dissentsFrom": [],
+          "dissents_from": [],
+          "supports": [
+            "FactChecker",
+            "CloudArchitect"
+          ]
+        },
+        "round": 1,
+        "timestamp": 1792674015402,
+        "latency_ms": 0,
+        "token_count": 92
+      }
+    ],
+    "rounds": 1,
+    "consensusReached": true,
+    "finalConfidence": 0.9,
+    "consensus_method": "threshold",
+    "quarantined_seats": [],
+    "seat_votes": {
+      "FactChecker": {
+        "position": "The evidence supports a provenance-first answer: cite each source separately, state its freshness, and mark any cross-source conclusion as an inference rather than a directly observed fact.",
+        "confidence": 0.89,
+        "dissented": false
+      },
+      "CloudArchitect": {
+        "position": "Use a source-aware context builder, preserve per-source attribution in the transcript, and make the synthesizer return explicit gaps. Do not merge sources unless a documented key and freshness window support the join.",
+        "confidence": 0.9,
+        "dissented": false
+      },
+      "Synthesizer": {
+        "position": "Recommended pattern: attribute every claim to a source, include freshness and query metadata, and return a gaps section when a join key or source is missing. The debate can still recommend a direction, but it must not fabricate a unified record.",
+        "confidence": 0.91,
+        "dissented": false
+      }
+    },
+    "timestamp": 1792674015403,
+    "halted": false,
+    "transportMode": "in_process",
+    "compression": {
+      "tokenEstimateBefore": 133,
+      "tokenEstimateAfter": 158,
+      "compactionCount": 0
+    }
+  },
+  "audit": {
+    "integrity": true,
+    "events": [
+      {
+        "event_type": "session_complete",
+        "session_id": "d4004561-9e8c-4075-b03c-be3542fdb461",
+        "timestamp": 1792674015403,
+        "payload": {
+          "rounds": 1,
+          "consensus_reached": true,
+          "final_confidence": 0.9,
+          "seat_vote_count": 3
+        },
+        "id": "audit_1792674015403_2repp",
+        "previous_hash": "c910699e010057fee5424ddcb6751ac88b20169be78af84a4741e0754e5d8b59",
+        "hash": "357548a035327dcaf7dbc14917a7488319dff3bc552c6a4fe0d8f7809d7468b5",
+        "signature": "6187aea1b754f7e5573c301724086011ba31ae8657da9f44337125a4d5640424"
+      }
+    ]
+  }
+}

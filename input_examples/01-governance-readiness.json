@@ -1,0 +1,70 @@
+{
+	"id": "governance-readiness",
+	"topic": "Which governance controls should a data team verify before exposing Zetaris federated data to an external agent, and what evidence supports the recommendation?",
+	"zetaris": {
+		"query": "SHOW LIGHTNING DATABASES",
+		"columns": ["database", "owner", "classification"],
+		"rows": [
+			["governance_demo", "data-governance", "internal"],
+			["operations_demo", "operations", "internal"],
+			["finance_demo", "finance", "confidential"]
+		],
+		"total": 3
+	},
+	"seats": {
+		"FactChecker": [
+			{
+				"position": "Inventory every Lightning database before granting access, then verify the owner and classification for each source. The cached evidence shows three sources with two internal and one confidential classification.",
+				"confidence_self": 0.78,
+				"confidence_expert_agreement": 0.72,
+				"evidence": ["governance_demo: internal, owner data-governance", "finance_demo: confidential, owner finance"],
+				"caveats": ["Owner labels do not prove that access reviews are current."],
+				"supports": []
+			},
+			{
+				"position": "The inventory supports a least-privilege review: require a read-only Zetaris role, confirm ownership for all three sources, and treat finance_demo as confidential until a separate approval exists.",
+				"confidence_self": 0.9,
+				"confidence_expert_agreement": 0.88,
+				"evidence": ["Three databases returned", "finance_demo is classified confidential"],
+				"caveats": ["The sample does not include role assignments or review timestamps."],
+				"supports": ["CloudArchitect"]
+			}
+		],
+		"CloudArchitect": [
+			{
+				"position": "Put the agent behind a policy gate and give it a read-only Zetaris role. The agent should receive only the minimum evidence needed for the question, not wholesale database access.",
+				"confidence_self": 0.8,
+				"confidence_expert_agreement": 0.76,
+				"evidence": ["The gateway already enforces a read-only SQL guard", "The Zetaris tool is policy-gated"],
+				"caveats": ["Client-side guards are defense in depth, not a substitute for Zetaris RBAC."],
+				"supports": []
+			},
+			{
+				"position": "Adopt three controls: a read-only Zetaris role, a policy-gated query tool with statement limits, and a signed audit record for every recommendation. Escalate confidential sources for explicit approval.",
+				"confidence_self": 0.91,
+				"confidence_expert_agreement": 0.89,
+				"evidence": ["Read-only guard and policy gate are implemented", "Audit trail is hash-chained and signed"],
+				"caveats": ["Production deployment still needs identity, tenancy, and key management review."],
+				"supports": ["FactChecker"]
+			}
+		],
+		"Synthesizer": [
+			{
+				"position": "The evidence points to a governance-first workflow: inventory sources, apply least privilege, and preserve evidence for review. Confidential data needs an explicit approval boundary.",
+				"confidence_self": 0.83,
+				"confidence_expert_agreement": 0.8,
+				"evidence": ["Three sources with mixed classifications", "Finance source is confidential"],
+				"caveats": ["Missing evidence includes current access reviews and retention policy."],
+				"supports": []
+			},
+			{
+				"position": "Recommended workflow: inventory each Zetaris source, require a read-only role, route queries through the policy gate, flag confidential sources, and attach the signed audit trail to the answer. Confidence is high for the control pattern but not for production readiness.",
+				"confidence_self": 0.92,
+				"confidence_expert_agreement": 0.9,
+				"evidence": ["Read-only guard rejects writes and multiple statements", "Audit integrity can be verified locally", "finance_demo is confidential"],
+				"caveats": ["Sample evidence is synthetic", "Production IAM and data-retention decisions remain open."],
+				"supports": ["FactChecker", "CloudArchitect"]
+			}
+		]
+	}
+}

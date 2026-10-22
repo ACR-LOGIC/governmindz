@@ -1,0 +1,280 @@
+{
+  "mode": "sample",
+  "generated_at": "2026-10-22T13:00:15.973Z",
+  "scenario_id": "audit-explainability",
+  "scenario_file": "03-audit-explainability.json",
+  "topic": "What minimum audit evidence should accompany a multi-agent recommendation so a reviewer can reproduce it?",
+  "zetaris": {
+    "query": "SHOW LIGHTNING DATABASES",
+    "columns": [
+      "database",
+      "retention_days",
+      "audit_required"
+    ],
+    "rows": [
+      [
+        "governance_demo",
+        "365",
+        "true"
+      ],
+      [
+        "operations_demo",
+        "90",
+        "false"
+      ],
+      [
+        "finance_demo",
+        "730",
+        "true"
+      ]
+    ],
+    "total": 3
+  },
+  "result": {
+    "session_id": "6ca30fd1-7b53-4ff6-9981-a53705d88950",
+    "query_hash": "qh_mvjjtnfk",
+    "transcript": [
+      {
+        "id": "c03cc923-42a5-4f20-a2f0-8046e8c7b772",
+        "fromSeat": "FactChecker",
+        "toSeat": "all",
+        "type": "proposal",
+        "content": "Record the query, timestamp, source, and row count before the recommendation. Two of the three cached sources require audit retention, so the evidence bundle must outlive the session.",
+        "confidence": 0.79,
+        "structured": {
+          "position": "Record the query, timestamp, source, and row count before the recommendation. Two of the three cached sources require audit retention, so the evidence bundle must outlive the session.",
+          "confidenceSelf": 0.79,
+          "confidence_self": 0.79,
+          "confidenceExpertAgreement": 0.75,
+          "confidence_expert_agreement": 0.75,
+          "evidence": [
+            "governance_demo audit_required true",
+            "finance_demo audit_required true",
+            "operations_demo audit_required false"
+          ],
+          "caveats": [
+            "Retention values are sample data, not a policy determination."
+          ],
+          "outputs": [],
+          "dissentsFrom": [],
+          "dissents_from": [],
+          "supports": []
+        },
+        "round": 0,
+        "timestamp": 1792674015961,
+        "latency_ms": 3,
+        "token_count": 72
+      },
+      {
+        "id": "5f2355b8-6eba-4e5b-82a8-52417d99258a",
+        "fromSeat": "CloudArchitect",
+        "toSeat": "all",
+        "type": "proposal",
+        "content": "Treat the audit trail as part of the product contract: emit structured events, chain them, sign the head, and export a reviewable artifact with the recommendation.",
+        "confidence": 0.82,
+        "structured": {
+          "position": "Treat the audit trail as part of the product contract: emit structured events, chain them, sign the head, and export a reviewable artifact with the recommendation.",
+          "confidenceSelf": 0.82,
+          "confidence_self": 0.82,
+          "confidenceExpertAgreement": 0.79,
+          "confidence_expert_agreement": 0.79,
+          "evidence": [
+            "AuditTrailEmitter emits session_complete events",
+            "Integrity verification walks the hash chain"
+          ],
+          "caveats": [
+            "The current emitter is in-memory; production needs durable storage."
+          ],
+          "outputs": [],
+          "dissentsFrom": [],
+          "dissents_from": [],
+          "supports": []
+        },
+        "round": 0,
+        "timestamp": 1792674015961,
+        "latency_ms": 0,
+        "token_count": 64
+      },
+      {
+        "id": "e21825c5-cd9b-4d7d-84c9-642db17b5ca9",
+        "fromSeat": "Synthesizer",
+        "toSeat": "all",
+        "type": "proposal",
+        "content": "The evidence supports a compact, signed audit bundle: query metadata, transcript, final recommendation, and verification instructions.",
+        "confidence": 0.84,
+        "structured": {
+          "position": "The evidence supports a compact, signed audit bundle: query metadata, transcript, final recommendation, and verification instructions.",
+          "confidenceSelf": 0.84,
+          "confidence_self": 0.84,
+          "confidenceExpertAgreement": 0.81,
+          "confidence_expert_agreement": 0.81,
+          "evidence": [
+            "Audit and transcript artifacts already exist",
+            "Two sources require retention"
+          ],
+          "caveats": [
+            "Sample retention values are illustrative."
+          ],
+          "outputs": [],
+          "dissentsFrom": [],
+          "dissents_from": [],
+          "supports": []
+        },
+        "round": 0,
+        "timestamp": 1792674015962,
+        "latency_ms": 1,
+        "token_count": 52
+      },
+      {
+        "id": "28314348-0df4-4200-9d93-89d02e8e2459",
+        "fromSeat": "FactChecker",
+        "toSeat": "all",
+        "type": "consensus",
+        "content": "The minimum bundle is: trace id, source queries, evidence snapshot, seat transcript, final confidence, and a verifiable signature. For audit-required sources, retain the bundle for the source-defined period.",
+        "confidence": 0.88,
+        "structured": {
+          "position": "The minimum bundle is: trace id, source queries, evidence snapshot, seat transcript, final confidence, and a verifiable signature. For audit-required sources, retain the bundle for the source-defined period.",
+          "confidenceSelf": 0.88,
+          "confidence_self": 0.88,
+          "confidenceExpertAgreement": 0.86,
+          "confidence_expert_agreement": 0.86,
+          "evidence": [
+            "Two sources require audit retention",
+            "The audit trail is hash-chained and signed",
+            "The transcript records each seat position"
+          ],
+          "caveats": [
+            "Key rotation and external timestamping are not implemented."
+          ],
+          "outputs": [],
+          "dissentsFrom": [],
+          "dissents_from": [],
+          "supports": [
+            "CloudArchitect"
+          ]
+        },
+        "round": 1,
+        "timestamp": 1792674015966,
+        "latency_ms": 0,
+        "token_count": 82
+      },
+      {
+        "id": "d9356fb3-1567-4822-819b-990211326bc3",
+        "fromSeat": "CloudArchitect",
+        "toSeat": "all",
+        "type": "consensus",
+        "content": "Ship an evidence bundle with the result: JSONL trace, signed audit events, source metadata, and a deterministic summary. A reviewer should be able to verify integrity and see which evidence drove each seat.",
+        "confidence": 0.9,
+        "structured": {
+          "position": "Ship an evidence bundle with the result: JSONL trace, signed audit events, source metadata, and a deterministic summary. A reviewer should be able to verify integrity and see which evidence drove each seat.",
+          "confidenceSelf": 0.9,
+          "confidence_self": 0.9,
+          "confidenceExpertAgreement": 0.88,
+          "confidence_expert_agreement": 0.88,
+          "evidence": [
+            "JSONL logs preserve message order",
+            "Audit events include previous_hash and signature",
+            "Result includes seat_votes and transcript"
+          ],
+          "caveats": [
+            "Long-term WORM storage and access control are deployment concerns."
+          ],
+          "outputs": [],
+          "dissentsFrom": [],
+          "dissents_from": [],
+          "supports": [
+            "FactChecker"
+          ]
+        },
+        "round": 1,
+        "timestamp": 1792674015967,
+        "latency_ms": 1,
+        "token_count": 82
+      },
+      {
+        "id": "0ccc4841-1e71-4dcd-b272-0b5b166d7bf7",
+        "fromSeat": "Synthesizer",
+        "toSeat": "all",
+        "type": "consensus",
+        "content": "Recommended minimum: a trace id, source queries and freshness, evidence snapshot, complete seat transcript, final confidence and dissent, signed audit chain, and a one-command verification path. This is enough to reproduce the reasoning, not just the answer.",
+        "confidence": 0.92,
+        "structured": {
+          "position": "Recommended minimum: a trace id, source queries and freshness, evidence snapshot, complete seat transcript, final confidence and dissent, signed audit chain, and a one-command verification path. This is enough to reproduce the reasoning, not just the answer.",
+          "confidenceSelf": 0.92,
+          "confidence_self": 0.92,
+          "confidenceExpertAgreement": 0.9,
+          "confidence_expert_agreement": 0.9,
+          "evidence": [
+            "Hash-chained audit events are implemented",
+            "JSONL trace is generated by sample mode",
+            "Seat votes and confidence are in the result"
+          ],
+          "caveats": [
+            "Production review also needs identity, access logs, and retention enforcement."
+          ],
+          "outputs": [],
+          "dissentsFrom": [],
+          "dissents_from": [],
+          "supports": [
+            "FactChecker",
+            "CloudArchitect"
+          ]
+        },
+        "round": 1,
+        "timestamp": 1792674015968,
+        "latency_ms": 1,
+        "token_count": 96
+      }
+    ],
+    "rounds": 1,
+    "consensusReached": true,
+    "finalConfidence": 0.9,
+    "consensus_method": "threshold",
+    "quarantined_seats": [],
+    "seat_votes": {
+      "FactChecker": {
+        "position": "The minimum bundle is: trace id, source queries, evidence snapshot, seat transcript, final confidence, and a verifiable signature. For audit-required sources, retain the bundle for the source-defined period.",
+        "confidence": 0.88,
+        "dissented": false
+      },
+      "CloudArchitect": {
+        "position": "Ship an evidence bundle with the result: JSONL trace, signed audit events, source metadata, and a deterministic summary. A reviewer should be able to verify integrity and see which evidence drove each seat.",
+        "confidence": 0.9,
+        "dissented": false
+      },
+      "Synthesizer": {
+        "position": "Recommended minimum: a trace id, source queries and freshness, evidence snapshot, complete seat transcript, final confidence and dissent, signed audit chain, and a one-command verification path. This is enough to reproduce the reasoning, not just the answer.",
+        "confidence": 0.92,
+        "dissented": false
+      }
+    },
+    "timestamp": 1792674015968,
+    "halted": false,
+    "transportMode": "in_process",
+    "compression": {
+      "tokenEstimateBefore": 131,
+      "tokenEstimateAfter": 155,
+      "compactionCount": 0
+    }
+  },
+  "audit": {
+    "integrity": true,
+    "events": [
+      {
+        "event_type": "session_complete",
+        "session_id": "6ca30fd1-7b53-4ff6-9981-a53705d88950",
+        "timestamp": 1792674015968,
+        "payload": {
+          "rounds": 1,
+          "consensus_reached": true,
+          "final_confidence": 0.9,
+          "seat_vote_count": 3
+        },
+        "id": "audit_1792674015968_4aykq",
+        "previous_hash": "c910699e010057fee5424ddcb6751ac88b20169be78af84a4741e0754e5d8b59",
+        "hash": "bff18ec30a82392b2746fc5f04701ea65b37fbf6a9118211cb8e78781f01ef67",
+        "signature": "9868e4e9d4564203a05fc3293d14ce1415bd4d66590b9eac5d4cd0a2f29bcc9f"
+      }
+    ]
+  }
+}

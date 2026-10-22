@@ -9,6 +9,8 @@
 		"test": "node --test --import tsx libs/core/test/gravity.test.ts libs/core/test/meterless.test.ts libs/core/test/zetaris.test.ts",
 		"demo": "node --env-file=.env.local --import tsx apps/gateway/src/main.ts",
 		"demo:dry": "node --env-file=.env.local --import tsx apps/gateway/src/main.ts --dry-run",
+		"demo:sample": "node --import tsx apps/gateway/src/sample.ts",
+		"samples": "node scripts/run-samples.mjs",
 		"smoke": "node --env-file=.env.local --import tsx apps/gateway/src/smoke.ts"
 	},
 	"devDependencies": {

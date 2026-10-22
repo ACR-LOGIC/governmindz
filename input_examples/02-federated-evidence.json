@@ -1,0 +1,67 @@
+{
+	"id": "federated-evidence",
+	"topic": "How should an agent combine fragmented Zetaris sources into an evidence-backed answer without inventing missing data?",
+	"zetaris": {
+		"query": "SHOW LIGHTNING DATABASES",
+		"columns": ["database", "source_type", "freshness"],
+		"rows": [
+			["crm_lightning", "postgres", "15m"],
+			["billing_lightning", "api", "1h"],
+			["support_lightning", "parquet", "24h"]
+		],
+		"total": 3
+	},
+	"seats": {
+		"FactChecker": [
+			{
+				"position": "Name the source and freshness beside every claim. The cached evidence lists three sources with different freshness windows, so a combined answer must not imply they were observed at the same time.",
+				"confidence_self": 0.8,
+				"confidence_expert_agreement": 0.77,
+				"evidence": ["crm_lightning freshness 15m", "billing_lightning freshness 1h", "support_lightning freshness 24h"],
+				"caveats": ["Freshness labels do not prove row-level completeness."]
+			},
+			{
+				"position": "The evidence supports a provenance-first answer: cite each source separately, state its freshness, and mark any cross-source conclusion as an inference rather than a directly observed fact.",
+				"confidence_self": 0.89,
+				"confidence_expert_agreement": 0.87,
+				"evidence": ["Three sources have different freshness values", "No shared join key is present in the sample"],
+				"caveats": ["A real join may require keys that are not in this evidence."],
+				"supports": ["CloudArchitect"]
+			}
+		],
+		"CloudArchitect": [
+			{
+				"position": "Build an evidence envelope: source id, query, timestamp, freshness, columns, and row counts. The debate should consume that envelope instead of raw disconnected rows.",
+				"confidence_self": 0.81,
+				"confidence_expert_agreement": 0.78,
+				"evidence": ["The demo formats Zetaris results into a bounded context", "The audit trail records the session result"],
+				"caveats": ["The current context formatter does not include freshness metadata automatically."]
+			},
+			{
+				"position": "Use a source-aware context builder, preserve per-source attribution in the transcript, and make the synthesizer return explicit gaps. Do not merge sources unless a documented key and freshness window support the join.",
+				"confidence_self": 0.9,
+				"confidence_expert_agreement": 0.88,
+				"evidence": ["Three heterogeneous sources are listed", "No join key is included in the sample evidence"],
+				"caveats": ["Schema-level key discovery is a next step, not part of this demo."],
+				"supports": ["FactChecker"]
+			}
+		],
+		"Synthesizer": [
+			{
+				"position": "The safe answer is to present source-level findings, label freshness, and separate observed facts from cross-source inferences.",
+				"confidence_self": 0.84,
+				"confidence_expert_agreement": 0.82,
+				"evidence": ["Three sources with distinct freshness windows", "No common key is visible"],
+				"caveats": ["The sample is synthetic and does not include source schemas."]
+			},
+			{
+				"position": "Recommended pattern: attribute every claim to a source, include freshness and query metadata, and return a gaps section when a join key or source is missing. The debate can still recommend a direction, but it must not fabricate a unified record.",
+				"confidence_self": 0.91,
+				"confidence_expert_agreement": 0.89,
+				"evidence": ["Source-aware evidence is available", "The transcript preserves per-seat positions", "The audit record captures the final confidence"],
+				"caveats": ["Production joins need schema discovery and data-quality checks."],
+				"supports": ["FactChecker", "CloudArchitect"]
+			}
+		]
+	}
+}

@@ -1,15 +1,22 @@
 // Copyright (c) 2026 ACR Logic.
 
 import { randomUUID } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { AgentSeat, type SeatConfig } from "@governmindz/core/debate/AgentSeat";
-import { DebateLoop } from "@governmindz/core/debate/DebateLoop";
+import { DebateLoop, type DebateResult } from "@governmindz/core/debate/DebateLoop";
 import { LocalSeatTransport } from "@governmindz/core/debate/SeatTransport";
-import { auditTrail } from "@governmindz/core/engine/AuditTrailEmitter";
+import {
+	auditTrail,
+	type AuditEvent,
+} from "@governmindz/core/engine/AuditTrailEmitter";
 import { Logger } from "@governmindz/core/kernel/Logger";
 import { MeterlessProvider } from "@governmindz/core/providers/MeterlessProvider";
 import { MeterlessSeatClient } from "@governmindz/core/providers/MeterlessSeatClient";
 import { PromptRegistry } from "@governmindz/core/services/PromptRegistry";
 import { formatZetarisResult } from "./format.js";
+import { loadSampleScenario, type SampleScenario } from "./sampleScenario.js";
+import { SampleSeatClient } from "./sampleSeat.js";
 import { zetarisQueryHandler } from "./tools/zetaris.tools.js";
 
 interface ZetarisToolResult {
@@ -78,18 +85,11 @@ async function runDryRun(): Promise<number> {
 	return 0;
 }
 
-function buildSeats(provider: MeterlessProvider): AgentSeat[] {
+function buildSeats(
+	provider: MeterlessProvider | null,
+	scenario?: SampleScenario,
+): AgentSeat[] {
 	const seatModel = process.env.METERLESS_SEAT_MODEL?.trim() || undefined;
-	const llm = new MeterlessSeatClient(provider, seatModel);
-	const trace = (seatId: string) => ({
-		complete: async (system: string, prompt: string) => {
-			console.log(`\n[${seatId}] requesting...`);
-			const started = Date.now();
-			const result = await llm.complete(system, prompt);
-			console.log(`[${seatId}] responded in ${Date.now() - started}ms`);
-			return result;
-		},
-	});
 	const configs: SeatConfig[] = [
 		{
 			seatId: "FactChecker",
@@ -111,29 +111,29 @@ function buildSeats(provider: MeterlessProvider): AgentSeat[] {
 		},
 	];
 
-	return configs.map(
-		(config) => new AgentSeat(config, trace(config.seatId)),
-	);
+	return configs.map((config) => {
+		if (scenario) {
+			return new AgentSeat(
+				config,
+				new SampleSeatClient(config.seatId, scenario.seats[config.seatId] ?? []),
+			);
+		}
+		if (!provider) throw new Error("Meterless provider is required outside sample mode.");
+		const llm = new MeterlessSeatClient(provider, seatModel);
+		return new AgentSeat(config, {
+			complete: async (system: string, prompt: string) => {
+				console.log(`\n[${config.seatId}] requesting...`);
+				const started = Date.now();
+				const result = await llm.complete(system, prompt);
+				console.log(`[${config.seatId}] responded in ${Date.now() - started}ms`);
+				return result;
+			},
+		});
+	});
 }
 
-async function runDebate(): Promise<number> {
-	const provider = new MeterlessProvider();
-	const status = await printMeterlessStatus(provider);
-	if (status.state !== "online") {
-		console.error(
-			status.state === "unauthorized"
-				? "Meterless rejected the token. Paste the current /connect link or token into METERLESS_CONNECT_LINK or METERLESS_API_KEY, then retry."
-				: "Meterless is offline. Start the runtime or retry with --auto-detect.",
-		);
-		return 2;
-	}
-
-	const { query, result, context } = await fetchZetarisContext();
-	console.log(`Zetaris query: ${query}`);
-	console.log(context);
-
-	const topic = process.env.GOVERNMINDZ_TOPIC?.trim() || DEFAULT_TOPIC;
-	const task = [
+function buildTask(topic: string, context: string): string {
+	return [
 		"You are advising a human operator. Use only the supplied Zetaris evidence and your role expertise.",
 		"",
 		`Question: ${topic}`,
@@ -143,12 +143,13 @@ async function runDebate(): Promise<number> {
 		"",
 		"Do not invent database names, row counts, sources, or credentials. If the evidence is insufficient, say so and lower your confidence.",
 	].join("\n");
+}
 
-	const seats = buildSeats(provider);
+function createDebateLoop(seats: AgentSeat[], topic: string): DebateLoop {
 	const seatMap = new Map(seats.map((seat) => [seat.seatId, seat]));
 	const transport = new LocalSeatTransport(seatMap);
 	const seatIds = seats.map((seat) => seat.seatId);
-	const loop = new DebateLoop(
+	return new DebateLoop(
 		seatIds,
 		transport,
 		() => seatIds,
@@ -169,10 +170,13 @@ async function runDebate(): Promise<number> {
 		undefined,
 		topic,
 	);
+}
 
-	const resultDebate = await loop.run(task);
-	const auditEvents = auditTrail.getLog();
-
+function printDebateResult(
+	resultDebate: DebateResult,
+	zetarisRows: number,
+	auditEvents: AuditEvent[],
+): void {
 	console.log("\n=== Debate result ===");
 	console.log(
 		JSON.stringify(
@@ -185,7 +189,7 @@ async function runDebate(): Promise<number> {
 				halted: resultDebate.halted,
 				haltReason: resultDebate.haltReason,
 				quarantinedSeats: resultDebate.quarantined_seats,
-				zetarisRows: result.rows.length,
+				zetarisRows,
 			},
 			null,
 			2,
@@ -204,13 +208,202 @@ async function runDebate(): Promise<number> {
 	const head = auditEvents[auditEvents.length - 1];
 	if (head) console.log(`Audit head: ${head.hash}`);
 	console.log(`Session artifact: ${resultDebate.session_id}`);
+}
+
+function writeTrace(
+	logPath: string,
+	mode: "sample" | "live",
+	metadata: Record<string, unknown>,
+	resultDebate: DebateResult,
+	auditEvents: AuditEvent[],
+): void {
+	const resolved = path.resolve(process.cwd(), logPath);
+	fs.mkdirSync(path.dirname(resolved), { recursive: true });
+	const lines: Record<string, unknown>[] = [
+		{
+			type: "run_start",
+			mode,
+			timestamp: new Date().toISOString(),
+			...metadata,
+		},
+		...resultDebate.transcript.map((message) => ({
+			type: "agent_message",
+			id: message.id,
+			from: message.fromSeat,
+			to: message.toSeat,
+			message_type: message.type,
+			round: message.round,
+			confidence: Number(message.confidence.toFixed(4)),
+			position: message.content,
+			evidence: message.structured?.evidence ?? [],
+			caveats: message.structured?.caveats ?? [],
+			in_reply_to: message.inReplyTo ?? null,
+			latency_ms: message.latency_ms,
+			token_count: message.token_count,
+		})),
+		...auditEvents.map((event) => ({
+			type: "audit_event",
+			event_type: event.event_type,
+			session_id: event.session_id,
+			timestamp: event.timestamp,
+			previous_hash: event.previous_hash,
+			hash: event.hash,
+			signature: event.signature,
+			payload: event.payload,
+		})),
+		{
+			type: "run_complete",
+			timestamp: new Date().toISOString(),
+			session_id: resultDebate.session_id,
+			rounds: resultDebate.rounds,
+			consensus_reached: resultDebate.consensusReached,
+			consensus_method: resultDebate.consensus_method,
+			final_confidence: Number(resultDebate.finalConfidence.toFixed(4)),
+			halted: resultDebate.halted,
+			audit_integrity: auditTrail.verifyIntegrity(),
+		},
+	];
+	fs.writeFileSync(
+		resolved,
+		`${lines.map((line) => JSON.stringify(line)).join("\n")}\n`,
+		"utf8",
+	);
+}
+
+function writeSampleArtifacts(
+	scenario: SampleScenario,
+	scenarioPath: string,
+	topic: string,
+	resultDebate: DebateResult,
+	auditEvents: AuditEvent[],
+): { outputPath: string; logPath: string } {
+	const outputPath =
+		process.env.SAMPLE_OUTPUT?.trim() ||
+		path.join("output_examples", `${scenario.id}.json`);
+	const logPath =
+		process.env.SAMPLE_LOG?.trim() || path.join("logs", `${scenario.id}.jsonl`);
+	const resolvedOutput = path.resolve(process.cwd(), outputPath);
+	fs.mkdirSync(path.dirname(resolvedOutput), { recursive: true });
+	const payload = {
+		mode: "sample",
+		generated_at: new Date().toISOString(),
+		scenario_id: scenario.id,
+		scenario_file: scenarioPath.split(/[\\/]/).pop() ?? scenarioPath,
+		topic,
+		zetaris: {
+			query: scenario.zetaris.query,
+			columns: scenario.zetaris.columns,
+			rows: scenario.zetaris.rows,
+			total: scenario.zetaris.total ?? scenario.zetaris.rows.length,
+		},
+		result: resultDebate,
+		audit: {
+			integrity: auditTrail.verifyIntegrity(),
+			events: auditEvents,
+		},
+	};
+	fs.writeFileSync(
+		resolvedOutput,
+		`${JSON.stringify(payload, null, 2)}\n`,
+		"utf8",
+	);
+	writeTrace(
+		logPath,
+		"sample",
+		{
+			scenario_id: scenario.id,
+			scenario_file: payload.scenario_file,
+			topic,
+			zetaris_query: scenario.zetaris.query,
+			zetaris_rows: scenario.zetaris.rows.length,
+		},
+		resultDebate,
+		auditEvents,
+	);
+	return { outputPath, logPath };
+}
+
+async function runDebate(): Promise<number> {
+	const provider = new MeterlessProvider();
+	const status = await printMeterlessStatus(provider);
+	if (status.state !== "online") {
+		console.error(
+			status.state === "unauthorized"
+				? "Meterless rejected the token. Paste the current /connect link or token into METERLESS_CONNECT_LINK or METERLESS_API_KEY, then retry."
+				: "Meterless is offline. Start the runtime or retry with --auto-detect.",
+		);
+		return 2;
+	}
+
+	const { query, result, context } = await fetchZetarisContext();
+	console.log(`Zetaris query: ${query}`);
+	console.log(context);
+
+	const topic = process.env.GOVERNMINDZ_TOPIC?.trim() || DEFAULT_TOPIC;
+	const seats = buildSeats(provider);
+	const loop = createDebateLoop(seats, topic);
+	const resultDebate = await loop.run(buildTask(topic, context));
+	const auditEvents = auditTrail.getLog();
+
+	printDebateResult(resultDebate, result.rows.length, auditEvents);
+	const logPath = process.env.GOVERNMINDZ_LOG_PATH?.trim();
+	if (logPath) {
+		writeTrace(
+			logPath,
+			"live",
+			{
+				topic,
+				zetaris_query: query,
+				zetaris_rows: result.rows.length,
+				meterless_base_url: status.baseUrl,
+				meterless_models: status.models ?? [],
+			},
+			resultDebate,
+			auditEvents,
+		);
+		console.log(`Trace log: ${logPath}`);
+	}
+
+	return resultDebate.halted ? 1 : 0;
+}
+
+async function runSampleDebate(): Promise<number> {
+	const { scenario, filePath } = loadSampleScenario();
+	const topic = process.env.GOVERNMINDZ_TOPIC?.trim() || scenario.topic;
+	const context = formatZetarisResult(scenario.zetaris, 50);
+	console.log(`Sample mode: ${scenario.id} (${filePath})`);
+	console.log(`Zetaris query (cached): ${scenario.zetaris.query}`);
+	console.log(context);
+
+	const seats = buildSeats(null, scenario);
+	const loop = createDebateLoop(seats, topic);
+	const resultDebate = await loop.run(buildTask(topic, context));
+	const auditEvents = auditTrail.getLog();
+
+	printDebateResult(resultDebate, scenario.zetaris.rows.length, auditEvents);
+	const { outputPath, logPath } = writeSampleArtifacts(
+		scenario,
+		filePath,
+		topic,
+		resultDebate,
+		auditEvents,
+	);
+	console.log(`Sample output: ${outputPath}`);
+	console.log(`Trace log: ${logPath}`);
 
 	return resultDebate.halted ? 1 : 0;
 }
 
 async function main(): Promise<void> {
 	Logger.configure({ minLevel: "warn" });
-	const code = hasFlag("--dry-run") ? await runDryRun() : await runDebate();
+	let code: number;
+	if (hasFlag("--dry-run")) {
+		code = await runDryRun();
+	} else if (process.env.SAMPLE_MODE === "true" || hasFlag("--sample")) {
+		code = await runSampleDebate();
+	} else {
+		code = await runDebate();
+	}
 	process.exitCode = code;
 }
 
