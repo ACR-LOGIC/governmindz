@@ -12,5 +12,6 @@ dist-*/**
 .nx/cache/
 coverage/
 *.tsbuildinfo
+logs/hmem.json
 .idea/
 .vscode/

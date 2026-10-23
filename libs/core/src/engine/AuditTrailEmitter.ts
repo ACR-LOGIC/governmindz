@@ -48,10 +48,18 @@ export class AuditTrailEmitter {
 	private log: AuditEvent[] = [];
 	private headHash: string = "";
 	private secret: string;
+	private listeners: Array<(event: AuditEvent) => void> = [];
 
 	constructor(secret = resolveAuditTrailSecret()) {
 		this.secret = secret;
 		this.headHash = this.hashGenesis();
+	}
+
+	onEmit(listener: (event: AuditEvent) => void): () => void {
+		this.listeners.push(listener);
+		return () => {
+			this.listeners = this.listeners.filter((l) => l !== listener);
+		};
 	}
 
 	setSecret(secret: string): void {
@@ -117,6 +125,13 @@ export class AuditTrailEmitter {
 		this.headHash = event.hash;
 
 		this.log.push(event);
+		for (const listener of this.listeners) {
+			try {
+				listener(event);
+			} catch {
+				// ignore
+			}
+		}
 		console.log(
 			`[AuditTrail][${event.event_type}] Hash: ${event.hash.substr(0, 8)}... LinkedDecay: ${event.linked_decay_hash?.substr(0, 8) || "none"}`,
 		);

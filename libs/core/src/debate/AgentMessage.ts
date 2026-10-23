@@ -22,6 +22,7 @@ export interface AgentOutputContract {
 	confidence_expert_agreement: number; // snake_case alias
 	evidence: string[]; // Supporting evidence array
 	caveats: string[]; // Known limitations / uncertainties
+	claimConfidences?: Array<{ claim: string; confidence: number }>; // per-claim confidence
 	outputs?: Array<{
 		id: string;
 		type:

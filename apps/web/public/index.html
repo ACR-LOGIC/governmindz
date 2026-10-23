@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GOVERNMINDZ — Explainable Multi-Agent Debate</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0e1a; --bg2:#0f1424; --panel:#12182b; --panel2:#18203a;
+  --border:#252e4d; --text:#e8ecf7; --muted:#8a93b6; --dim:#5b6488;
+  --accent:#f4b942; --cyan:#5eead4; --blue:#7dd3fc; --violet:#c4b5fd;
+  --emerald:#34d399; --rose:#fb7185; --amber:#fbbf24;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:'Manrope',system-ui,sans-serif;font-size:14px;line-height:1.5}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+.display{font-family:'Fraunces',serif}
+::selection{background:var(--accent);color:#1a1200}
+
+body::before{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(244,185,66,.12), transparent 60%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(94,234,212,.08), transparent 60%),
+    linear-gradient(rgba(255,255,255,.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.02) 1px, transparent 1px);
+  background-size:auto,auto,40px 40px,40px 40px;
+}
+body::after{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.35;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .06 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+.app{position:relative;z-index:1;display:grid;grid-template-columns:1fr 360px;min-height:100vh}
+@media (max-width:980px){.app{grid-template-columns:1fr}.rail{display:none}}
+.rail{border-left:1px solid var(--border);background:rgba(12,16,30,.6);backdrop-filter:blur(6px);padding:20px;overflow:auto}
+
+header{position:sticky;top:0;z-index:20;background:rgba(10,14,26,.75);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;gap:16px}
+.brand .title{font-family:'Fraunces',serif;font-size:22px;font-weight:700;letter-spacing:-.5px;line-height:1}
+.brand .sub{color:var(--muted);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
+.pill{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:999px;border:1px solid var(--border);background:var(--panel);font-size:12px;font-weight:500}
+.pill .dot{width:8px;height:8px;border-radius:50%;box-shadow:0 0 8px currentColor}
+.dot.ok{color:var(--emerald);background:var(--emerald)} .dot.bad{color:var(--rose);background:var(--rose)} .dot.idle{color:var(--dim);background:var(--dim)}
+header .actions{margin-left:auto;display:flex;gap:8px}
+
+.btn{background:var(--accent);color:#1a1200;border:none;padding:8px 15px;border-radius:9px;font-weight:600;cursor:pointer;font-size:13px;font-family:'Manrope',sans-serif;transition:transform .12s ease,box-shadow .12s ease}
+.btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(244,185,66,.25)}
+.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--border)}
+.btn.ghost:hover{border-color:var(--accent);color:var(--accent)}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+
+.chat{padding:28px 24px 120px;max-width:780px;margin:0 auto;width:100%}
+.msg{display:flex;gap:12px;margin-bottom:18px;animation:rise .35s cubic-bezier(.2,.8,.2,1) both}
+@keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.msg.user{flex-direction:row-reverse}
+.msg.user .bubble{background:linear-gradient(135deg,#2a2310,#1f1a0a);border-color:var(--accent);color:#f7e9c4}
+.avatar{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0;border:1px solid var(--border);position:relative}
+.avatar.FactChecker{background:linear-gradient(135deg,#1e3a8a,#172554);color:#bfdbfe}
+.avatar.CloudArchitect{background:linear-gradient(135deg,#065f46,#022c22);color:#a7f3d0}
+.avatar.Synthesizer{background:linear-gradient(135deg,#5b21b6,#2e1065);color:#ddd6fe}
+.avatar.user{background:linear-gradient(135deg,#78350f,#451a03);color:#fde68a}
+.avatar .status{position:absolute;bottom:-2px;right:-2px;width:9px;height:9px;border-radius:50%;border:2px solid var(--bg);background:var(--emerald)}
+.body{flex:1;min-width:0}
+.meta{display:flex;align-items:baseline;gap:8px;margin-bottom:5px;font-size:12px}
+.meta .name{font-weight:700}
+.meta .role{color:var(--muted);font-size:11px}
+.meta .time{color:var(--dim);font-size:10px;margin-left:auto;font-family:'JetBrains Mono',monospace}
+.bubble{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:13px 15px;position:relative}
+.bubble .pos{line-height:1.5}
+.bubble .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.chip{font-size:11px;padding:3px 9px;border-radius:6px;font-weight:500}
+.chip.ev{background:rgba(16,185,129,.12);color:#6ee7b7;border:1px solid rgba(16,185,129,.25)}
+.chip.cav{background:rgba(251,191,36,.12);color:#fde68a;border:1px solid rgba(251,191,36,.25)}
+.chip.sup{background:rgba(96,165,250,.12);color:#bfdbfe;border:1px solid rgba(96,165,250,.25)}
+.chip.dis{background:rgba(251,113,133,.12);color:#fda4af;border:1px solid rgba(251,113,133,.25)}
+.chip.type{background:var(--panel2);color:var(--muted);border:1px solid var(--border)}
+.confrow{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:11px;color:var(--muted)}
+.confbar{flex:1;height:5px;background:#1f2744;border-radius:3px;overflow:hidden}
+.confbar>div{height:100%;background:linear-gradient(90deg,var(--cyan),var(--accent));transition:width .5s ease}
+.badge{font-size:10px;padding:2px 8px;border-radius:999px;border:1px solid var(--border);background:var(--panel2);text-transform:uppercase;letter-spacing:.8px;font-weight:600}
+.badge.proposal{color:var(--blue)} .badge.challenge{color:var(--rose)} .badge.refinement{color:var(--violet)}
+.badge.consensus{color:var(--emerald)} .badge.escalation{color:var(--amber)} .badge.summary{color:var(--muted)} .badge.final{color:var(--accent)}
+
+.systemline{display:flex;align-items:center;gap:10px;margin:14px 0;font-size:12px;color:var(--muted)}
+.systemline .line{flex:1;height:1px;background:linear-gradient(90deg,transparent,var(--border),transparent)}
+.systemline .avatars{display:flex;gap:-6px}
+.systemline .avatars .mini{width:22px;height:22px;border-radius:6px;border:1px solid var(--border);font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-left:-4px}
+.systemline .avatars .mini:first-child{margin-left:0}
+.delegated{background:rgba(244,185,66,.08);border:1px solid rgba(244,185,66,.25);color:#f7e9c4;padding:8px 12px;border-radius:9px;font-size:12px;display:inline-flex;align-items:center;gap:8px}
+
+.divider{display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--dim);font-size:11px;letter-spacing:2px;text-transform:uppercase}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
+
+.typing{display:flex;gap:4px;padding:4px 2px}
+.typing span{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:bounce 1.2s infinite}
+.typing span:nth-child(2){animation-delay:.15s} .typing span:nth-child(3){animation-delay:.3s}
+@keyframes bounce{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-5px);opacity:1}}
+
+.finalbubble .bubble{border-color:var(--accent);background:linear-gradient(135deg,rgba(244,185,66,.08),rgba(12,16,30,.9));box-shadow:0 0 40px rgba(244,185,66,.12)}
+.finalbubble .name{color:var(--accent)}
+
+.alert{background:rgba(251,113,133,.1);border:1px solid rgba(251,113,133,.3);color:#fda4af;padding:10px 13px;border-radius:9px;font-size:12px;margin-bottom:14px}
+
+.rail h3{margin:0 0 10px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;font-weight:600}
+.rail .block{margin-bottom:20px}
+.rail .table{width:100%;border-collapse:collapse;font-size:12px}
+.rail .table th,.rail .table td{padding:6px 8px;border-bottom:1px solid var(--border);text-align:left}
+.rail .table th{color:var(--muted);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:1px}
+.chart{width:100%;height:150px;background:var(--panel);border:1px solid var(--border);border-radius:9px;overflow:hidden}
+.auditblock{font-family:'JetBrains Mono',monospace;font-size:10.5px;padding:9px;border:1px solid var(--border);border-radius:8px;background:var(--panel);margin-bottom:7px;word-break:break-all;line-height:1.5}
+.auditblock .hash{color:var(--cyan)}
+.auditblock .label{color:var(--muted);font-size:10px}
+
+.composer{position:fixed;bottom:0;left:0;right:360px;background:rgba(10,14,26,.85);backdrop-filter:blur(12px);border-top:1px solid var(--border);padding:14px 24px;z-index:15}
+@media (max-width:980px){.composer{right:0}}
+.composer .inner{max-width:780px;margin:0 auto;display:flex;gap:10px;align-items:flex-end}
+.composer textarea{flex:1;min-height:44px;max-height:140px;resize:none;background:var(--panel);border:1px solid var(--border);color:var(--text);padding:11px 13px;border-radius:11px;font-size:13px;font-family:'Manrope',sans-serif}
+.composer textarea:focus{outline:none;border-color:var(--accent)}
+.statusbar{max-width:780px;margin:0 auto 6px;display:flex;gap:14px;font-size:11px;color:var(--muted);align-items:center}
+select,input{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:8px;font-size:12px}
+.empty{color:var(--muted);text-align:center;padding:24px;font-size:12px}
+.toast{position:fixed;bottom:90px;right:24px;background:var(--panel);border:1px solid var(--border);padding:10px 14px;border-radius:9px;font-size:12px;z-index:30;animation:rise .25s}
+.spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="title display">GOVERNMINDZ</div>
+    <div class="sub">Explainable multi-agent debate</div>
+  </div>
+  <span class="pill"><span class="dot idle" id="dotMeterless"></span>Meterless</span>
+  <span class="pill"><span class="dot idle" id="dotZetaris"></span>Zetaris</span>
+  <span class="pill" id="modePill">sample</span>
+  <div class="actions">
+    <button class="btn ghost" id="btnDry">Connectivity</button>
+    <button class="btn ghost" id="btnAbout">About</button>
+  </div>
+</header>
+
+<div class="app">
+  <main class="chat" id="chat"></main>
+
+  <aside class="rail">
+    <div class="block">
+      <h3>Evidence (Zetaris)</h3>
+      <div id="evidencePanel" class="empty">No evidence yet</div>
+    </div>
+    <div class="block">
+      <h3>Confidence trajectory</h3>
+      <div class="chart"><svg id="chart" viewBox="0 0 320 150" preserveAspectRatio="none"></svg></div>
+    </div>
+    <div class="block">
+      <h3>Audit chain</h3>
+      <div id="auditPanel" class="empty">No audit events yet</div>
+    </div>
+    <div class="block">
+      <h3>Sponsor tech</h3>
+      <div style="font-size:12px;line-height:1.7;color:var(--muted)">
+        <div><b style="color:var(--text)">Zetaris Lightning</b> — read-only SQL, policy-gated evidence.</div>
+        <div><b style="color:var(--text)">Meterless Runtime</b> — OpenAI-compatible, token redaction.</div>
+        <div><b style="color:var(--text)">NVIDIA Nemotron</b> — nvidia/nemotron-3.5-lightning-30b-a3b.</div>
+      </div>
+    </div>
+    <div class="block" id="aboutBlock" style="display:none">
+      <h3>About</h3>
+      <div style="font-size:12px;color:var(--muted);line-height:1.7">
+        Track 02 — The Agent That Can Explain Why. Role-separated seats debate over federated evidence, reach confidence-aware consensus, and emit a signed hash-chained audit trail a reviewer can verify.
+      </div>
+    </div>
+  </aside>
+</div>
+
+<div class="composer">
+  <div class="statusbar">
+    <span id="statusText">idle</span>
+    <span style="margin-left:auto;display:flex;gap:8px;align-items:center">
+      <label style="margin:0">Mode</label>
+      <select id="modeSel"><option value="sample">Sample (key-free)</option><option value="live">Live</option></select>
+      <select id="scenarioSel"></select>
+    </span>
+  </div>
+  <div class="inner">
+    <textarea id="topicInput" placeholder="Ask a governance question… (leave blank to use scenario topic)"></textarea>
+    <button class="btn" id="btnRun">Send</button>
+  </div>
+</div>
+
+<script>
+const $=(s)=>document.querySelector(s);
+const chat=$('#chat');
+let evtSource=null, currentRun=null;
+let seats={}, chartData={FactChecker:[],CloudArchitect:[],Synthesizer:[]};
+let messages=[], zetarisData=null, auditEvents=[], runResult=null;
+let typingEl=null;
+
+const colors={FactChecker:'#7dd3fc',CloudArchitect:'#34d399',Synthesizer:'#c4b5fd'};
+const avatars={FactChecker:'FC',CloudArchitect:'CA',Synthesizer:'SY',user:'YOU'};
+
+function toast(m){const t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),3200)}
+async function api(p,o){const r=await fetch(p,o);if(!r.ok)throw new Error(await r.text());return r.json()}
+function setDot(id,st){const e=document.getElementById(id);e.className='dot '+st}
+
+async function loadHealth(){
+  try{const h=await api('/api/health');
+    setDot('dotMeterless', h.meterless&&h.meterless.state==='online'?'ok':'bad');
+    setDot('dotZetaris', h.zetaris&&h.zetaris.ok?'ok':'bad');
+  }catch(e){setDot('dotMeterless','bad');setDot('dotZetaris','bad')}
+}
+async function loadScenarios(){
+  try{const s=await api('/api/scenarios');
+    const sel=$('#scenarioSel'); sel.innerHTML='';
+    s.forEach(x=>{const o=document.createElement('option');o.value=x.file;o.textContent=(x.id||x.file);sel.appendChild(o)});
+  }catch(e){toast('scenario load failed')}
+}
+
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function time(){return new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}
+
+function addUserBubble(text){
+  const d=document.createElement('div'); d.className='msg user';
+  d.innerHTML=`<div class="avatar user">${avatars.user}</div>
+  <div class="body">
+    <div class="meta"><span class="name">You</span><span class="time">${time()}</span></div>
+    <div class="bubble"><div class="pos">${esc(text)}</div></div>
+  </div>`;
+  chat.appendChild(d); scrollBottom();
+}
+
+function showTyping(seat){
+  removeTyping();
+  const d=document.createElement('div'); d.className='msg'; d.id='typing';
+  d.innerHTML=`<div class="avatar ${seat}">${avatars[seat]}</div>
+  <div class="body">
+    <div class="meta"><span class="name">${seat}</span><span class="role">is thinking…</span></div>
+    <div class="bubble"><div class="typing"><span></span><span></span><span></span></div></div>
+  </div>`;
+  chat.appendChild(d); scrollBottom();
+  typingEl=d;
+}
+function removeTyping(){if(typingEl){typingEl.remove();typingEl=null}}
+
+function addSystemLine(html){
+  const d=document.createElement('div'); d.className='systemline';
+  d.innerHTML=`<div class="line"></div>${html}<div class="line"></div>`;
+  chat.appendChild(d); scrollBottom();
+}
+
+function addDivider(label){
+  const d=document.createElement('div'); d.className='divider'; d.textContent=label;
+  chat.appendChild(d); scrollBottom();
+}
+
+function addAlert(text){
+  const d=document.createElement('div'); d.className='alert'; d.textContent=text;
+  chat.appendChild(d); scrollBottom();
+}
+
+function addMessage(m){
+  removeTyping();
+  messages.push(m);
+  const s=m.fromSeat;
+  const st=m.structured||{};
+  const conf=(st.confidence_self!=null?st.confidence_self:(st.confidenceSelf!=null?st.confidenceSelf:m.confidence))||0;
+  const ev=st.evidence||[]; const cav=st.caveats||[];
+  const sup=st.supports||[]; const dis=st.dissents_from||st.dissentsFrom||[];
+  const isFinal = m.type==='consensus' && m.toSeat==='all' && (m.fromSeat==='Synthesizer') && (m.round>=1);
+  // track confidence
+  if(chartData[s]) chartData[s].push({round:m.round,conf:conf});
+  if(!seats[s]) seats[s]={status:'responded',conf:conf};
+  seats[s].status='responded'; seats[s].conf=conf;
+  updateRailSeats();
+
+  const typeBadge = `<span class="badge ${m.type}">${m.type.replace('_',' ')}</span>`;
+  const chips = [
+    ...ev.map(x=>`<span class="chip ev">${esc(x)}</span>`),
+    ...cav.map(x=>`<span class="chip cav">${esc(x)}</span>`),
+    ...sup.map(x=>`<span class="chip sup">supports ${esc(x)}</span>`),
+    ...dis.map(x=>`<span class="chip dis">dissents ${esc(x)}</span>`),
+  ].join('');
+
+  const d=document.createElement('div');
+  d.className='msg'+(isFinal?' finalbubble':'');
+  d.innerHTML=`
+    <div class="avatar ${s}">${avatars[s]||s.slice(0,2).toUpperCase()}<span class="status"></span></div>
+    <div class="body">
+      <div class="meta">
+        <span class="name" style="color:${colors[s]||'var(--text)'}">${s}</span>
+        <span class="role">${m.roleName||m.role||''}</span>
+        ${typeBadge}
+        <span class="time">${time()}</span>
+      </div>
+      <div class="bubble">
+        <div class="pos">${esc(st.position||m.content||'')}</div>
+        <div class="confrow">
+          <span>confidence</span>
+          <div class="confbar"><div style="width:${(conf*100).toFixed(0)}%"></div></div>
+          <span>${conf.toFixed(2)}</span>
+          <span style="color:var(--dim)">· expert ${( (st.confidence_expert_agreement||st.confidenceExpertAgreement||0)).toFixed(2)}</span>
+          <span style="color:var(--dim)">· ${m.latency_ms||0}ms</span>
+        </div>
+        ${chips?`<div class="chips">${chips}</div>`:''}
+      </div>
+    </div>`;
+  chat.appendChild(d); scrollBottom();
+  drawChart();
+  const r=m.round||0;
+  $('#statusText').textContent = 'round '+r+' · '+messages.length+' messages';
+}
+
+function updateRailSeats(){
+  // seats panel not in rail now; confidence chart handles it
+}
+
+function renderEvidence(){
+  const p=$('#evidencePanel');
+  if(!zetarisData){p.innerHTML='<div class="empty">No evidence yet</div>';return}
+  let html=`<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Query: <span class="mono">${esc(zetarisData.query)}</span> · ${zetarisData.total} rows</div>`;
+  html+='<table class="table"><thead><tr>';
+  zetarisData.columns.forEach(c=>html+=`<th>${esc(c)}</th>`);
+  html+='</tr></thead><tbody>';
+  zetarisData.rows.forEach(r=>{html+='<tr>'+r.map(v=>`<td>${esc(v)}</td>`).join('')+'</tr>'});
+  html+='</tbody></table>';
+  p.innerHTML=html;
+}
+
+function renderAudit(){
+  const p=$('#auditPanel');
+  if(!auditEvents.length){p.innerHTML='<div class="empty">No audit events yet</div>';return}
+  let html='';
+  auditEvents.forEach(e=>{
+    html+=`<div class="auditblock">
+      <div class="label">${e.event_type} · ${new Date(e.timestamp).toISOString()}</div>
+      <div>prev <span class="hash">${(e.previous_hash||'').slice(0,12)}…</span></div>
+      <div>hash <span class="hash">${(e.hash||'').slice(0,12)}…</span></div>
+      <div>sig  <span class="hash">${(e.signature||'').slice(0,12)}…</span></div>
+    </div>`;
+  });
+  html+=`<div style="margin-top:6px"><span class="pill" style="font-size:11px"><span class="dot ok"></span>integrity verified · ${auditEvents.length} events</span></div>`;
+  p.innerHTML=html;
+}
+
+function drawChart(){
+  const svg=$('#chart'); if(!svg) return;
+  const W=320,H=150,pad=18;
+  let out='';
+  out += `<line x1="${pad}" y1="${H-pad}" x2="${W-pad}" y2="${H-pad}" stroke="#252e4d"/>`;
+  out += `<line x1="${pad}" y1="${pad}" x2="${pad}" y2="${H-pad}" stroke="#252e4d"/>`;
+  const thrY=H-pad-(0.75*(H-2*pad));
+  out += `<line x1="${pad}" y1="${thrY}" x2="${W-pad}" y2="${thrY}" stroke="#fbbf24" stroke-dasharray="3,3" opacity=".7"/>`;
+  const order=['FactChecker','CloudArchitect','Synthesizer'];
+  order.forEach(name=>{
+    const pts=chartData[name]||[]; if(!pts.length) return;
+    let d='';
+    pts.forEach((p,i)=>{const x=pad+(i/Math.max(pts.length-1,1))*(W-2*pad);const y=H-pad-(p.conf*(H-2*pad));d+=(i===0?'M':'L')+x.toFixed(1)+','+y.toFixed(1)+' '});
+    out += `<path d="${d}" fill="none" stroke="${colors[name]}" stroke-width="2"/>`;
+    pts.forEach((p,i)=>{const x=pad+(i/Math.max(pts.length-1,1))*(W-2*pad);const y=H-pad-(p.conf*(H-2*pad));out+=`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.5" fill="${colors[name]}"/>`});
+  });
+  let lx=pad;
+  order.forEach(name=>{out+=`<rect x="${lx}" y="3" width="8" height="8" fill="${colors[name]}" rx="2"/>`;out+=`<text x="${lx+12}" y="10" fill="#8a93b6" font-size="9">${name}</text>`;lx+=95});
+  svg.innerHTML=out;
+}
+
+function renderFinal(r){
+  const d=document.createElement('div'); d.className='msg finalbubble';
+  const conf=r.finalConfidence; const method=r.consensus_method; const halted=r.halted;
+  const sv=r.seat_votes&&r.seat_votes.Synthesizer;
+  d.innerHTML=`
+    <div class="avatar Synthesizer">${avatars.Synthesizer}<span class="status"></span></div>
+    <div class="body">
+      <div class="meta"><span class="name" style="color:var(--accent)">Synthesizer</span><span class="role">supervisor · final</span><span class="badge final">final answer</span><span class="time">${time()}</span></div>
+      <div class="bubble">
+        <div class="pos">${esc(sv?sv.position:(r.haltReason||'No final answer'))}</div>
+        <div class="confrow">
+          <span>method</span><b style="color:var(--accent)">${method}</b>
+          <span style="margin-left:8px">confidence</span><b>${conf.toFixed(3)}</b>
+          <span style="margin-left:8px">rounds</span><b>${r.rounds}</b>
+          <span style="margin-left:8px">audit</span><b style="color:var(--emerald)">${runResult.auditIntegrity?'verified':'broken'}</b>
+        </div>
+        ${halted&&r.haltReason?`<div class="chips"><span class="chip dis">${esc(r.haltReason)}</span></div>`:''}
+        ${r.quarantined_seats&&r.quarantined_seats.length?`<div class="chips"><span class="chip dis">quarantined: ${r.quarantined_seats.join(', ')}</span></div>`:''}
+      </div>
+    </div>`;
+  chat.appendChild(d); scrollBottom();
+}
+
+function scrollBottom(){window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'})}
+
+function resetRun(){
+  chat.innerHTML=''; messages=[]; seats={}; chartData={FactChecker:[],CloudArchitect:[],Synthesizer:[]};
+  zetarisData=null; auditEvents=[]; runResult=null;
+  $('#evidencePanel').innerHTML='<div class="empty">No evidence yet</div>';
+  $('#auditPanel').innerHTML='<div class="empty">No audit events yet</div>';
+  $('#chart').innerHTML='';
+  $('#statusText').textContent='idle';
+}
+
+function handleEvent(ev){
+  if(ev.type==='run_start'){
+    addSystemLine(`<span class="delegated"><span class="spinner"></span>Delegated to <b>FactChecker</b>, <b>CloudArchitect</b>, <b>Synthesizer</b></span>`);
+    $('#statusText').textContent='running…';
+  } else if(ev.type==='zetaris'){
+    zetarisData=ev; renderEvidence();
+  } else if(ev.type==='seat_thinking'){
+    showTyping(ev.seatId);
+  } else if(ev.type==='round_start'){
+    if(ev.round && ev.round>0) addDivider('Round '+ev.round);
+  } else if(ev.type==='message'){
+    addMessage(ev.message);
+  } else if(ev.type==='halt'){
+    addAlert('Halted: '+ev.reason);
+  } else if(ev.type==='audit'){
+    auditEvents.push(ev.event); renderAudit();
+  } else if(ev.type==='consensus'){
+    // no-op, final handled on complete
+  } else if(ev.type==='complete'){
+    if(runResult){ return; }
+    runResult={result:ev.result,auditEvents:ev.auditEvents,auditIntegrity:ev.auditIntegrity};
+    if(ev.auditEvents && ev.auditEvents.length>auditEvents.length){auditEvents=ev.auditEvents;renderAudit()}
+    renderFinal(ev.result);
+    $('#statusText').textContent='complete';
+    toast('debate complete · audit '+ (ev.auditIntegrity?'verified':'broken'));
+  } else if(ev.type==='done'){
+    // stream end
+  } else if(ev.type==='error'){
+    addAlert('Error: '+ev.message);
+    $('#statusText').textContent='error';
+  }
+}
+
+async function runDebate(){
+  const mode=$('#modeSel').value;
+  const scenario=$('#scenarioSel').value;
+  const topic=$('#topicInput').value.trim();
+  resetRun();
+  if(topic) addUserBubble(topic);
+  else addUserBubble(mode==='sample'?'Run sample scenario: '+scenario:'Live debate over Zetaris evidence');
+  $('#statusText').textContent='starting…';
+  const body={mode,scenario,topic:topic||undefined};
+  try{
+    const {runId}=await api('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    currentRun=runId;
+    if(evtSource) evtSource.close();
+    evtSource=new EventSource('/api/run/'+runId+'/events');
+    evtSource.onmessage=(e)=>{try{handleEvent(JSON.parse(e.data))}catch(err){console.error(err)}};
+    evtSource.onerror=()=>{$('#statusText').textContent='stream closed';evtSource.close()};
+  }catch(e){toast('run failed: '+e.message);$('#statusText').textContent='failed'}
+}
+// replace
+window.runDebate=runDebate;
+$('#btnRun').onclick=runDebate;
+
+async function dryRun(){
+  $('#statusText').textContent='checking…';
+  try{const h=await api('/api/health');
+    toast('Meterless: '+(h.meterless&&h.meterless.state)+' · Zetaris: '+(h.zetaris&&h.zetaris.ok?'ok':'fail'));
+    setDot('dotMeterless',h.meterless&&h.meterless.state==='online'?'ok':'bad');
+    setDot('dotZetaris',h.zetaris&&h.zetaris.ok?'ok':'bad');
+    $('#statusText').textContent='done';
+  }catch(e){toast('health check failed');$('#statusText').textContent='failed'}
+}
+$('#btnDry').onclick=dryRun;
+$('#btnAbout').onclick=()=>{const b=$('#aboutBlock');b.style.display=b.style.display==='none'?'block':'none'};
+
+$('#modeSel').addEventListener('change',e=>{$('#modePill').textContent=e.target.value});
+
+loadHealth(); loadScenarios();
+</script>
+</body>
+</html>

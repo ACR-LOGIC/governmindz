@@ -7,6 +7,8 @@ import { auditTrail } from "../engine/AuditTrailEmitter";
 import { syncEngine } from "../integrations/syncEngine";
 import type { AgentMessage } from "./AgentMessage";
 import type { ISeatTransport } from "./SeatTransport";
+import type { RivalChallenger } from "../memory/RivalChallenger.js";
+import type { ThinkerAgent } from "../memory/ThinkerAgent.js";
 import { SemanticTranscriptCompressor } from "./SemanticTranscriptCompressor";
 
 export interface DebateConfig {
@@ -25,6 +27,11 @@ export interface DebateConfig {
 	};
 	maxActiveTranscriptMessages?: number;
 	summaryIntervalRounds?: number;
+	eventSink?: (event: Record<string, unknown>) => void;
+	evidenceContext?: string;
+	rivalChallenger?: RivalChallenger;
+	thinkerAgent?: ThinkerAgent;
+	inquiryScore?: number;
 }
 
 export type AndresNotifier = (payload: {
@@ -118,6 +125,10 @@ export class DebateLoop {
 		compactionCount: 0,
 	};
 	private adversaryConsecutiveHighConfidence = 0;
+	private challengedSeats = new Set<string>();
+	private thinkerQuestionsAsked = 0;
+	private thinkerCount = 0;
+	private interventionLog: Array<{ agent: string; reason: string; round: number }> = [];
 	private adversarialRoundsLog: Array<{
 		round: number;
 		targetSeatId: string;
@@ -137,6 +148,14 @@ export class DebateLoop {
 		private readonly topic?: string,
 		private readonly andresNotifier?: AndresNotifier,
 	) {}
+
+	private emit(event: Record<string, unknown>): void {
+		try {
+			this.config.eventSink?.(event);
+		} catch {
+			// never let streaming break the debate
+		}
+	}
 
 	async run(task: string): Promise<DebateResult> {
 		if (
@@ -158,6 +177,7 @@ export class DebateLoop {
 			if (this.haltReason) break;
 
 			this.round++;
+			this.emit({ type: "round_start", round: this.round });
 			const activeSeats = this.gravityRouter(
 				this.transcript,
 				this.round,
@@ -173,6 +193,7 @@ export class DebateLoop {
 					continue;
 				if (this.haltReason) break;
 
+				this.emit({ type: "seat_thinking", seatId, round: this.round });
 				try {
 					const challenge = this.findOpenChallenge(seatId);
 					const response = await this.transport.respond(
@@ -187,29 +208,52 @@ export class DebateLoop {
 					);
 					this.transcript.push(response);
 					this.seatFailures.delete(seatId);
+					this.emit({ type: "message", message: response });
+					await this.maybeChallenge(response, this.round);
 				} catch (err) {
 					this.handleSeatFailure(seatId, err);
 				}
+			}
+
+			await this.maybeThink(
+				this.round,
+				this.transcript.map((m) => m.content).join("\n"),
+			);
+
+			// Fallback: ensure every seat is challenged no later than its second response.
+			if (this.config.rivalChallenger) {
+				const unchallenged = this.seatIds.some(
+					(id) => !this.challengedSeats.has(id),
+				);
+				if (unchallenged) await this.runRivalChallenges(this.round);
 			}
 
 			if (this.config.adversarialSeatId && !this.haltReason) {
 				await this.runAdversarialPhase(this.round);
 			}
 
-			if (this.haltReason) break;
+			if (this.haltReason) {
+				this.emit({ type: "halt", reason: this.haltReason });
+				break;
+			}
 
 			this.compactTranscriptIfNeeded();
+
+			const roundConsensus = this.hasConsensus();
+			this.emit({ type: "round_end", round: this.round, consensus: roundConsensus });
 
 			if (this.hasDissentThresholdBreach()) {
 				await this.triggerJudgeResolution(
 					"Resolve the deadlock and produce a single authoritative answer.",
 				);
 				this.consensusMethod = "tiebreaker";
+				this.emit({ type: "consensus", method: "tiebreaker", finalConfidence: this.computeFinalConfidence() });
 				break;
 			}
 
-			if (this.hasConsensus()) {
+			if (roundConsensus) {
 				this.consensusMethod = "threshold";
+				this.emit({ type: "consensus", method: "threshold", finalConfidence: this.computeFinalConfidence() });
 				break;
 			}
 
@@ -218,37 +262,223 @@ export class DebateLoop {
 					"Escalation requested. Produce the final unified answer.",
 				);
 				this.consensusMethod = "synthesizer";
+				this.emit({ type: "consensus", method: "synthesizer", finalConfidence: this.computeFinalConfidence() });
 				break;
 			}
 		}
 
-		return this.buildResult();
+		const result = this.buildResult();
+		this.emit({ type: "complete", result });
+		return result;
 	}
 
 	private async blindRound(task: string): Promise<void> {
+		this.emit({ type: "round_start", round: 0 });
 		for (const seatId of this.seatIds) {
 			if (!this.transport.hasSeat(seatId)) continue;
+			if (this.haltReason) return;
+			this.emit({ type: "seat_thinking", seatId, round: 0 });
 			try {
 				const proposal = await this.transport.propose(seatId, task, 0);
 				this.transcript.push(proposal);
+				this.emit({ type: "message", message: proposal });
+				await this.maybeChallenge(proposal, 0);
 			} catch (err) {
 				this.handleSeatFailure(seatId, err);
-				if (this.haltReason) return;
+				if (this.haltReason) {
+					this.emit({ type: "halt", reason: this.haltReason });
+					return;
+				}
 			}
+		}
+		this.emit({ type: "round_end", round: 0, consensus: false });
+		await this.runRivalChallenges(0);
+		await this.maybeThink(0, this.transcript.map((m) => m.content).join("\n"));
+	}
+
+	private challengeCount = 0;
+
+	private async challengeOne(
+		seatId: string,
+		message: AgentMessage,
+		round: number,
+	): Promise<void> {
+		const challenger = this.config.rivalChallenger;
+		if (!challenger) return;
+		if (this.challengeCount >= 12) return;
+		const evidenceContext = this.config.evidenceContext || "";
+		this.emit({ type: "seat_thinking", seatId: "RivalChallenger", round });
+		try {
+			const result = await challenger.challenge(
+				seatId,
+				message,
+				evidenceContext,
+			);
+			const challengeMsg: AgentMessage = {
+				id: `rival-${seatId}-r${round}-${Date.now()}`,
+				fromSeat: "RivalChallenger",
+				toSeat: seatId,
+				type: "challenge",
+				content: result.challenge,
+				structured: {
+					position: result.correctedPosition,
+					confidenceSelf: result.confidence,
+					confidence_self: result.confidence,
+					confidenceExpertAgreement: result.confidence,
+					confidence_expert_agreement: result.confidence,
+					evidence: result.verifiedClaims,
+					caveats: result.unsupportedClaims,
+					dissentsFrom: result.unsupportedClaims.length ? [seatId] : [],
+					dissents_from: result.unsupportedClaims.length ? [seatId] : [],
+					supports: [],
+				},
+				confidence: result.confidence,
+				round,
+				timestamp: Date.now(),
+			};
+			this.transcript.push(challengeMsg);
+			this.challengedSeats.add(seatId);
+			this.challengeCount++;
+			this.emit({ type: "message", message: challengeMsg });
+			this.emit({
+				type: "rival_verification",
+				seatId,
+				verifiedClaims: result.verifiedClaims,
+				unsupportedClaims: result.unsupportedClaims,
+				correctedPosition: result.correctedPosition,
+			});
+		} catch (err) {
+			this.handleSeatFailure("RivalChallenger", err);
 		}
 	}
 
+	private async runRivalChallenges(round: number): Promise<void> {
+		const challenger = this.config.rivalChallenger;
+		if (!challenger) return;
+		for (const seatId of this.seatIds) {
+			if (this.challengedSeats.has(seatId)) continue;
+			const lastMsg = [...this.transcript]
+				.reverse()
+				.find((m) => m.fromSeat === seatId && m.structured);
+			if (!lastMsg) continue;
+			await this.challengeOne(seatId, lastMsg, round);
+		}
+	}
+
+	private shouldChallenge(m: AgentMessage): { challenge: boolean; reason: string } {
+		const conf = m.confidence ?? 0;
+		const ev = m.structured?.evidence ?? [];
+		const dissents = m.structured?.dissents_from ?? m.structured?.dissentsFrom ?? [];
+		const supports = m.structured?.supports ?? [];
+		const claimConfs = m.structured?.claimConfidences ?? [];
+		if (conf >= 0.8 && ev.length <= 1)
+			return { challenge: true, reason: "overconfidence with weak evidence" };
+		if (claimConfs.some((c) => c.confidence >= 0.8) && ev.length === 0)
+			return { challenge: true, reason: "unsupported certainty" };
+		if (dissents.length > 0)
+			return { challenge: true, reason: "contradiction or source conflict" };
+		if (supports.length > 0 && ev.length === 0)
+			return { challenge: true, reason: "premature consensus" };
+		if (conf <= 0.4)
+			return { challenge: true, reason: "high uncertainty on critical claim" };
+		return { challenge: false, reason: "" };
+	}
+
+	private async maybeChallenge(m: AgentMessage, round: number): Promise<void> {
+		const challenger = this.config.rivalChallenger;
+		if (!challenger) return;
+		if (this.challengeCount >= 12) return;
+		// Rival Challenger always challenges to force double-check and verification.
+		const reason = "routine challenge to force verification";
+		const key = m.fromSeat + "|" + (m.structured?.position || "").slice(0, 60);
+		if (this.challengedClaims.has(key)) return;
+		this.challengedClaims.add(key);
+		this.interventionLog.push({ agent: "RivalChallenger", reason, round });
+		this.emit({ type: "rival_trigger", seatId: m.fromSeat, reason, round });
+		await this.challengeOne(m.fromSeat, m, round);
+	}
+
+	private async maybeThink(round: number, findings: string): Promise<void> {
+		const thinker = this.config.thinkerAgent;
+		if (!thinker) return;
+		if (this.thinkerCount >= 2) return;
+		// Trigger conditions: contradictions, research gaps, pre-finalization.
+		const hasContradiction = this.transcript.some(
+			(m) => (m.structured?.dissents_from?.length ?? 0) > 0,
+		);
+		const beforeFinal = this.hasConsensus();
+		if (!hasContradiction && !beforeFinal && round > 0 && round < this.config.maxRounds) {
+			// only think on round 0 or finalization unless contradiction
+			if (round !== 0) return;
+		}
+		const sources = this.config.evidenceContext || "";
+		const result = await thinker.think({
+			inquiry: this.topic || "",
+			findings,
+			sources,
+		});
+		if (!result.questions || result.questions.length === 0) return;
+		this.thinkerCount++;
+		this.thinkerQuestionsAsked += result.questions.length;
+		for (const q of result.questions) {
+			const msg: AgentMessage = {
+				id: `thinker-q-${round}-${Date.now()}`,
+				fromSeat: "Thinker",
+				toSeat: "all",
+				type: "action_items",
+				content: q.question,
+				structured: {
+					position: q.question,
+					confidenceSelf: 0.7,
+					confidence_self: 0.7,
+					confidenceExpertAgreement: 0.7,
+					confidence_expert_agreement: 0.7,
+					evidence: [],
+					caveats: [q.reason],
+					dissents_from: [],
+					supports: q.assignedTo || [],
+				},
+				confidence: 0.7,
+				round,
+				timestamp: Date.now(),
+			};
+			this.transcript.push(msg);
+			this.emit({ type: "message", message: msg });
+			this.emit({
+				type: "thinker_question",
+				question: q.question,
+				assignedTo: q.assignedTo,
+				reason: q.reason,
+			});
+		}
+		this.interventionLog.push({
+			agent: "Thinker",
+			reason: result.summary,
+			round,
+		});
+	}
+
+	private challengedClaims = new Set<string>();
+
 	private async initialProposals(task: string): Promise<void> {
+		this.emit({ type: "round_start", round: 0 });
 		for (const seatId of this.seatIds) {
 			if (!this.transport.hasSeat(seatId)) continue;
+			if (this.haltReason) return;
+			this.emit({ type: "seat_thinking", seatId, round: 0 });
 			try {
 				const proposal = await this.transport.propose(seatId, task, 0);
 				this.transcript.push(proposal);
+				this.emit({ type: "message", message: proposal });
 			} catch (err) {
 				this.handleSeatFailure(seatId, err);
-				if (this.haltReason) return;
+				if (this.haltReason) {
+					this.emit({ type: "halt", reason: this.haltReason });
+					return;
+				}
 			}
 		}
+		this.emit({ type: "round_end", round: 0, consensus: false });
 	}
 
 	public getAdversarialRoundsLog() {
@@ -281,6 +511,7 @@ export class DebateLoop {
 		);
 
 		let challengeMsg: AgentMessage;
+		this.emit({ type: "seat_thinking", seatId: adversaryId, round });
 		try {
 			challengeMsg = await this.transport.respond(
 				adversaryId,
@@ -298,6 +529,7 @@ export class DebateLoop {
 			};
 			this.transcript.push(challengeMsg);
 			this.seatFailures.delete(adversaryId);
+			this.emit({ type: "message", message: challengeMsg });
 		} catch (err) {
 			this.handleSeatFailure(adversaryId, err);
 			return;
@@ -325,6 +557,7 @@ export class DebateLoop {
 			return;
 
 		let rebuttalMsg: AgentMessage;
+		this.emit({ type: "seat_thinking", seatId: targetId, round });
 		try {
 			rebuttalMsg = await this.transport.respond(
 				targetId,
@@ -342,6 +575,7 @@ export class DebateLoop {
 			};
 			this.transcript.push(rebuttalMsg);
 			this.seatFailures.delete(targetId);
+			this.emit({ type: "message", message: rebuttalMsg });
 		} catch (err) {
 			this.handleSeatFailure(targetId, err);
 			return;
@@ -539,13 +773,15 @@ export class DebateLoop {
 
 		try {
 			this.round += 1;
+			this.emit({ type: "round_start", round: this.round });
 			const resolution = await this.transport.synthesize(
 				judgeSeatId,
 				this.transcript,
 				this.round,
-				`${instruction}\n\nUse the available evidence to declare the strongest position and return a unified answer.`,
+				`${instruction}\\n\\nUse the available evidence to declare the strongest position and return a unified answer.`,
 			);
 			this.transcript.push(resolution);
+			this.emit({ type: "message", message: resolution });
 		} catch (err) {
 			this.handleSeatFailure(judgeSeatId, err);
 		}
@@ -652,6 +888,35 @@ export class DebateLoop {
 	}
 
 	private buildResult(): DebateResult {
+		if (this.interventionLog.length > 0) {
+			const summary = this.interventionLog
+				.map((i) => `${i.agent}(${i.reason})`)
+				.join("; ");
+			const reportMsg: AgentMessage = {
+				id: `uncertainty-report-${Date.now()}`,
+				fromSeat: "RivalChallenger",
+				toSeat: "all",
+				type: "escalation",
+				content: `Unresolved interventions escalated: ${summary}. Final answer carries residual uncertainty.`,
+				structured: {
+					position: `Unresolved interventions escalated: ${summary}. Final answer carries residual uncertainty.`,
+					confidenceSelf: 0.5,
+					confidence_self: 0.5,
+					confidenceExpertAgreement: 0.5,
+					confidence_expert_agreement: 0.5,
+					evidence: [],
+					caveats: [summary],
+					dissents_from: [],
+					supports: [],
+				},
+				confidence: 0.5,
+				round: this.round,
+				timestamp: Date.now(),
+			};
+			this.transcript.push(reportMsg);
+			this.emit({ type: "uncertainty_report", interventions: this.interventionLog });
+			this.emit({ type: "message", message: reportMsg });
+		}
 		const resolvedByJudgeOrSynth =
 			!this.haltReason &&
 			(this.consensusMethod === "synthesizer" ||

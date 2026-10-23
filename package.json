@@ -11,7 +11,8 @@
 		"demo:dry": "node --env-file=.env.local --import tsx apps/gateway/src/main.ts --dry-run",
 		"demo:sample": "node --import tsx apps/gateway/src/sample.ts",
 		"samples": "node scripts/run-samples.mjs",
-		"smoke": "node --env-file=.env.local --import tsx apps/gateway/src/smoke.ts"
+		"smoke": "node --env-file=.env.local --import tsx apps/gateway/src/smoke.ts",
+		"web": "node --env-file=.env.local --import tsx apps/web/server.ts"
 	},
 	"devDependencies": {
 		"tsx": "^4.20.6",

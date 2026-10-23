@@ -2,21 +2,17 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { AgentSeat, type SeatConfig } from "@governmindz/core/debate/AgentSeat";
-import { DebateLoop, type DebateResult } from "@governmindz/core/debate/DebateLoop";
-import { LocalSeatTransport } from "@governmindz/core/debate/SeatTransport";
+import { type DebateResult } from "@governmindz/core/debate/DebateLoop";
 import {
 	auditTrail,
 	type AuditEvent,
 } from "@governmindz/core/engine/AuditTrailEmitter";
 import { Logger } from "@governmindz/core/kernel/Logger";
 import { MeterlessProvider } from "@governmindz/core/providers/MeterlessProvider";
-import { MeterlessSeatClient } from "@governmindz/core/providers/MeterlessSeatClient";
-import { PromptRegistry } from "@governmindz/core/services/PromptRegistry";
 import { formatZetarisResult } from "./format.js";
 import { loadSampleScenario, type SampleScenario } from "./sampleScenario.js";
-import { SampleSeatClient } from "./sampleSeat.js";
 import { zetarisQueryHandler } from "./tools/zetaris.tools.js";
+import { runDebate as runDebateCore } from "./debateRunner.js";
 
 interface ZetarisToolResult {
 	columns: string[];
@@ -82,93 +78,6 @@ async function runDryRun(): Promise<number> {
 	await printMeterlessStatus(new MeterlessProvider());
 	console.log("Dry run complete: Zetaris verified; no LLM calls were made.");
 	return 0;
-}
-
-function buildSeats(
-	provider: MeterlessProvider | null,
-	scenario?: SampleScenario,
-): AgentSeat[] {
-	const seatModel = process.env.METERLESS_SEAT_MODEL?.trim() || undefined;
-	const configs: SeatConfig[] = [
-		{
-			seatId: "FactChecker",
-			role: "fact_checker",
-			provider: "meterless",
-			systemPrompt: PromptRegistry.load("fact_checker"),
-		},
-		{
-			seatId: "CloudArchitect",
-			role: "cloud-architect",
-			provider: "meterless",
-			systemPrompt: PromptRegistry.load("architect"),
-		},
-		{
-			seatId: "Synthesizer",
-			role: "synthesizer",
-			provider: "meterless",
-			systemPrompt: PromptRegistry.load("synthesizer"),
-		},
-	];
-
-	return configs.map((config) => {
-		if (scenario) {
-			return new AgentSeat(
-				config,
-				new SampleSeatClient(config.seatId, scenario.seats[config.seatId] ?? []),
-			);
-		}
-		if (!provider) throw new Error("Meterless provider is required outside sample mode.");
-		const llm = new MeterlessSeatClient(provider, seatModel);
-		return new AgentSeat(config, {
-			complete: async (system: string, prompt: string) => {
-				console.log(`\n[${config.seatId}] requesting...`);
-				const started = Date.now();
-				const result = await llm.complete(system, prompt);
-				console.log(`[${config.seatId}] responded in ${Date.now() - started}ms`);
-				return result;
-			},
-		});
-	});
-}
-
-function buildTask(topic: string, context: string): string {
-	return [
-		"You are advising a human operator. Use only the supplied Zetaris evidence and your role expertise.",
-		"",
-		`Question: ${topic}`,
-		"",
-		"Zetaris evidence:",
-		context,
-		"",
-		"Do not invent database names, row counts, sources, or credentials. If the evidence is insufficient, say so and lower your confidence.",
-	].join("\n");
-}
-
-function createDebateLoop(seats: AgentSeat[], topic: string): DebateLoop {
-	const seatMap = new Map(seats.map((seat) => [seat.seatId, seat]));
-	const transport = new LocalSeatTransport(seatMap);
-	const seatIds = seats.map((seat) => seat.seatId);
-	return new DebateLoop(
-		seatIds,
-		transport,
-		() => seatIds,
-		{
-			maxRounds: 2,
-			consensusThreshold: 0.75,
-			minConsensusSeats: 2,
-			enableTieredPhases: true,
-			dissentTriggerCount: 3,
-			judgeSeatId: "Synthesizer",
-			transcriptCompression: {
-				maxRecentMessages: 8,
-				maxEvidencePerMessage: 3,
-			},
-			maxActiveTranscriptMessages: 12,
-			summaryIntervalRounds: 2,
-		},
-		undefined,
-		topic,
-	);
 }
 
 function printDebateResult(
@@ -339,10 +248,12 @@ async function runDebate(): Promise<number> {
 	console.log(context);
 
 	const topic = process.env.GOVERNMINDZ_TOPIC?.trim() || DEFAULT_TOPIC;
-	const seats = buildSeats(provider);
-	const loop = createDebateLoop(seats, topic);
-	const resultDebate = await loop.run(buildTask(topic, context));
-	const auditEvents = auditTrail.getLog();
+	const out = await runDebateCore({
+		mode: "live",
+		topicOverride: topic,
+	});
+	const resultDebate = out.result;
+	const auditEvents = out.auditEvents;
 
 	printDebateResult(resultDebate, result.rows.length, auditEvents);
 	const logPath = process.env.GOVERNMINDZ_LOG_PATH?.trim();
@@ -374,10 +285,13 @@ async function runSampleDebate(): Promise<number> {
 	console.log(`Zetaris query (cached): ${scenario.zetaris.query}`);
 	console.log(context);
 
-	const seats = buildSeats(null, scenario);
-	const loop = createDebateLoop(seats, topic);
-	const resultDebate = await loop.run(buildTask(topic, context));
-	const auditEvents = auditTrail.getLog();
+	const out = await runDebateCore({
+		mode: "sample",
+		scenarioPath: filePath,
+		topicOverride: topic,
+	});
+	const resultDebate = out.result;
+	const auditEvents = out.auditEvents;
 
 	printDebateResult(resultDebate, scenario.zetaris.rows.length, auditEvents);
 	const { outputPath, logPath } = writeSampleArtifacts(
