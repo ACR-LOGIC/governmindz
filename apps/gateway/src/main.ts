@@ -13,6 +13,7 @@ import { formatZetarisResult } from "./format.js";
 import { loadSampleScenario, type SampleScenario } from "./sampleScenario.js";
 import { zetarisQueryHandler } from "./tools/zetaris.tools.js";
 import { runDebate as runDebateCore } from "./debateRunner.js";
+import { Orchestrator } from "./orchestrator.js";
 
 interface ZetarisToolResult {
 	columns: string[];
@@ -312,6 +313,32 @@ async function main(): Promise<void> {
 	let code: number;
 	if (hasFlag("--dry-run")) {
 		code = await runDryRun();
+	} else if (hasFlag("--orchestrator")) {
+		const orchestrator = new Orchestrator({
+			mode: process.env.SAMPLE_MODE === "true" ? "sample" : "live",
+			scenarioPath: process.env.SAMPLE_SCENARIO,
+			topicOverride: process.env.GOVERNMINDZ_TOPIC,
+			maxCycles: 5,
+		});
+		const result = await orchestrator.run();
+		console.log("\n=== Orchestrator Result ===");
+		console.log(`Run ID: ${result.runId}`);
+		console.log(`Mode: ${result.mode}`);
+		console.log(`Question: ${result.userQuestion}`);
+		console.log(`Inquiry score: ${result.inquiryScore}/10`);
+		console.log(`Consensus: ${result.consensusReached} (${result.consensusMethod})`);
+		console.log(`Zetaris used: ${result.zetarisUsed}`);
+		console.log(`Research used: ${result.researchUsed}`);
+		console.log(`Audit integrity: ${result.auditIntegrity}`);
+		console.log(`Unresolved issues: ${result.unresolvedIssues.length}`);
+		console.log(`Interventions: ${result.interventions.length}`);
+		console.log("\n--- Final Answer ---");
+		console.log(result.finalAnswer);
+		console.log("\n--- State History ---");
+		for (const s of result.stateHistory) {
+			console.log(`  [${s.state}] ${s.trigger}`);
+		}
+		code = result.unresolvedIssues.length > 0 ? 1 : 0;
 	} else if (process.env.SAMPLE_MODE === "true" || hasFlag("--sample")) {
 		code = await runSampleDebate();
 	} else {

@@ -154,6 +154,13 @@ export class AuditTrailEmitter {
 		return [...this.log];
 	}
 
+	/**
+	 * Public emit for external orchestration workflows.
+	 */
+	emitEvent(params: Omit<AuditEvent, "id" | "previous_hash" | "hash" | "signature">): void {
+		this.emit(params);
+	}
+
 	verifyIntegrity(): boolean {
 		let prev = this.hashGenesis();
 		for (const event of this.log) {
