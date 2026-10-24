@@ -12,11 +12,14 @@
 		"demo:sample": "node --import tsx apps/gateway/src/sample.ts",
 		"samples": "node scripts/run-samples.mjs",
 		"smoke": "node --env-file=.env.local --import tsx apps/gateway/src/smoke.ts",
-	"orchestrator": "node --env-file=.env.local --import tsx apps/gateway/src/main.ts --orchestrator",
+		"orchestrator": "node --env-file=.env.local --import tsx apps/gateway/src/main.ts --orchestrator",
 		"web": "node --env-file=.env.local --import tsx apps/web/server.ts"
 	},
 	"devDependencies": {
 		"tsx": "^4.20.6",
 		"typescript": "^6.0.3"
+	},
+	"dependencies": {
+		"better-sqlite3": "^13.0.3"
 	}
 }
