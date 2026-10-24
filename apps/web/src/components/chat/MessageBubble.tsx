@@ -21,13 +21,14 @@ import {
 	ThumbsUp,
 	ThumbsDown,
 } from "lucide-react";
-import type { ChatMessage } from "../../types";
-import { AGENT_REGISTRY } from "../../services/agentRegistry";
+import type { ChatMessage, AgentProfile } from "../../types";
+import { AGENT_REGISTRY, getAgentProfile } from "../../services/agentRegistry";
 import { AgentAvatar } from "../common/AgentAvatar";
 import { ttsService } from "../../services/ttsService";
 
 interface MessageBubbleProps {
 	message: ChatMessage;
+	agentProfile?: AgentProfile;
 	onSelectAgent?: (seatId: string) => void;
 	onRateMessage?: (messageId: string, rating: "up" | "down" | null) => void;
 }
@@ -46,6 +47,7 @@ const CATCHPHRASES: Record<string, string> = {
 
 export const MessageBubble: React.FC<MessageBubbleProps> = ({
 	message,
+	agentProfile,
 	onSelectAgent,
 	onRateMessage,
 }) => {
@@ -67,14 +69,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 	const isUser = message.fromSeat === "user";
 	const isOrchestrator = message.fromSeat === "Orchestrator";
 
-	const profile = AGENT_REGISTRY[message.fromSeat] || {
-		id: message.fromSeat,
-		name: message.fromSeat,
-		role: "Agent Seat",
-		initials: message.fromSeat.slice(0, 2).toUpperCase(),
-		avatarGradient: "from-slate-600 to-slate-800",
-		accentColor: "#94a3b8",
-	};
+	const profile =
+		agentProfile || AGENT_REGISTRY[message.fromSeat] || getAgentProfile(message.fromSeat);
 
 	const st = message.structured;
 	const selfConf = st?.confidence_self ?? st?.confidenceSelf ?? message.confidence;
@@ -212,22 +208,23 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 						className="font-bold text-sm hover:underline transition-colors flex items-center gap-1.5"
 						style={{ color: profile.accentColor }}
 					>
-						<span>{profile.name}</span>
+						<span>{profile.humanName ? `${profile.humanName} (${profile.role})` : profile.name}</span>
 					</button>
 
 					<span className="text-[11px] text-slate-400 font-medium">· {profile.role}</span>
 
-					{/* Creative Stylized Title */}
-					{profile.creativeTitle && (
+					{/* Assigned Job Task Badge */}
+					{profile.jobTask && (
 						<span
-							className="text-[10px] font-mono px-2 py-0.5 rounded-md font-semibold border shadow-sm"
+							className="text-[9.5px] font-mono px-2 py-0.5 rounded-md font-semibold border shadow-sm max-w-xs truncate"
 							style={{
 								backgroundColor: `${profile.accentColor}15`,
 								borderColor: `${profile.accentColor}40`,
 								color: profile.accentColor,
 							}}
+							title={`Job Task: ${profile.jobTask}`}
 						>
-							{profile.creativeTitle}
+							Task: {profile.jobTask}
 						</span>
 					)}
 

@@ -56,9 +56,9 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
 							<h3 className="font-display font-bold text-base text-slate-100 flex items-center gap-1.5">
 								<span>{agent.name}</span>
 							</h3>
-							{agent.creativeTitle && (
-								<div className="text-[11px] font-mono font-semibold text-amber-300">
-									{agent.creativeTitle}
+							{agent.humanName && (
+								<div className="text-[12px] font-mono font-bold text-amber-300">
+									Assigned Operator: {agent.humanName}
 								</div>
 							)}
 							<p className="text-xs text-slate-400">{agent.role}</p>
@@ -86,6 +86,15 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
 						</span>
 					</div>
 
+					{agent.humanName && (
+						<div className="flex items-center justify-between text-xs">
+							<span className="text-slate-400">Operator Identity:</span>
+							<span className="font-mono font-bold text-amber-300 text-[11px] px-2 py-0.5 rounded bg-amber-950/50 border border-amber-800/40">
+								{agent.humanName}
+							</span>
+						</div>
+					)}
+
 					{agent.domainExpertise && (
 						<div className="flex items-start justify-between text-xs">
 							<span className="text-slate-400 shrink-0 mr-2">Domain Focus:</span>
@@ -107,6 +116,19 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
 						</div>
 					)}
 				</div>
+
+				{/* Assigned Job Task Card */}
+				{agent.jobTask && (
+					<div className="p-3.5 mb-6 rounded-xl bg-gradient-to-r from-amber-950/30 via-[#18203a] to-[#12182b] border border-amber-500/30 text-xs space-y-1.5 shadow-md">
+						<div className="text-[10.5px] font-mono uppercase text-amber-300 font-bold flex items-center gap-1.5">
+							<Bot className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+							<span>{agent.humanName || agent.name}&apos;s Delegated Job Task:</span>
+						</div>
+						<div className="text-slate-200 text-xs leading-relaxed font-sans font-medium italic">
+							&ldquo;{agent.jobTask}&rdquo;
+						</div>
+					</div>
+				)}
 
 				{catchphrase && (
 					<div className="p-3 mb-6 rounded-xl bg-[#18203a] border border-[#2c385c] text-xs font-mono italic text-amber-300 flex items-center gap-2 shadow-inner">

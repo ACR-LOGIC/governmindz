@@ -23,7 +23,9 @@ export type AgentStatus =
 export interface AgentProfile {
 	id: string;
 	name: string;
+	humanName?: string;
 	role: string;
+	jobTask?: string;
 	creativeTitle?: string;
 	domainExpertise?: string;
 	initials: string;
@@ -123,6 +125,13 @@ export interface ScenarioItem {
 	rows?: number;
 }
 
+export interface SeatAssignment {
+	seatId?: string;
+	humanName: string;
+	role?: string;
+	jobTask: string;
+}
+
 export interface Conversation {
 	id: string;
 	title: string;
@@ -138,6 +147,7 @@ export interface Conversation {
 	status: "idle" | "running" | "completed" | "error";
 	inquiryScore?: number;
 	workflowEvents: WorkflowTimelineEvent[];
+	agentAssignments?: Record<string, SeatAssignment>;
 	webSearchData?: {
 		query: string;
 		total: number;

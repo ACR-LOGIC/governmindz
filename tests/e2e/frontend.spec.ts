@@ -91,6 +91,7 @@ test.describe("GovernMindz Mission Control Frontend", () => {
 
 	test("Conversation history creation and message submission", async ({ page }) => {
 		await page.goto("/");
+		await page.waitForLoadState("networkidle");
 
 		// Create a new debate
 		await page.getByRole("button", { name: /New AI Debate/i }).click();

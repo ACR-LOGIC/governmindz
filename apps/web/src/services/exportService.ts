@@ -42,6 +42,7 @@ export function exportConversationAsJson(conv: Conversation) {
 		},
 		deliberation: {
 			totalMessages: conv.messages.length,
+			councilAssignments: conv.agentAssignments || null,
 			messages: conv.messages.map((m) => ({
 				id: m.id,
 				fromSeat: m.fromSeat,
@@ -102,6 +103,15 @@ export function exportConversationAsMarkdown(conv: Conversation) {
 	if (finalMsg) {
 		lines.push(`## 🏛️ Final Calibrated Consensus`);
 		lines.push(finalMsg.structured?.position || finalMsg.content);
+		lines.push("");
+	}
+
+	// Council Human Assignments
+	if (conv.agentAssignments && Object.keys(conv.agentAssignments).length > 0) {
+		lines.push(`## 👥 Council Team Assignments`);
+		Object.entries(conv.agentAssignments).forEach(([seatId, a]) => {
+			lines.push(`- **${a.humanName}** (*${a.role || seatId}*): ${a.jobTask}`);
+		});
 		lines.push("");
 	}
 

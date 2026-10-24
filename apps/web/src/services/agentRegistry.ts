@@ -1,4 +1,18 @@
 import type { AgentProfile } from "../types";
+import { SEAT_JOB_TASKS } from "./nameRotation";
+
+export const DEFAULT_HUMAN_NAMES: Record<string, string> = {
+	FactChecker: "Vicky",
+	CloudArchitect: "Luis",
+	Synthesizer: "Shaniqua",
+	RivalChallenger: "RJ",
+	Thinker: "Lucy",
+	CredibleSourcesResearchAgent: "Arturo",
+	ContextAgent: "Tom",
+	SocialCommunityResearchAgent: "Jovita",
+	Orchestrator: "Raul",
+	user: "Operator",
+};
 
 export const AGENT_REGISTRY: Record<
 	string,
@@ -7,9 +21,10 @@ export const AGENT_REGISTRY: Record<
 	FactChecker: {
 		id: "FactChecker",
 		name: "Fact Checker",
-		creativeTitle: "Chief Forensic Truth Arbiter",
-		role: "Federated Evidence & Data Verification",
-		domainExpertise: "Epistemic Verification & Schema Provenance",
+		humanName: "Vicky",
+		jobTask: SEAT_JOB_TASKS.FactChecker,
+		role: "Fact Checker",
+		domainExpertise: "Federated Evidence & Data Verification",
 		initials: "FC",
 		avatarGradient: "from-sky-500 via-blue-600 to-indigo-900",
 		accentColor: "#7dd3fc",
@@ -17,9 +32,10 @@ export const AGENT_REGISTRY: Record<
 	CloudArchitect: {
 		id: "CloudArchitect",
 		name: "Cloud Architect",
-		creativeTitle: "High Zero-Trust Sentinel",
-		role: "Least Privilege & Safety Guard",
-		domainExpertise: "Least-Privilege Bastion & Firewall Enforcer",
+		humanName: "Luis",
+		jobTask: SEAT_JOB_TASKS.CloudArchitect,
+		role: "Cloud Architect",
+		domainExpertise: "Least Privilege & Safety Guard",
 		initials: "CA",
 		avatarGradient: "from-emerald-500 via-teal-600 to-emerald-950",
 		accentColor: "#34d399",
@@ -27,9 +43,10 @@ export const AGENT_REGISTRY: Record<
 	Synthesizer: {
 		id: "Synthesizer",
 		name: "Synthesizer",
-		creativeTitle: "Chancellor of Calibrated Synthesis",
-		role: "Consensus Arbiter & Final Decision",
-		domainExpertise: "Multi-Agent Consensus & Final Decree",
+		humanName: "Shaniqua",
+		jobTask: SEAT_JOB_TASKS.Synthesizer,
+		role: "Synthesizer",
+		domainExpertise: "Consensus Arbiter & Final Decision",
 		initials: "SY",
 		avatarGradient: "from-purple-500 via-violet-600 to-indigo-950",
 		accentColor: "#c4b5fd",
@@ -37,9 +54,10 @@ export const AGENT_REGISTRY: Record<
 	RivalChallenger: {
 		id: "RivalChallenger",
 		name: "Rival Challenger",
-		creativeTitle: "Grand Adversarial Inquisitor",
-		role: "Adversarial Review & Challenge Intervention",
-		domainExpertise: "Interrogation & Falsification Engine",
+		humanName: "RJ",
+		jobTask: SEAT_JOB_TASKS.RivalChallenger,
+		role: "Rival Challenger",
+		domainExpertise: "Adversarial Review & Challenge Intervention",
 		initials: "RC",
 		avatarGradient: "from-rose-500 via-red-600 to-rose-950",
 		accentColor: "#fb7185",
@@ -47,9 +65,10 @@ export const AGENT_REGISTRY: Record<
 	Thinker: {
 		id: "Thinker",
 		name: "Thinker Agent",
-		creativeTitle: "High Cosmic Ontologist",
-		role: "Exploratory Inquiry & Hidden Angles",
-		domainExpertise: "Edge-Case Dialectics & Temporal Horizon Analysis",
+		humanName: "Lucy",
+		jobTask: SEAT_JOB_TASKS.Thinker,
+		role: "Thinker Agent",
+		domainExpertise: "Exploratory Inquiry & Hidden Angles",
 		initials: "TK",
 		avatarGradient: "from-amber-400 via-yellow-600 to-amber-950",
 		accentColor: "#fbbf24",
@@ -57,9 +76,10 @@ export const AGENT_REGISTRY: Record<
 	ContextAgent: {
 		id: "ContextAgent",
 		name: "Context Agent",
-		creativeTitle: "Master Archivist of Memory",
-		role: "Memory & Assumption Assessor",
-		domainExpertise: "Cross-Round Transcripts & Historical State",
+		humanName: "Tom",
+		jobTask: SEAT_JOB_TASKS.ContextAgent,
+		role: "Context Agent",
+		domainExpertise: "Memory & Assumption Assessor",
 		initials: "CX",
 		avatarGradient: "from-teal-400 via-cyan-600 to-teal-950",
 		accentColor: "#2dd4bf",
@@ -67,9 +87,10 @@ export const AGENT_REGISTRY: Record<
 	CredibleSourcesResearchAgent: {
 		id: "CredibleSourcesResearchAgent",
 		name: "Credible Research",
-		creativeTitle: "Imperial Web Intelligence Scout",
-		role: "Source Citation & Authority Verifier",
-		domainExpertise: "Live Web Telemetry & Authoritative Citations",
+		humanName: "Arturo",
+		jobTask: SEAT_JOB_TASKS.CredibleSourcesResearchAgent,
+		role: "Credible Research",
+		domainExpertise: "Source Citation & Authority Verifier",
 		initials: "CR",
 		avatarGradient: "from-cyan-500 via-sky-600 to-blue-950",
 		accentColor: "#38bdf8",
@@ -77,9 +98,10 @@ export const AGENT_REGISTRY: Record<
 	SocialCommunityResearchAgent: {
 		id: "SocialCommunityResearchAgent",
 		name: "Community Agent",
-		creativeTitle: "Tribune of Public Sentiment",
-		role: "Social & Perspective Assessment",
-		domainExpertise: "Ecosystem Consensus & Stakeholder Impact",
+		humanName: "Jovita",
+		jobTask: SEAT_JOB_TASKS.SocialCommunityResearchAgent,
+		role: "Community Agent",
+		domainExpertise: "Social & Perspective Assessment",
 		initials: "SR",
 		avatarGradient: "from-orange-500 via-amber-600 to-orange-950",
 		accentColor: "#fb923c",
@@ -87,7 +109,8 @@ export const AGENT_REGISTRY: Record<
 	Orchestrator: {
 		id: "Orchestrator",
 		name: "GovernMindz Core",
-		creativeTitle: "Mission Director & State Arbiter",
+		humanName: "Raul",
+		jobTask: "Directs council workflow lifecycle, assigns job tasks, and coordinates state transitions.",
 		role: "Workflow State & Lifecycle Engine",
 		domainExpertise: "Workflow State Machine & Council Dispatch",
 		initials: "GM",
@@ -97,7 +120,8 @@ export const AGENT_REGISTRY: Record<
 	user: {
 		id: "user",
 		name: "Operator",
-		creativeTitle: "High Sovereign Reviewer",
+		humanName: "You",
+		jobTask: "Reviews multi-agent deliberation and ratifies final decisions.",
 		role: "Human Reviewer",
 		domainExpertise: "Human Oversight & Final Ratification",
 		initials: "OP",
@@ -106,11 +130,15 @@ export const AGENT_REGISTRY: Record<
 	},
 };
 
-export function getAgentProfile(seatId: string): AgentProfile {
+export function getAgentProfile(
+	seatId: string,
+	assignment?: { humanName?: string; jobTask?: string },
+): AgentProfile {
 	const template = AGENT_REGISTRY[seatId] || {
 		id: seatId,
 		name: seatId,
-		creativeTitle: "Autonomous Council Member",
+		humanName: DEFAULT_HUMAN_NAMES[seatId] || "Alex",
+		jobTask: "support the multi-agent council with specialized analysis and verification.",
 		role: "Autonomous Agent Seat",
 		domainExpertise: "Specialized Analysis & Verification",
 		initials: seatId.slice(0, 2).toUpperCase(),
@@ -118,8 +146,13 @@ export function getAgentProfile(seatId: string): AgentProfile {
 		accentColor: "#94a3b8",
 	};
 
+	const humanName = assignment?.humanName || template.humanName || DEFAULT_HUMAN_NAMES[seatId] || "Alex";
+	const jobTask = assignment?.jobTask || template.jobTask || "support council deliberation.";
+
 	return {
 		...template,
+		humanName,
+		jobTask,
 		status: "idle",
 		evidenceCount: 0,
 		confidence: null,
@@ -127,15 +160,17 @@ export function getAgentProfile(seatId: string): AgentProfile {
 	};
 }
 
-export function getAllAgentProfiles(): AgentProfile[] {
+export function getAllAgentProfiles(
+	assignments?: Record<string, { humanName?: string; jobTask?: string }>,
+): AgentProfile[] {
 	return [
-		getAgentProfile("FactChecker"),
-		getAgentProfile("CloudArchitect"),
-		getAgentProfile("Synthesizer"),
-		getAgentProfile("RivalChallenger"),
-		getAgentProfile("Thinker"),
-		getAgentProfile("CredibleSourcesResearchAgent"),
-		getAgentProfile("ContextAgent"),
-		getAgentProfile("SocialCommunityResearchAgent"),
+		getAgentProfile("FactChecker", assignments?.FactChecker),
+		getAgentProfile("CloudArchitect", assignments?.CloudArchitect),
+		getAgentProfile("Synthesizer", assignments?.Synthesizer),
+		getAgentProfile("RivalChallenger", assignments?.RivalChallenger),
+		getAgentProfile("Thinker", assignments?.Thinker),
+		getAgentProfile("CredibleSourcesResearchAgent", assignments?.CredibleSourcesResearchAgent),
+		getAgentProfile("ContextAgent", assignments?.ContextAgent),
+		getAgentProfile("SocialCommunityResearchAgent", assignments?.SocialCommunityResearchAgent),
 	];
 }

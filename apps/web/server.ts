@@ -65,6 +65,8 @@ function getAllConversations() {
 				auditEvents: parsed.auditEvents || [],
 				zetarisData: parsed.zetarisData || null,
 				workflowEvents: parsed.workflowEvents || [],
+				agentAssignments: parsed.agentAssignments || null,
+				webSearchData: parsed.webSearchData || null,
 			};
 		} catch {
 			return {
@@ -103,6 +105,8 @@ function getConversationById(id: string) {
 			auditEvents: parsed.auditEvents || [],
 			zetarisData: parsed.zetarisData || null,
 			workflowEvents: parsed.workflowEvents || [],
+			agentAssignments: parsed.agentAssignments || null,
+			webSearchData: parsed.webSearchData || null,
 		};
 	} catch {
 		return null;
@@ -130,6 +134,8 @@ function upsertConversation(conv: any) {
 		auditEvents: conv.auditEvents || [],
 		zetarisData: conv.zetarisData || null,
 		workflowEvents: conv.workflowEvents || [],
+		agentAssignments: conv.agentAssignments || null,
+		webSearchData: conv.webSearchData || null,
 	};
 
 	stmt.run({

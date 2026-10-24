@@ -7,6 +7,7 @@ import { ArrowDown, Bot, ShieldCheck, Sparkles, AlertCircle, Database, Play, Arr
 
 interface GroupConversationProps {
 	messages: ChatMessage[];
+	agentRoster?: AgentProfile[];
 	activeAgentThinking: string | null;
 	inquiryScore?: number;
 	finalConfidence?: number;
@@ -23,6 +24,7 @@ interface GroupConversationProps {
 
 export const GroupConversation: React.FC<GroupConversationProps> = ({
 	messages,
+	agentRoster,
 	activeAgentThinking,
 	inquiryScore,
 	finalConfidence,
@@ -238,11 +240,17 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 
 				{/* Messages Stream */}
 				{visibleMessages.map((m) => {
+					const agentProfile = agentRoster?.find((a) => a.id === m.fromSeat);
 					// If this is the final consensus message, we render the highlighted FinalAnswerCard!
 					if (m === finalMessage) {
 						return (
 							<React.Fragment key={m.id}>
-								<MessageBubble message={m} onSelectAgent={onSelectAgent} onRateMessage={onRateMessage} />
+								<MessageBubble
+									message={m}
+									agentProfile={agentProfile}
+									onSelectAgent={onSelectAgent}
+									onRateMessage={onRateMessage}
+								/>
 								<FinalAnswerCard
 									message={m}
 									finalConfidence={finalConfidence}
@@ -258,6 +266,7 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 						<MessageBubble
 							key={m.id}
 							message={m}
+							agentProfile={agentProfile}
 							onSelectAgent={onSelectAgent}
 							onRateMessage={onRateMessage}
 						/>

@@ -19,6 +19,7 @@ import {
 	subscribeRunEvents,
 } from "./services/api";
 import { AGENT_REGISTRY, getAgentProfile } from "./services/agentRegistry";
+import { assignHumanCouncil, generateTaskDelegationAnnouncement } from "./services/nameRotation";
 import type {
 	ActiveTab,
 	ChatMessage,
@@ -99,10 +100,26 @@ export const App: React.FC = () => {
 		try {
 			const convs = await fetchConversations();
 			if (convs && convs.length > 0) {
-				setConversations(convs);
-				setActiveId(convs[0].id);
+				setConversations((prev) => {
+					// If a new conversation was created before fetch resolved, keep it at top
+					if (prev.length > 0 && prev[0].messages.length === 0 && !convs.find((c) => c.id === prev[0].id)) {
+						return [prev[0], ...convs];
+					}
+					return convs;
+				});
+				setActiveId((curr) => curr || convs[0].id);
+				if (convs[0].agentAssignments) {
+					const assigns = convs[0].agentAssignments;
+					setAgentRoster((prev) =>
+						prev.map((a) => {
+							const m = assigns[a.id];
+							return m ? { ...a, humanName: m.humanName, jobTask: m.jobTask } : a;
+						}),
+					);
+				}
 			} else {
-				// Create initial default conversation
+				// Create initial default conversation with rotated human council
+				const defaultAssigns = assignHumanCouncil();
 				const defaultConv: Conversation = {
 					id: `conv_${Date.now()}`,
 					title: "Zetaris Data Access Readiness",
@@ -116,9 +133,16 @@ export const App: React.FC = () => {
 					auditEvents: [],
 					status: "idle",
 					workflowEvents: [],
+					agentAssignments: defaultAssigns,
 				};
 				setConversations([defaultConv]);
 				setActiveId(defaultConv.id);
+				setAgentRoster((prev) =>
+					prev.map((a) => {
+						const m = defaultAssigns[a.id];
+						return m ? { ...a, humanName: m.humanName, jobTask: m.jobTask } : a;
+					}),
+				);
 			}
 		} catch (e) {
 			console.warn("Conversation load error:", e);
@@ -128,6 +152,19 @@ export const App: React.FC = () => {
 	useEffect(() => {
 		loadInitData();
 	}, [loadInitData]);
+
+	// Sync active conversation's assigned council whenever active conversation changes
+	useEffect(() => {
+		if (activeConv?.agentAssignments) {
+			const assigns = activeConv.agentAssignments;
+			setAgentRoster((prev) =>
+				prev.map((a) => {
+					const m = assigns[a.id];
+					return m ? { ...a, humanName: m.humanName, jobTask: m.jobTask } : a;
+				}),
+			);
+		}
+	}, [activeConv?.id]);
 
 	// Refresh Health
 	const handleRefreshHealth = async () => {
@@ -145,6 +182,8 @@ export const App: React.FC = () => {
 
 	// Create New Conversation
 	const handleNewConversation = () => {
+		const councilAssignments = assignHumanCouncil();
+
 		const newConv: Conversation = {
 			id: `conv_${Date.now()}`,
 			title: `AI Debate #${conversations.length + 1}`,
@@ -157,7 +196,23 @@ export const App: React.FC = () => {
 			auditEvents: [],
 			status: "idle",
 			workflowEvents: [],
+			agentAssignments: councilAssignments,
 		};
+
+		// Update active roster with the assigned human names and tasks
+		setAgentRoster((prev) =>
+			prev.map((a) => {
+				const match = councilAssignments[a.id];
+				if (match) {
+					return {
+						...a,
+						humanName: match.humanName,
+						jobTask: match.jobTask,
+					};
+				}
+				return a;
+			}),
+		);
 
 		const updated = [newConv, ...conversations];
 		setConversations(updated);
@@ -243,6 +298,24 @@ export const App: React.FC = () => {
 
 		const topicToRun = userTopic || activeConv.topic || "Assess the Zetaris data available to this agent.";
 
+		// Assign / rotate friendly human names & job tasks for this deliberation
+		const councilAssignments = activeConv.agentAssignments || assignHumanCouncil();
+
+		// Update active roster with the assigned human names and tasks
+		setAgentRoster((prev) =>
+			prev.map((a) => {
+				const match = councilAssignments[a.id];
+				if (match) {
+					return {
+						...a,
+						humanName: match.humanName,
+						jobTask: match.jobTask,
+					};
+				}
+				return a;
+			}),
+		);
+
 		// Add user message to conversation
 		const userMsg: ChatMessage = {
 			id: `msg_user_${Date.now()}`,
@@ -260,6 +333,7 @@ export const App: React.FC = () => {
 			title: activeConv.title.startsWith("AI Debate #") ? topicToRun.slice(0, 32) + "…" : activeConv.title,
 			messages: updatedMessages,
 			status: "running",
+			agentAssignments: councilAssignments,
 			updatedAt: Date.now(),
 		};
 
@@ -309,19 +383,9 @@ export const App: React.FC = () => {
 				let updated = { ...curr };
 
 				if (ev.type === "run_start") {
-					// Announce the active agent roster upon task delegation
-					const rosterAnnouncement = [
-						"🏛️ Council Convened for Task Delegation: Inquiry initiated in " + ev.mode.toUpperCase() + " mode.",
-						"",
-						"• Chief Forensic Truth Arbiter (Fact Checker) — Epistemic Verification & Schema Provenance",
-						"• High Zero-Trust Sentinel (Cloud Architect) — Least-Privilege Bastion & Firewall Enforcer",
-						"• Chancellor of Calibrated Synthesis (Synthesizer) — Multi-Agent Consensus & Final Decree",
-						"• Grand Adversarial Inquisitor (Rival Challenger) — Interrogation & Falsification Engine",
-						"• High Cosmic Ontologist (Thinker Agent) — Edge-Case Dialectics & Temporal Horizon Analysis",
-						"• Imperial Web Intelligence Scout (Credible Research) — Live Web Telemetry & Citations",
-						"",
-						"Council active. Initiating federated evidence analysis, web verification, and multi-round deliberation...",
-					].join("\n");
+					// Announce the active agent roster with friendly human names and assigned job tasks
+					const assignments = updated.agentAssignments || assignHumanCouncil();
+					const rosterAnnouncement = generateTaskDelegationAnnouncement(assignments, ev.mode);
 
 					const orchMsg: ChatMessage = {
 						id: `msg_orch_${Date.now()}`,
@@ -518,6 +582,7 @@ export const App: React.FC = () => {
 								<>
 									<GroupConversation
 										messages={activeConv.messages}
+										agentRoster={agentRoster}
 										activeAgentThinking={activeAgentThinking}
 										inquiryScore={activeConv.inquiryScore}
 										finalConfidence={activeConv.finalConfidence}
