@@ -1,6 +1,6 @@
 {
   "mode": "sample",
-  "generated_at": "2026-10-24T12:44:34.489Z",
+  "generated_at": "2026-10-24T14:45:13.061Z",
   "scenario_id": "governance-readiness",
   "scenario_file": "01-governance-readiness.json",
   "topic": "Which governance controls should a data team verify before exposing Zetaris federated data to an external agent, and what evidence supports the recommendation?",
@@ -31,8 +31,8 @@
     "total": 3
   },
   "result": {
-    "session_id": "0f198ffe-dbe3-4c44-aa79-2a2bc6def67c",
-    "query_hash": "qh_mvme568w",
+    "session_id": "128d24ca-df28-442c-9cab-ea22bf54d513",
+    "query_hash": "qh_mvmigbmm",
     "transcript": [
       {
         "id": "summary-2-5",
@@ -55,11 +55,11 @@
         },
         "confidence": 0.7620000000000001,
         "round": 0,
-        "timestamp": 1792845874400,
+        "timestamp": 1792853113053,
         "token_count": 195
       },
       {
-        "id": "rival-Synthesizer-r0-1792845874396",
+        "id": "rival-Synthesizer-r0-1792853113049",
         "fromSeat": "RivalChallenger",
         "toSeat": "Synthesizer",
         "type": "challenge",
@@ -80,10 +80,10 @@
         },
         "confidence": 0.7,
         "round": 0,
-        "timestamp": 1792845874396
+        "timestamp": 1792853113049
       },
       {
-        "id": "thinker-q-0-1792845874396",
+        "id": "thinker-q-0-1792853113050",
         "fromSeat": "Thinker",
         "toSeat": "all",
         "type": "action_items",
@@ -105,10 +105,10 @@
         },
         "confidence": 0.7,
         "round": 0,
-        "timestamp": 1792845874397
+        "timestamp": 1792853113050
       },
       {
-        "id": "e639b580-b159-4479-80a4-c5eb2891880e",
+        "id": "68f27768-400c-48a1-9347-29c7038fb75b",
         "fromSeat": "FactChecker",
         "toSeat": "RivalChallenger",
         "type": "refinement",
@@ -135,13 +135,13 @@
           ]
         },
         "round": 1,
-        "timestamp": 1792845874398,
+        "timestamp": 1792853113051,
         "latency_ms": 1,
         "token_count": 65,
-        "inReplyTo": "rival-FactChecker-r0-1792845874395"
+        "inReplyTo": "rival-FactChecker-r0-1792853113048"
       },
       {
-        "id": "rival-FactChecker-r1-1792845874398",
+        "id": "rival-FactChecker-r1-1792853113051",
         "fromSeat": "RivalChallenger",
         "toSeat": "FactChecker",
         "type": "challenge",
@@ -162,10 +162,10 @@
         },
         "confidence": 0.7,
         "round": 1,
-        "timestamp": 1792845874398
+        "timestamp": 1792853113051
       },
       {
-        "id": "e2a04f84-9df6-4eef-8ab2-d4b73d2d1f1c",
+        "id": "98dc5b98-e171-4f1f-ae56-1ae5856fa442",
         "fromSeat": "CloudArchitect",
         "toSeat": "RivalChallenger",
         "type": "refinement",
@@ -192,13 +192,13 @@
           ]
         },
         "round": 1,
-        "timestamp": 1792845874398,
+        "timestamp": 1792853113051,
         "latency_ms": 0,
         "token_count": 72,
-        "inReplyTo": "rival-CloudArchitect-r0-1792845874395"
+        "inReplyTo": "rival-CloudArchitect-r0-1792853113049"
       },
       {
-        "id": "rival-CloudArchitect-r1-1792845874398",
+        "id": "rival-CloudArchitect-r1-1792853113051",
         "fromSeat": "RivalChallenger",
         "toSeat": "CloudArchitect",
         "type": "challenge",
@@ -219,10 +219,10 @@
         },
         "confidence": 0.7,
         "round": 1,
-        "timestamp": 1792845874398
+        "timestamp": 1792853113051
       },
       {
-        "id": "e5f52c41-3296-4aef-84b4-0f4bca1f7c98",
+        "id": "3812767d-f932-4432-81c0-c83b7ee53c58",
         "fromSeat": "Synthesizer",
         "toSeat": "RivalChallenger",
         "type": "refinement",
@@ -252,13 +252,13 @@
           ]
         },
         "round": 1,
-        "timestamp": 1792845874398,
+        "timestamp": 1792853113051,
         "latency_ms": 0,
         "token_count": 98,
-        "inReplyTo": "rival-Synthesizer-r0-1792845874396"
+        "inReplyTo": "rival-Synthesizer-r0-1792853113049"
       },
       {
-        "id": "rival-Synthesizer-r1-1792845874398",
+        "id": "rival-Synthesizer-r1-1792853113052",
         "fromSeat": "RivalChallenger",
         "toSeat": "Synthesizer",
         "type": "challenge",
@@ -279,10 +279,10 @@
         },
         "confidence": 0.7,
         "round": 1,
-        "timestamp": 1792845874398
+        "timestamp": 1792853113052
       },
       {
-        "id": "fee9c49c-3a29-4af9-84a8-b6b13ae84ae9",
+        "id": "c64b6584-25cc-4698-bb2c-ff2da89fb887",
         "fromSeat": "FactChecker",
         "toSeat": "RivalChallenger",
         "type": "refinement",
@@ -309,13 +309,13 @@
           ]
         },
         "round": 2,
-        "timestamp": 1792845874399,
+        "timestamp": 1792853113052,
         "latency_ms": 0,
         "token_count": 65,
-        "inReplyTo": "rival-FactChecker-r1-1792845874398"
+        "inReplyTo": "rival-FactChecker-r1-1792853113051"
       },
       {
-        "id": "ad6c7335-5220-4ba0-b8d0-062d425e2c40",
+        "id": "f64152e3-067d-4c5d-ada8-7c80d6cb608c",
         "fromSeat": "CloudArchitect",
         "toSeat": "RivalChallenger",
         "type": "refinement",
@@ -342,13 +342,13 @@
           ]
         },
         "round": 2,
-        "timestamp": 1792845874399,
+        "timestamp": 1792853113053,
         "latency_ms": 0,
         "token_count": 72,
-        "inReplyTo": "rival-CloudArchitect-r1-1792845874398"
+        "inReplyTo": "rival-CloudArchitect-r1-1792853113051"
       },
       {
-        "id": "f752f637-1932-405f-acf6-8998a2e4fda6",
+        "id": "3d6666cb-cb9a-447e-b4f1-6c213da23a08",
         "fromSeat": "Synthesizer",
         "toSeat": "RivalChallenger",
         "type": "refinement",
@@ -378,13 +378,13 @@
           ]
         },
         "round": 2,
-        "timestamp": 1792845874400,
-        "latency_ms": 1,
+        "timestamp": 1792853113053,
+        "latency_ms": 0,
         "token_count": 98,
-        "inReplyTo": "rival-Synthesizer-r1-1792845874398"
+        "inReplyTo": "rival-Synthesizer-r1-1792853113052"
       },
       {
-        "id": "uncertainty-report-1792845874400",
+        "id": "uncertainty-report-1792853113053",
         "fromSeat": "RivalChallenger",
         "toSeat": "all",
         "type": "escalation",
@@ -404,7 +404,7 @@
         },
         "confidence": 0.5,
         "round": 2,
-        "timestamp": 1792845874400
+        "timestamp": 1792853113053
       }
     ],
     "rounds": 2,
@@ -429,7 +429,7 @@
         "dissented": false
       }
     },
-    "timestamp": 1792845874401,
+    "timestamp": 1792853113054,
     "halted": false,
     "transportMode": "in_process",
     "compression": {
@@ -443,18 +443,18 @@
     "events": [
       {
         "event_type": "session_complete",
-        "session_id": "0f198ffe-dbe3-4c44-aa79-2a2bc6def67c",
-        "timestamp": 1792845874401,
+        "session_id": "128d24ca-df28-442c-9cab-ea22bf54d513",
+        "timestamp": 1792853113054,
         "payload": {
           "rounds": 2,
           "consensus_reached": false,
           "final_confidence": 0.8075,
           "seat_vote_count": 3
         },
-        "id": "audit_1792845874401_fn6ah",
+        "id": "audit_1792853113054_p5emw",
         "previous_hash": "c910699e010057fee5424ddcb6751ac88b20169be78af84a4741e0754e5d8b59",
-        "hash": "413de4eae042e9fd63012f7a2b609266e2a82e01db43290faa2e119a04185630",
-        "signature": "7674845855b230d98ad866117b47bc1484a5b3b4d906ee47f28770e38b6c905a"
+        "hash": "4065f9044ae4f3fcb2acbe5d95468ce3a9915216ee7806ebb0d87f9a0b9c81ad",
+        "signature": "379bcaac518244c089839d692b2ea1b024f54abf1fe3e05ea6ba9c189c635474"
       }
     ]
   }
