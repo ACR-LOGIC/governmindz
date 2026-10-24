@@ -11,6 +11,7 @@ import {
 	Bot,
 } from "lucide-react";
 import type { AgentProfile } from "../../types";
+import { AgentAvatar } from "../common/AgentAvatar";
 
 interface ChartPoint {
 	round: number;
@@ -85,23 +86,13 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 								className="w-full flex items-center justify-between p-2 rounded-xl bg-[#12182b] hover:bg-[#18203a] border border-[#1e2842] hover:border-[#2c385c] transition-all text-left group"
 							>
 								<div className="flex items-center gap-2.5 truncate">
-									{/* Avatar with status indicator */}
-									<div className="relative">
-										<div
-											className={`w-7 h-7 rounded-lg bg-gradient-to-br ${agent.avatarGradient} flex items-center justify-center text-[10px] font-bold text-white shadow-sm`}
-										>
-											{agent.initials}
-										</div>
-										<span
-											className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-[#0c101e] ${
-												isWorking
-													? "bg-amber-400 animate-ping"
-													: agent.status === "completed"
-														? "bg-emerald-400"
-														: "bg-slate-600"
-											}`}
-										/>
-									</div>
+									{/* Character Avatar with status pip */}
+									<AgentAvatar
+										seatId={agent.id}
+										size="sm"
+										showStatusPip={true}
+										status={isWorking ? "analyzing" : agent.status}
+									/>
 
 									<div className="truncate">
 										<div className="text-xs font-semibold text-slate-200 group-hover:text-white truncate">

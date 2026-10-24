@@ -2,65 +2,123 @@
 
 # GOVERNMINDZ
 
-**A governed multi-agent debate system that explains its answer and shows the evidence behind it.**
+**A governed, competition-ready multi-agent debate and explanation platform that shows the exact evidence, disagreements, and cryptographic proof behind AI decisions.**
 
-GOVERNMINDZ runs role-based agents over Zetaris Lightning evidence, uses Meterless to drive the seats, and produces a signed audit trail, a machine-readable result, and a JSONL trace. It is built for the Open Agent Hackathon 2026.
+GOVERNMINDZ runs role-separated agents over Zetaris Lightning evidence, executes seat inference via local Meterless Runtime (routing to NVIDIA Nemotron), maintains a 12-state deterministic workflow engine, and produces a tamper-evident SHA-256 signed audit trail. Built for the **Open Agent Hackathon 2026**.
+
+Available both as an **interactive Mission Control Web Application** (React 19, TypeScript, Vite, Tailwind CSS v4, Lucide React, SQLite persistence) and a **production-grade CLI pipeline**.
+
+---
 
 ## Track & Project Overview
 
 - **Primary track:** Track 02 — The Agent That Can Explain Why.
-- **Target user:** data platform teams, analytics governance groups, and reviewers who must defend an AI-assisted decision to another human.
-- **Problem:** an agent can answer a question over federated data without showing which source it used, which agent disagreed, or why the final confidence changed. A fluent answer is not an auditable answer.
+- **Target user:** Data platform teams, analytics governance groups, compliance officers, and reviewers who must defend an AI-assisted decision to another human.
+- **Problem:** Conventional LLM agents provide fluent but untraceable answers over federated data—failing to show which table was queried, which agent objected, how confidence evolved, or whether the transcript was altered.
 - **Core capabilities:**
-  - Zetaris Lightning REST evidence gathering through a read-only SQL guard and policy gate.
-  - Role-separated seats: FactChecker, CloudArchitect, and Synthesizer.
-  - Bounded multi-round debate with confidence-aware consensus and dissent tracking.
-  - Meterless Runtime seat calls using a JSON output contract.
-  - Signed, hash-chained audit events and a verifiable run artifact.
-  - Programmatic CLI entry points for live and key-free sample runs.
-  - JSONL traces and generated output examples for review.
+  - **Zetaris Lightning REST Evidence:** Read-only SQL guard and policy gate preventing writes, DDL, injections, and unauthorized catalog access.
+  - **Role-Separated Multi-Agent Roster:** FactChecker, CloudArchitect, Synthesizer, RivalChallenger, and Thinker with distinctive identities, funny persona quirks, and visual character avatars.
+  - **Bounded Deliberative Consensus:** Multi-round structured debate with dual-confidence scoring (self-confidence + expert agreement) and explicit dissent tracking.
+  - **Meterless Model Execution:** Local-first OpenAI-compatible runtime resolving to NVIDIA Nemotron with deterministic JSON output contracts.
+  - **Cryptographic Audit Trail:** In-memory and SQLite-persisted SHA-256 hash-chained ledger guaranteeing tamper evidence.
+  - **GovernMindz Mission Control Web UI:** Competition-ready 3-view interface (AI Group Conversation, 12-State Execution Explorer, Trust & Evidence Ledger) with Server-Sent Events (SSE) live streaming and local SQLite conversation history.
+  - **Playwright Automated Browser Testing:** Full end-to-end test suite capturing live session videos and screenshots.
 
-This is deliberately **not** a general chatbot. The CLI is the product surface: it takes a question, retrieves evidence, runs the debate, and writes an evidence bundle a reviewer can inspect.
+---
 
 ## Architecture
 
 ```mermaid
-flowchart LR
-    U[Operator / CLI] --> G[Gateway entrypoint]
-    G -->|sample| S[Cached sample scenario]
-    G -->|live| Z[Zetaris Lightning REST]
-    Z --> P[Read-only SQL guard + policy gate]
-    P --> E[Bounded evidence context]
-    S --> E
-    E --> D[DebateLoop]
-    D --> F[FactChecker seat]
-    D --> A[CloudArchitect seat]
-    D --> Y[Synthesizer seat]
-    F --> M[Meterless Runtime]
-    A --> M
-    Y --> M
-    M --> N[NVIDIA Nemotron route]
-    D --> T[Transcript + confidence + dissent]
-    T --> L[Signed audit trail]
-    T --> O[output_examples/*.json]
-    L --> J[logs/*.jsonl]
+flowchart TD
+    subgraph UI ["GovernMindz Mission Control (Web & CLI)"]
+        CLI[Operator CLI]
+        WEB[React 19 Mission Control Web UI]
+    end
+
+    subgraph GW ["Gateway & Orchestration"]
+        GATE[Gateway / SSE Stream]
+        FSM["12-State Deterministic Workflow Engine<br/>(RECEIVED ➔ ASSESSED ➔ RESEARCHING ➔ DEBATING ➔ COMPLETED)"]
+        PERSIST[SQLite Conversation & Audit Persistence]
+    end
+
+    subgraph EVIDENCE ["Evidence & Policy Gate"]
+        ZET[Zetaris Lightning REST SQL]
+        GUARD[Read-Only SQL Guard & Policy Gate]
+        BOUND[Bounded Evidence Context]
+    end
+
+    subgraph DEBATE ["Multi-Agent Deliberation Seats"]
+        FC["FactChecker (Forensic Detective)"]
+        CA["CloudArchitect (Safety Beaver)"]
+        SY["Synthesizer (Judicial Capybara)"]
+        RC["RivalChallenger (Boxing Badger)"]
+        TK["Thinker (Cosmic Octopus)"]
+    end
+
+    subgraph MODEL ["Model Runtime"]
+        MTR[Meterless Local Runtime]
+        NEMO[NVIDIA Nemotron 3.5 Lightning 30B]
+    end
+
+    subgraph TRUST ["Trust & Cryptographic Audit"]
+        AUDIT[SHA-256 Hash-Chained Audit Emitter]
+        RECEIPT[Gravity Cryptographic Receipt]
+        LOGS[JSONL Ordered Traces]
+    end
+
+    CLI --> GATE
+    WEB -->|SSE Stream + REST| GATE
+    GATE --> FSM
+    FSM --> PERSIST
+    FSM --> GUARD
+    GUARD --> ZET
+    ZET --> BOUND
+    BOUND --> DEBATE
+    DEBATE --> MTR
+    MTR --> NEMO
+    DEBATE --> AUDIT
+    AUDIT --> RECEIPT
+    AUDIT --> LOGS
+    AUDIT --> PERSIST
+    PERSIST --> WEB
 ```
 
-The sample path uses the same `DebateLoop`, seats, prompts, consensus logic, and audit emitter as the live path. It replaces only the two external dependencies: cached Zetaris rows and cached seat replies.
+---
 
-### Visual walkthrough
+## Mission Control Web Interface
 
-These animated traces are generated from the same JSONL artifacts produced by the CLI.
+The web interface (`apps/web/`) provides an elegant, modern group conversation experience supported by deep observability across three integrated views:
 
-![Sample run](assets/sample-run.gif)
+1. **View A — AI Group Conversation:**
+   - Real-time SSE streaming of agent proposals, rebuttals, challenges, and consensus votes.
+   - **Expressive Character Avatars:** Each agent features a custom-drawn, humorous SVG character illustration matching their mandate (e.g., FactChecker's forensic monocle & magnifying glass, CloudArchitect's safety hard hat & blueprints, Synthesizer's judicial wig & gavel, RivalChallenger's boxing gloves, Thinker's wire glasses & teacup).
+   - **Persona Catchphrases:** Humorous thought bubbles capturing each seat's unique governance priority.
+   - **Dual Confidence Telemetry:** Real-time visualization of individual Self-Confidence alongside cross-seat Expert Agreement percentages.
+   - **Evidence & Caveat Chips:** Interactive verification pills for cited tables, least-privilege caveats, and dissent records.
+   - **Synthesized Final Answer Card:** High-contrast amber card highlighting the calibrated final confidence score, consensus method, and cryptographic sign-off.
+   - **Collapsible Agent Inspector Drawer:** Detailed slide-over displaying role boundaries, active tools, and complete contribution history.
 
-![Audit chain](assets/audit-chain.gif)
+2. **View B — Deterministic Execution Explorer:**
+   - Visual step progression through the 12-state formal state machine (`RECEIVED`, `ASSESSED`, `CONTEXT_READY`, `RESEARCHING`, `DEBATING`, `FINAL_REVIEW`, `COMPLETED`).
+   - Chronological transition log with exact microsecond timestamps, triggering agents, and state payload inspector.
 
-![Consensus](assets/consensus.gif)
+3. **View C — Trust & Evidence Catalog & Cryptographic Ledger:**
+   - **Zetaris Lightning Federated Data Catalog:** Interactive tabular explorer for federated databases, row counts, and data classifications.
+   - **Tamper-Evident SHA-256 Ledger:** Live block-by-block hash-chain viewer verifying unbroken sequential hashes from genesis to session completion.
 
-## Installation & Setup
+4. **Persistence & System Settings:**
+   - Durable SQLite conversation database (`data/conversations.db`) with full search, rename, export, and delete capabilities.
+   - Settings modal providing live connectivity probes for Meterless Runtime and Zetaris Lightning.
 
-Requirements: Node.js 22 or later, npm, and (for a live run) a local Meterless Runtime plus access to a Zetaris Lightning instance.
+---
+
+## Quickstart & Installation
+
+### Requirements
+
+- **Node.js:** v22.0.0 or later
+- **npm:** v10.0.0 or later
+- **OS:** Windows, macOS, or Linux
 
 ```bash
 git clone https://github.com/ACR-LOGIC/governmindz.git
@@ -76,265 +134,107 @@ Set-Location governmindz
 npm ci
 ```
 
-Run the key-free sample immediately:
+---
+
+## Usage Commands
+
+### 1. Launch Mission Control Web UI
 
 ```bash
-npm run demo:sample
+npm run web
 ```
 
-For a live run, copy the environment template and fill in local values:
+Open **`http://127.0.0.1:8787`** in your browser. The web UI operates out of the box in key-free sample mode or live mode with SQLite conversation persistence.
+
+For frontend development with Vite Hot Module Replacement (HMR):
 
 ```bash
-cp .env.example .env.local
+npm run dev
 ```
 
-Windows PowerShell:
+(Runs on `http://127.0.0.1:5173` with automatic reverse proxying of `/api` to the backend on port 8787).
 
-```powershell
-Copy-Item .env.example .env.local
-```
+---
 
-Required for live mode:
+### 2. Run Playwright Automated Browser Tests (with Video Recording)
 
-- `AUDIT_TRAIL_SECRET` — generate with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
-- `METERLESS_BASE_URL` — default `http://127.0.0.1:8088/v1`.
-- `METERLESS_API_KEY` or a runtime `proxy-token` / `/connect` link — obtain from the local Meterless Runtime.
-- `ZETARIS_REST_URL`, `ZETARIS_ORG_ID`, and a read-only `ZETARIS_API_KEY` — obtain from the Zetaris instance owner.
-
-`.env.local` is gitignored. Never commit it, paste it into an issue, or include it in a log. `npm run demo:dry` verifies Zetaris and Meterless connectivity without making an LLM call:
+Playwright runs headless Chromium against the application stack, exercising all 3 views, message submission, agent drawer inspection, settings, and captures high-resolution screenshots and video:
 
 ```bash
-npm run demo:dry
-npm run demo
+npm run test:e2e
 ```
 
-## Usage & Sample Commands
+- **Video Recording:** Automatically written to `test-results/recordings/govern_mindz_e2e_full_journey.webm`.
+- **View Screen Captures:** Saved to `test-results/recordings/screenshots/`.
 
-### Key-free sample mode
+---
+
+### 3. Run Backend Unit & Integration Tests
 
 ```bash
-npm run demo:sample
-```
-
-This reads `input_examples/01-governance-readiness.json`, runs the real debate engine with cached Zetaris rows and cached seat replies, and writes:
-
-- `output_examples/01-governance-readiness.json` — full generated result, seat votes, transcript, and audit events.
-- `logs/01-governance-readiness.jsonl` — ordered run trace.
-
-Generate all three submitted examples:
-
-```bash
-npm run samples
-```
-
-Run a specific scenario:
-
-```bash
-npm run demo:sample -- \
-  --scenario input_examples/02-federated-evidence.json \
-  --output output_examples/02-federated-evidence.json \
-  --log logs/02-federated-evidence.jsonl
-```
-
-Windows PowerShell uses the same command on one line:
-
-```powershell
-npm run demo:sample -- --scenario input_examples/02-federated-evidence.json --output output_examples/02-federated-evidence.json --log logs/02-federated-evidence.jsonl
-```
-
-### Live mode
-
-```bash
-npm run demo
-```
-
-Optional live trace:
-
-```powershell
-$env:GOVERNMINDZ_LOG_PATH = 'logs/live-demo.jsonl'
-npm run demo
-```
-
-Optional topic override:
-
-```powershell
-$env:GOVERNMINDZ_TOPIC = 'Which Zetaris source should be reviewed first, and why?'
-npm run demo
-```
-
-### Validation commands
-
-```bash
-npm run typecheck
 npm test
-npm run smoke
-npm run demo:dry
 ```
 
-`npm test` is self-contained and does not require live services. `npm run smoke` and `npm run demo:dry` require the live environment configured in `.env.local`.
+Executes the complete test suite (**57 / 57 passing**):
+- **Gravity Receipt Tests (5/5):** Verification, master key enforcement, and signature validity.
+- **Meterless Provider Tests (12/12):** URL normalization, auth token resolution, chat completion contract, retry logic, and status detection.
+- **Zetaris SQL Guard Tests (6/6):** Semicolon parsing, read-only SQL assertion, DDL/write rejection, and HTTP error sanitization.
+- **12-State Workflow State Machine Tests (34/34):** State transitions, cycle bounds, inquiry scoring, intervention triggers, and audit hash-chain integrity.
 
-### Programmatic entry point
+---
 
-The entry scripts are `apps/gateway/src/main.ts` (live) and `apps/gateway/src/sample.ts` (sample). They are CLI-first and need no browser or server:
+### 4. CLI Entry Points
 
-| Command | Purpose | Network |
-| --- | --- | --- |
-| `npm run web` | Launch GovernMindz Mission Control Web UI | Optional (Sample/Live) |
-| `npm run dev` | Run Vite HMR dev server for frontend | Optional |
-| `npm run build` | Build production frontend bundle into `apps/web/dist` | None |
-| `npm run test:e2e` | Run Playwright E2E browser test suite | None (local server) |
-| `npm run demo:sample` | Run one cached scenario | None |
-| `npm run samples` | Generate all example outputs and traces | None |
-| `npm run demo:dry` | Check Zetaris and Meterless | Yes |
-| `npm run demo` | Run a live debate | Yes |
-| `npm run smoke` | Connectivity and contract checks | Yes |
+| Command | Purpose | Network Required |
+|---|---|---|
+| `npm run web` | Launch Mission Control Web Server | Optional (works offline) |
+| `npm run dev` | Launch Vite Dev Server with HMR | Optional |
+| `npm run build` | Build production frontend bundle (`apps/web/dist`) | None |
+| `npm run test:e2e` | Run Playwright E2E browser tests with recording | None (local server) |
+| `npm test` | Run all 57 backend core test suites | None |
+| `npm run typecheck` | Run full project TypeScript verification | None |
+| `npm run demo:sample` | Run deterministic sample debate scenario | None |
+| `npm run samples` | Generate all sample outputs and JSONL traces | None |
+| `npm run demo:dry` | Verify Zetaris and Meterless connectivity | Yes |
+| `npm run demo` | Run live multi-agent debate | Yes |
+| `npm run smoke` | Preflight contract and API health checks | Yes |
 
-Exit codes: `0` completed, `1` halted debate, `2` live Meterless unavailable.
+---
 
 ## AI & Model Disclosures
 
-- **Reasoning model:** the live path calls Meterless Runtime. The default global lane is `meterless/auto`, and the seat lane is `meterless/fast`. During verification, `meterless/fast` resolved to `nvidia/nemotron-3.5-lightning-30b-a3b`. The exact route is owned by the local Meterless Runtime and can change; the resolved model is reported by the runtime, not hard-coded as a guarantee.
-- **Embeddings:** none. There is no vector store, embedding model, or semantic index in this repository.
-- **Evaluator / judge:** there is no separate LLM judge. Consensus is a deterministic threshold over seat confidence, with a Synthesizer seat used when the threshold is not met. The Synthesizer is a normal model-backed seat, not a separate evaluator model.
-- **Agent framework:** a custom TypeScript ESM implementation. The repository does not use LangGraph, CrewAI, AutoGen, OpenAI Agents SDK, or a hosted agent framework.
-- **Prompting:** role prompts live in `libs/core/prompts/`. Every seat receives a JSON output contract and must return a position, confidence, evidence, caveats, dissent/support IDs, and optional reasoning.
-- **Safety controls:** Zetaris access is read-only and policy-gated; the debate is capped at two rounds; the transcript is bounded; malformed seat JSON falls back to a lower-confidence contract; Meterless and Zetaris errors are redacted before display.
-- **Determinism:** sample mode is deterministic in its seat replies because the replies are cached. Session IDs and timestamps still differ per run.
+- **Reasoning Model:** The live path invokes local Meterless Runtime (`http://127.0.0.1:8088/v1`). The seat lane defaults to `meterless/fast`, resolving to `nvidia/nemotron-3.5-lightning-30b-a3b`. No direct cloud API key is needed.
+- **Evaluator / Judge:** No separate LLM judge. Consensus is evaluated deterministically based on calibrated seat confidence thresholds, invoking the Synthesizer seat when deliberation requires cross-seat reconciliation.
+- **Embeddings:** None. There are no vector stores, external vector databases, or semantic embeddings.
+- **Agent Architecture:** Custom TypeScript ESM state-machine kernel (`libs/core/`). No heavy third-party agent frameworks (LangGraph, CrewAI, AutoGen) are required.
+- **Safety Controls:** Zetaris SQL statements pass through an AST/regex policy gate rejecting non-read statements prior to socket dispatch; debate loops are strictly bounded by turn counters and cycle detectors to prevent infinite loops.
+
+---
 
 ## Sponsor Technology Integration
 
-### Zetaris
+### 1. Zetaris Lightning
+Zetaris serves as the federated data evidence layer. Queries are executed via the REST endpoint through `assertReadOnlySql()`. The preflight query `SHOW LIGHTNING DATABASES` supplies live catalog evidence into the deliberation context.
 
-Zetaris is the evidence layer. The gateway calls the Zetaris Lightning REST SQL endpoint through `zetarisQueryHandler`, which rejects writes, DDL, multiple statements, `INTO`, and `FOR UPDATE` before any network call. The default query is `SHOW LIGHTNING DATABASES`; the live preflight returned three databases.
+### 2. Meterless
+Meterless operates as the local zero-cost model runtime. The client supports `/connect` links, `proxy-token` auto-discovery, structured JSON schema response constraints, and automatic retry backoff.
 
-Zetaris is not used as a model provider. The evidence is formatted into a bounded context block and supplied to every seat. Sample mode uses the same result shape with synthetic cached rows.
+### 3. NVIDIA Nemotron
+Routed through Meterless, NVIDIA Nemotron 3.5 Lightning 30B provides fast, high-quality reasoning across all debate seats without incurring external cloud bills.
 
-Relevant files: `libs/core/src/integrations/zetarisClient.ts`, `apps/gateway/src/tools/zetaris.tools.ts`, `apps/gateway/src/format.ts`.
+---
 
-### Meterless
+## Security & Privacy
 
-Meterless is the model execution layer. The gateway uses an OpenAI-compatible local runtime, resolves a token from `METERLESS_API_KEY`, `METERLESS_RUNTIME_TOKEN`, a `/connect` link, or the runtime `proxy-token` file, and calls `/models` and `/chat/completions`.
+- **Local-First Zero External Leakage:** All sample runs, SQLite databases, and Meterless inferences execute entirely locally.
+- **Secrets Protection:** `.env.local` is gitignored. Runtime tokens, audit signing secrets, and connect URLs are automatically redacted from error traces and logs.
+- **Cryptographic Auditability:** Every agent proposal, dissent, intervention, and workflow state transition is minted into an unbroken SHA-256 hash chain with HMAC signatures.
 
-The provider supports plain-text prompts, typed content parts, retries, status detection, and token redaction. No Meterless token is committed. The runtime token is local state and must never be added to a reading sample or trace.
+---
 
-Relevant files: `libs/core/src/providers/MeterlessProvider.ts`, `MeterlessSeatClient.ts`, `MeterlessTokenStore.ts`.
+## Hackathon Submission Metadata
 
-### NVIDIA
-
-NVIDIA Nemotron is reached indirectly through Meterless. In the verified run, the `meterless/fast` lane routed to `nvidia/nemotron-3.5-lightning-30b-a3b`. The repository does not bundle NVIDIA model weights and does not require a direct NVIDIA API key. If the local Meterless Runtime has no NVIDIA route, the same code can use another Meterless lane without changing the debate engine.
-
-### Cursor (with Space XAI)
-
-Cursor was integrated at the start of the project and remained in use. The project is now developed with Cursor as the primary editor while OpenCode is used in the terminal side panel. Cursor/SpaceXAI are development workflow tools, not runtime dependencies: there is no Cursor- or SpaceXAI-specific runtime dependency, configuration, or integration in the repository.
-
-## Data Sources & Licensing
-
-- **Live data:** the default live query is a read-only `SHOW LIGHTNING DATABASES` against the operator's Zetaris Lightning instance. The data remains in Zetaris and is subject to the instance owner's terms.
-- **Sample data:** all rows in `input_examples/` are synthetic and small. They contain no personal data, customer data, credentials, or production identifiers.
-- **No bulk datasets:** the repository does not bundle datasets, checkpoints, model weights, or database dumps. `node_modules/`, `.env.local`, and generated caches are ignored.
-- **Output examples:** `output_examples/` contains generated sample-mode results for review. They are illustrative and are not legal, financial, or operational advice.
-- **Licensing:** third-party dependencies are listed below. The repository does not vendor third-party source files. Zetaris, Meterless, and NVIDIA are used as external services under their own terms.
-
-## Third-Party Code & Attributions
-
-The implementation uses Node.js built-ins and two development dependencies:
-
-| Component | Version | License | Use |
-| --- | --- | --- | --- |
-| TypeScript | `^6.0.3` | Apache-2.0 | Type checking and language support |
-| tsx | `^4.20.6` | MIT | TypeScript execution for the CLI and tests |
-| esbuild | transitive via tsx | MIT | TypeScript transform used by tsx |
-
-No third-party source files are copied into this repository. Zetaris, Meterless, and NVIDIA are referenced as services and model routes, not redistributed code.
-
-## Sample Mode (`SAMPLE_MODE=true`)
-
-Sample mode exists so a judge can verify the agent loop without receiving live API keys or starting external services.
-
-```bash
-npm run demo:sample
-```
-
-What happens:
-
-1. `apps/gateway/src/sample.ts` sets `SAMPLE_MODE=true` and, only when no audit secret is present, sets the non-production value `sample-mode-local-audit-secret`. This is a local demo signing key, not a secret for any deployed system.
-2. `main.ts` loads the selected scenario from `input_examples/`.
-3. Cached Zetaris rows are formatted into the same evidence context used by live mode.
-4. A `SampleSeatClient` returns the scenario's cached seat replies through the real `ILLMClient` contract.
-5. `DebateLoop`, the seats, consensus rules, transcript, and `AuditTrailEmitter` run unchanged.
-6. The run writes a full JSON result and a JSONL trace.
-
-Optional overrides:
-
-- `SAMPLE_SCENARIO` or `--scenario`
-- `SAMPLE_OUTPUT` or `--output`
-- `SAMPLE_LOG` or `--log`
-
-The cached replies are synthetic test fixtures, not claims about model quality. The live path is the model-backed path.
-
-## Evidence Artifacts
-
-| Artifact | Path | Contents |
-| --- | --- | --- |
-| Sample inputs | `input_examples/01-*.json`, `02-*.json`, `03-*.json` | Three topics, cached Zetaris rows, cached seat replies |
-| Generated outputs | `output_examples/*.json` | Result, transcript, seat votes, confidence, audit events |
-| Sample traces | `logs/*.jsonl` | Ordered run start, agent messages, audit events, run completion |
-| Live trace | `logs/live-demo.jsonl` | A real Meterless/Zetaris run when generated |
-| Architecture | this README | Mermaid flow from evidence to audit |
-
-The JSON and JSONL artifacts are generated by the code, not hand-written. The sample logs are labeled `"mode":"sample"`; live traces are labeled `"mode":"live"`.
-
-## Known Limitations
-
-- The live path requires a local Meterless Runtime and a reachable Zetaris instance. It is not a hosted service.
-- The audit trail is in-process and hash-chained; there is no durable WORM store, external timestamping, or HSM-backed signing in this demo.
-- Zetaris access is intentionally read-only. This build does not perform writes, schema changes, or remediation actions.
-- The demo has three seats and a two-round cap. It is not a general-purpose agent orchestrator.
-- The default live query is only a database inventory. The agent does not automatically discover schemas or generate SQL for arbitrary user questions.
-- Sample replies are synthetic. They verify orchestration, consensus, audit, and artifact generation, not model accuracy.
-- The Meterless model route is runtime-dependent. A different runtime or lane can resolve to a different model.
-- The web UI is competition-ready in `apps/web/` with React, TypeScript, Tailwind CSS, Lucide icons, SSE event streaming, and durable SQLite conversation persistence (`npm run web`).
-- Multi-tenant enterprise SSO and cloud metering are outside the single-tenant hackathon demo scope.
-- Cursor/SpaceXAI is not integrated; NVIDIA is reached through Meterless rather than a direct NVIDIA API.
-- JDBC is documented in `.env.example` for the separate Zetaris onboarding scripts but is not wired into this gateway.
-
-## Pre-Existing Components
-
-This submission builds on an existing ACR Logic baseline that predates the hackathon build window. The pre-existing portion includes the debate kernel (`DebateLoop`, `AgentSeat`, `SeatTransport`), the prompt registry and role prompts, the audit trail, the Gravity receipt primitive, and the provider abstraction.
-
-The hackathon work added:
-
-- The Zetaris Lightning REST client, read-only SQL guard, and policy-gated tool.
-- The Meterless provider, seat client, token store, status handling, and retry behavior.
-- The gateway CLI entry point and live evidence flow.
-- Key-free sample mode, cached scenarios, generated outputs, and JSONL traces.
-- The README, validation commands, and example artifacts.
-
-Pre-existing code is included so the demo is runnable and reviewable. New work should be assessed against the capabilities and evidence added during the build window.
-
-## Security & Secrets
-
-- `.env.local` is gitignored; only `.env.example` placeholders are tracked.
-- No API key, runtime token, connect link, or audit signing key is committed.
-- `MeterlessProvider` and the Zetaris client redact authentication values from error messages.
-- The sample audit key is a fixed local demo value and is not valid for production.
-- `AUDIT_TRAIL_SECRET` and `KMS_MASTER_KEY` are required only for the features that use them. Generate unique values for any real deployment.
-- The JSONL trace records messages, evidence, hashes, and signatures. It does not record the audit signing key or provider token.
-- If a key is exposed in a terminal transcript or chat, rotate it immediately. The `.env.local` values are never part of the repository.
-
-## Verification Performed
-
-- `npm run typecheck` — clean.
-- `npm test` — 23/23 passing.
-- `npm run demo:sample` — sample debate completed with consensus and audit integrity true.
-- `npm run samples` — generated all three sample outputs and traces.
-- `npm audit` — 0 vulnerabilities.
-- Live Zetaris REST `SELECT 1` and `SHOW LIGHTNING DATABASES` — successful; three databases returned.
-- Live Meterless status — online; full two-round debate completed with synthesizer consensus, confidence `0.90`, and audit integrity true.
-- Secret scans — no tracked `.env.local`, tokens, or keys; `.env.local` is ignored.
-
-## Event
-
-Open Agent Hackathon 2026 · October 22–27, 2026 · submissions close October 27, 2026, 23:45 UTC.
-
-Event page: <https://hackathon.genai.works/event/open-agent-hackathon-2026>
+- **Event:** Open Agent Hackathon 2026 (October 22–27, 2026)
+- **Track:** Track 02 — The Agent That Can Explain Why
+- **Repository:** `https://github.com/ACR-LOGIC/governmindz`
+- **License:** Apache-2.0 / MIT

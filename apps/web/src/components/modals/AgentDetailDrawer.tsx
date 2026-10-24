@@ -1,12 +1,24 @@
 import React from "react";
 import { X, CheckCircle2, AlertTriangle, ShieldCheck, Cpu, Bot, Sparkles } from "lucide-react";
 import type { AgentProfile, ChatMessage } from "../../types";
+import { AgentAvatar } from "../common/AgentAvatar";
 
 interface AgentDetailDrawerProps {
 	agent: AgentProfile | null;
 	messages: ChatMessage[];
 	onClose: () => void;
 }
+
+const CATCHPHRASES: Record<string, string> = {
+	FactChecker: "“Wait... let me inspect the primary keys first!” 🔍",
+	CloudArchitect: "“Who left 0.0.0.0/0 open in the firewall?! 🧱”",
+	Synthesizer: "“Order in the court! We have calibrated consensus. ⚖️”",
+	RivalChallenger: "“Disputed! Show me the cryptographic hash or it didn't happen! 🥊”",
+	Thinker: "“Pondering the existential entropy of this retention policy... ☕”",
+	ContextAgent: "“I distinctly recall what you stated in round one. 📜”",
+	Orchestrator: "“GovernMindz flight director on deck. All seats report in! 🛰️”",
+	user: "“Operator review: inspecting multi-agent deliberation. ☕”",
+};
 
 export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
 	agent,
@@ -16,6 +28,7 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
 	if (!agent) return null;
 
 	const agentMessages = messages.filter((m) => m.fromSeat === agent.id);
+	const catchphrase = CATCHPHRASES[agent.id];
 
 	return (
 		<div className="fixed inset-0 z-50 overflow-hidden bg-black/60 backdrop-blur-sm flex justify-end animate-fadeIn">
@@ -23,11 +36,7 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
 				{/* Top bar with close button */}
 				<div className="flex items-center justify-between pb-4 border-b border-[#1e2842] mb-6">
 					<div className="flex items-center gap-3">
-						<div
-							className={`w-11 h-11 rounded-xl bg-gradient-to-br ${agent.avatarGradient} flex items-center justify-center text-sm font-bold text-white shadow-lg`}
-						>
-							{agent.initials}
-						</div>
+						<AgentAvatar seatId={agent.id} size="lg" showStatusPip={true} status={agent.status} />
 						<div>
 							<h3 className="font-display font-bold text-base text-slate-100">{agent.name}</h3>
 							<p className="text-xs text-slate-400">{agent.role}</p>
@@ -67,6 +76,13 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
 						</div>
 					)}
 				</div>
+
+				{catchphrase && (
+					<div className="p-3 mb-6 rounded-xl bg-[#18203a] border border-[#2c385c] text-xs font-mono italic text-amber-300 flex items-center gap-2 shadow-inner">
+						<Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+						<span>{catchphrase}</span>
+					</div>
+				)}
 
 				{/* Role Directive & System Description */}
 				<div className="space-y-2 mb-6">
