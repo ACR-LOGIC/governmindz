@@ -61,6 +61,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 					</div>
 					<button
 						type="button"
+						aria-label="Close settings"
 						onClick={onClose}
 						className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-[#18203a] transition-colors"
 					>

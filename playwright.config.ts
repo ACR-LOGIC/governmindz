@@ -2,15 +2,20 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
 	testDir: "./tests/e2e",
-	fullyParallel: true,
+	fullyParallel: false,
 	forbidOnly: !!process.env.CI,
-	retries: process.env.CI ? 2 : 0,
-	workers: process.env.CI ? 1 : undefined,
+	retries: 0,
+	workers: 1,
 	reporter: "list",
 	use: {
-		baseURL: "http://127.0.0.1:8787",
-		trace: "on-first-retry",
-		screenshot: "only-on-failure",
+		baseURL: "http://127.0.0.1:5173",
+		trace: "on",
+		video: {
+			mode: "on",
+			size: { width: 1280, height: 720 },
+		},
+		screenshot: "on",
+		viewport: { width: 1280, height: 720 },
 	},
 	projects: [
 		{
@@ -18,10 +23,18 @@ export default defineConfig({
 			use: { ...devices["Desktop Chrome"] },
 		},
 	],
-	webServer: {
-		command: "node --env-file=.env.local --import tsx apps/web/server.ts",
-		port: 8787,
-		reuseExistingServer: false,
-		timeout: 15000,
-	},
+	webServer: [
+		{
+			command: "node --env-file=.env.local --import tsx apps/web/server.ts",
+			url: "http://127.0.0.1:8787/api/models",
+			reuseExistingServer: false,
+			timeout: 30000,
+		},
+		{
+			command: "npx vite --host 127.0.0.1 --port 5173",
+			url: "http://127.0.0.1:5173",
+			reuseExistingServer: false,
+			timeout: 30000,
+		},
+	],
 });
