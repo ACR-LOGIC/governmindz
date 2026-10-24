@@ -61,6 +61,58 @@ export function decryptSecret(encryptedPayload: string): string {
 	return decrypted;
 }
 
+/**
+ * Automatically load environment variables from .env.local and decrypted credentials.enc
+ * if they are not already set in process.env.
+ */
+export function loadLocalEnvIfPresent(): void {
+	if (fs.existsSync(ENV_LOCAL_PATH)) {
+		try {
+			const envLines = fs.readFileSync(ENV_LOCAL_PATH, "utf8").split(/\r?\n/);
+			for (const line of envLines) {
+				const trimmed = line.trim();
+				if (!trimmed || trimmed.startsWith("#")) continue;
+				const eqIndex = trimmed.indexOf("=");
+				if (eqIndex > 0) {
+					const k = trimmed.slice(0, eqIndex).trim();
+					const v = trimmed.slice(eqIndex + 1).trim();
+					if (!process.env[k]) {
+						process.env[k] = v;
+					}
+				}
+			}
+		} catch {
+			// ignore
+		}
+	}
+
+	if (fs.existsSync(ENC_CREDS_PATH)) {
+		try {
+			const encContent = fs.readFileSync(ENC_CREDS_PATH, "utf8").trim();
+			if (encContent) {
+				const decrypted = decryptSecret(encContent);
+				if (decrypted) {
+					const parsed = JSON.parse(decrypted);
+					if (parsed.meterlessHost && !process.env.METERLESS_BASE_URL) process.env.METERLESS_BASE_URL = parsed.meterlessHost;
+					if (parsed.meterlessApiKey && !process.env.METERLESS_API_KEY) process.env.METERLESS_API_KEY = parsed.meterlessApiKey;
+					if (parsed.meterlessModel && !process.env.METERLESS_MODEL) process.env.METERLESS_MODEL = parsed.meterlessModel;
+					if (parsed.zetarisHost && !process.env.ZETARIS_HOST) process.env.ZETARIS_HOST = parsed.zetarisHost;
+					if (parsed.zetarisPort && !process.env.ZETARIS_PORT) process.env.ZETARIS_PORT = parsed.zetarisPort;
+					if (parsed.zetarisUser && !process.env.ZETARIS_USER) process.env.ZETARIS_USER = parsed.zetarisUser;
+					if (parsed.zetarisPassword && !process.env.ZETARIS_PASSWORD) process.env.ZETARIS_PASSWORD = parsed.zetarisPassword;
+					if (parsed.zetarisDatabase && !process.env.ZETARIS_DATABASE) process.env.ZETARIS_DATABASE = parsed.zetarisDatabase;
+					if (parsed.auditSecret && !process.env.AUDIT_TRAIL_SECRET) process.env.AUDIT_TRAIL_SECRET = parsed.auditSecret;
+				}
+			}
+		} catch {
+			// ignore
+		}
+	}
+}
+
+// Auto-run once on module import
+loadLocalEnvIfPresent();
+
 export interface ConfigStatus {
 	meterlessConfigured: boolean;
 	meterlessHost: string;
@@ -84,24 +136,51 @@ export function maskString(str?: string, visibleChars = 3): string {
 }
 
 export function getConfigStatus(): ConfigStatus {
-	const meterlessHost = process.env.METERLESS_BASE_URL || process.env.METERLESS_ENDPOINT || "";
-	const meterlessKey = process.env.METERLESS_API_KEY || "";
-	const meterlessModel = process.env.METERLESS_MODEL || "nemotron-3.5-lightning-30b-a3b";
+	loadLocalEnvIfPresent();
 
-	const zetarisHost = process.env.ZETARIS_HOST || "";
-	const zetarisPort = process.env.ZETARIS_PORT || "443";
-	const zetarisUser = process.env.ZETARIS_USER || "";
-	const zetarisPass = process.env.ZETARIS_PASSWORD || "";
-	const zetarisDb = process.env.ZETARIS_DATABASE || "";
+	const meterlessHost = process.env.METERLESS_BASE_URL || process.env.METERLESS_ENDPOINT || "";
+	const meterlessKey = process.env.METERLESS_API_KEY || process.env.METERLESS_RUNTIME_TOKEN || "";
+	const meterlessModel = process.env.METERLESS_MODEL || process.env.NEMOTRON_MODEL || "nemotron-3.5-lightning-30b-a3b";
+
+	const rawZetaris = process.env.ZETARIS_HOST || process.env.ZETARIS_REST_URL || process.env.ZETARIS_JDBC_URL || "";
+	let zetarisHost = rawZetaris;
+	let zetarisPort = process.env.ZETARIS_PORT || "443";
+	if (rawZetaris.startsWith("http://") || rawZetaris.startsWith("https://")) {
+		try {
+			const u = new URL(rawZetaris);
+			zetarisHost = u.hostname;
+			zetarisPort = u.port || (u.protocol === "https:" ? "443" : "80");
+		} catch {
+			// keep raw
+		}
+	} else if (rawZetaris.startsWith("jdbc:zetaris:lightning@")) {
+		const parts = rawZetaris.replace("jdbc:zetaris:lightning@", "").split(":");
+		zetarisHost = parts[0] || "localhost";
+		zetarisPort = parts[1] || "10000";
+	}
+
+	const zetarisUser = process.env.ZETARIS_USER || process.env.ZETARIS_USERNAME || "";
+	const zetarisPass = process.env.ZETARIS_PASSWORD || process.env.ZETARIS_API_KEY || process.env.ZETARIS_API_AUTH || "";
+	const zetarisDb = process.env.ZETARIS_DATABASE || "LIGHTNING_DB";
 
 	const auditSecret = process.env.AUDIT_TRAIL_SECRET || "";
 
+	const zetarisConfigured = Boolean(
+		(process.env.ZETARIS_HOST?.trim() || process.env.ZETARIS_REST_URL?.trim() || process.env.ZETARIS_JDBC_URL?.trim()) &&
+		(process.env.ZETARIS_API_KEY?.trim() || process.env.ZETARIS_API_AUTH?.trim() || process.env.ZETARIS_PASSWORD?.trim() || process.env.ZETARIS_USERNAME?.trim())
+	);
+
+	const meterlessConfigured = Boolean(
+		meterlessHost.trim() &&
+		(meterlessKey.trim() || process.env.METERLESS_APP_ID?.trim())
+	);
+
 	return {
-		meterlessConfigured: Boolean(meterlessHost.trim()),
+		meterlessConfigured,
 		meterlessHost: meterlessHost ? maskString(meterlessHost, 7) : "",
 		meterlessModel,
 		hasMeterlessKey: Boolean(meterlessKey.trim()),
-		zetarisConfigured: Boolean(zetarisHost.trim()),
+		zetarisConfigured,
 		zetarisHost: zetarisHost ? maskString(zetarisHost, 4) : "",
 		zetarisPort,
 		zetarisUser: zetarisUser ? maskString(zetarisUser, 2) : "",
@@ -135,13 +214,21 @@ export function saveSecureConfig(payload: SaveConfigPayload): void {
 		process.env.METERLESS_MODEL = payload.meterlessModel.trim();
 	}
 	if (payload.zetarisHost !== undefined) {
-		process.env.ZETARIS_HOST = payload.zetarisHost.trim();
+		const zh = payload.zetarisHost.trim();
+		process.env.ZETARIS_HOST = zh;
+		if (zh.startsWith("http://") || zh.startsWith("https://")) {
+			process.env.ZETARIS_REST_URL = zh;
+		} else if (zh) {
+			const port = payload.zetarisPort?.trim() || process.env.ZETARIS_PORT || "8888";
+			process.env.ZETARIS_REST_URL = `http://${zh}:${port}/api/v1.0`;
+		}
 	}
 	if (payload.zetarisPort !== undefined) {
 		process.env.ZETARIS_PORT = payload.zetarisPort.trim();
 	}
 	if (payload.zetarisUser !== undefined) {
 		process.env.ZETARIS_USER = payload.zetarisUser.trim();
+		process.env.ZETARIS_USERNAME = payload.zetarisUser.trim();
 	}
 	if (payload.zetarisPassword !== undefined) {
 		process.env.ZETARIS_PASSWORD = payload.zetarisPassword.trim();
@@ -180,8 +267,10 @@ export function saveSecureConfig(payload: SaveConfigPayload): void {
 	if (process.env.METERLESS_API_KEY) envMap.set("METERLESS_API_KEY", process.env.METERLESS_API_KEY);
 	if (process.env.METERLESS_MODEL) envMap.set("METERLESS_MODEL", process.env.METERLESS_MODEL);
 	if (process.env.ZETARIS_HOST) envMap.set("ZETARIS_HOST", process.env.ZETARIS_HOST);
+	if (process.env.ZETARIS_REST_URL) envMap.set("ZETARIS_REST_URL", process.env.ZETARIS_REST_URL);
 	if (process.env.ZETARIS_PORT) envMap.set("ZETARIS_PORT", process.env.ZETARIS_PORT);
 	if (process.env.ZETARIS_USER) envMap.set("ZETARIS_USER", process.env.ZETARIS_USER);
+	if (process.env.ZETARIS_USERNAME) envMap.set("ZETARIS_USERNAME", process.env.ZETARIS_USERNAME);
 	if (process.env.ZETARIS_PASSWORD) envMap.set("ZETARIS_PASSWORD", process.env.ZETARIS_PASSWORD);
 	if (process.env.ZETARIS_DATABASE) envMap.set("ZETARIS_DATABASE", process.env.ZETARIS_DATABASE);
 	if (process.env.AUDIT_TRAIL_SECRET) envMap.set("AUDIT_TRAIL_SECRET", process.env.AUDIT_TRAIL_SECRET);

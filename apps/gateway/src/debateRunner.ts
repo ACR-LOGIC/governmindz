@@ -56,7 +56,8 @@ function buildSeats(
 	];
 	return configs.map((config) => {
 		if (scenario) {
-			return new AgentSeat(config, new SampleSeatClient(config.seatId, scenario.seats[config.seatId] ?? []));
+			const delay = process.env.NODE_ENV === "test" ? 0 : 350;
+			return new AgentSeat(config, new SampleSeatClient(config.seatId, scenario.seats[config.seatId] ?? [], delay));
 		}
 		if (!provider) throw new Error("Meterless provider is required outside sample mode.");
 		const llm = new MeterlessSeatClient(provider, seatModel);
@@ -216,8 +217,11 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 	// Rival Challenger LLM client: real in live mode, canned in sample mode.
 	let challengerClient: { complete: (s: string, p: string) => Promise<{ content: string; confidence: number }> };
 	if (isSample) {
+		const delay = process.env.NODE_ENV === "test" ? 0 : 350;
 		challengerClient = {
-			complete: async () => ({
+			complete: async () => {
+				if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+				return {
 				content: JSON.stringify({
 					challenge: "Rival Challenger (sample): claims appear consistent with cached evidence; verify against live Zetaris before production.",
 					verifiedClaims: ["Cached evidence present"],
@@ -234,8 +238,9 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 					summary: "One unexplored governance angle.",
 				}),
 				confidence: 0.7,
-			}),
-		};
+			};
+		},
+	};
 	} else {
 		const seatModel = process.env.METERLESS_SEAT_MODEL?.trim() || undefined;
 		const llm = new MeterlessSeatClient(provider!, seatModel);

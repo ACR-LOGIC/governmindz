@@ -8,7 +8,8 @@ import { auditTrail } from "@governmindz/core/engine/AuditTrailEmitter";
 import { MeterlessProvider } from "@governmindz/core/providers/MeterlessProvider";
 import { zetarisQueryHandler } from "../gateway/src/tools/zetaris.tools.js";
 import { executeWebSearch } from "../gateway/src/tools/webSearch.tools.js";
-import { getConfigStatus, saveSecureConfig } from "../gateway/src/services/cryptoConfig.js";
+import { getConfigStatus, saveSecureConfig, loadLocalEnvIfPresent } from "../gateway/src/services/cryptoConfig.js";
+loadLocalEnvIfPresent();
 
 const PORT = Number(process.env.WEB_PORT || 8787);
 
@@ -305,9 +306,14 @@ async function handleRun(req: http.IncomingMessage, res: http.ServerResponse) {
 			sendJson(res, 400, { error: "invalid json" });
 			return;
 		}
-		if (activeRun && runs.get(activeRun) && !runs.get(activeRun)!.done) {
-			sendJson(res, 409, { error: "a run is already in progress" });
-			return;
+		if (activeRun) {
+			const current = runs.get(activeRun);
+			if (!current || current.done) {
+				activeRun = null;
+			} else {
+				sendJson(res, 409, { error: "a run is already in progress" });
+				return;
+			}
 		}
 		const runId = randomUUID();
 		const run: RunRecord = {
@@ -370,17 +376,42 @@ async function handleRun(req: http.IncomingMessage, res: http.ServerResponse) {
 					}
 				}
 
+				const completeEv = {
+					type: "complete",
+					runId,
+					result: out.result,
+					auditEvents: out.auditEvents,
+					auditIntegrity: out.auditIntegrity,
+				};
+				run.events.push(completeEv);
+				for (const r of run.listeners) {
+					try {
+						r.write("data: " + JSON.stringify(completeEv) + "\n\n");
+					} catch {
+						// ignore
+					}
+				}
+
 				const doneEv = { type: "done", runId };
 				run.events.push(doneEv);
 				for (const r of run.listeners) {
 					try {
 						r.write("data: " + JSON.stringify(doneEv) + "\n\n");
-						r.end();
 					} catch {
 						// ignore
 					}
 				}
-				run.listeners.clear();
+
+				setTimeout(() => {
+					for (const r of run.listeners) {
+						try {
+							r.end();
+						} catch {
+							// ignore
+						}
+					}
+					run.listeners.clear();
+				}, 500);
 			} catch (err) {
 				run.error = err instanceof Error ? err.message : String(err);
 				run.done = true;
@@ -389,15 +420,23 @@ async function handleRun(req: http.IncomingMessage, res: http.ServerResponse) {
 				for (const r of run.listeners) {
 					try {
 						r.write("data: " + JSON.stringify(errEv) + "\n\n");
-						r.end();
 					} catch {
 						// ignore
 					}
 				}
-				run.listeners.clear();
+				setTimeout(() => {
+					for (const r of run.listeners) {
+						try {
+							r.end();
+						} catch {
+							// ignore
+						}
+					}
+					run.listeners.clear();
+				}, 500);
 			} finally {
 				offAudit();
-				if (activeRun === runId) activeRun = null;
+				activeRun = null;
 			}
 		})();
 
@@ -423,9 +462,12 @@ function handleResult(req: http.IncomingMessage, res: http.ServerResponse, runId
 }
 
 async function handleHealth(_req: http.IncomingMessage, res: http.ServerResponse) {
+	loadLocalEnvIfPresent();
 	const provider = new MeterlessProvider();
 	const hasMeterless = Boolean((process.env.METERLESS_BASE_URL || process.env.METERLESS_ENDPOINT)?.trim());
-	const hasZetaris = Boolean(process.env.ZETARIS_HOST?.trim());
+	const hasZetaris = Boolean(
+		(process.env.ZETARIS_HOST || process.env.ZETARIS_REST_URL || process.env.ZETARIS_JDBC_URL)?.trim()
+	);
 
 	let meterless: any = null;
 	try {

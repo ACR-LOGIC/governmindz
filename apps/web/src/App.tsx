@@ -3,7 +3,7 @@ import { Header } from "./components/layout/Header";
 import { LeftSidebar } from "./components/layout/LeftSidebar";
 import { RightSidebar } from "./components/layout/RightSidebar";
 import { GroupConversation } from "./components/chat/GroupConversation";
-import { MessageComposer } from "./components/chat/MessageComposer";
+import { MessageComposer, DEMO_SCENARIOS } from "./components/chat/MessageComposer";
 import { ExecutionExplorer } from "./components/explorer/ExecutionExplorer";
 import { TrustEvidenceView } from "./components/evidence/TrustEvidenceView";
 import { AgentDetailDrawer } from "./components/modals/AgentDetailDrawer";
@@ -238,9 +238,36 @@ export const App: React.FC = () => {
 	};
 
 	// Start Demo scenario directly
-	const handleStartDemoScenario = (scenarioFile: string, question: string) => {
+	const handleStartDemoScenario = async (scenarioFile: string, question: string) => {
 		setSelectedScenario(scenarioFile);
-		handleSendMessage(question);
+
+		// If active conversation doesn't exist or already has completed messages, start a fresh conversation for this demo scenario!
+		if (!activeConv || activeConv.messages.length > 0) {
+			const councilAssignments = assignHumanCouncil();
+			const matchedScenario = DEMO_SCENARIOS.find((s) => s.file === scenarioFile);
+			const title = matchedScenario ? matchedScenario.title : `Demo: ${scenarioFile.replace(".json", "")}`;
+			const newConv: Conversation = {
+				id: `conv_${Date.now()}`,
+				title,
+				createdAt: Date.now(),
+				updatedAt: Date.now(),
+				topic: question,
+				mode: "sample",
+				scenarioId: scenarioFile.replace(".json", ""),
+				messages: [],
+				auditEvents: [],
+				status: "idle",
+				workflowEvents: [],
+				agentAssignments: councilAssignments,
+			};
+			setConversations((prev) => [newConv, ...prev]);
+			setActiveId(newConv.id);
+			saveConversation(newConv);
+			await handleSendMessageWithConv(newConv, question, scenarioFile);
+			return;
+		}
+
+		await handleSendMessageWithConv(activeConv, question, scenarioFile);
 	};
 
 	// Start Over in Demo mode
@@ -370,13 +397,42 @@ export const App: React.FC = () => {
 	};
 
 	// Run Debate Submission
-	const handleSendMessage = async (userTopic: string) => {
-		if (isBusy || !activeConv) return;
+	const handleSendMessage = async (userTopic: string, scenarioOverride?: string) => {
+		if (isBusy) return;
 
-		const topicToRun = userTopic || activeConv.topic || "Assess the Zetaris data available to this agent.";
+		let convToUse = activeConv;
+		if (!convToUse) {
+			const councilAssignments = assignHumanCouncil();
+			convToUse = {
+				id: `conv_${Date.now()}`,
+				title: `AI Debate #${conversations.length + 1}`,
+				createdAt: Date.now(),
+				updatedAt: Date.now(),
+				topic: userTopic,
+				mode,
+				scenarioId: (scenarioOverride || selectedScenario).replace(".json", ""),
+				messages: [],
+				auditEvents: [],
+				status: "idle",
+				workflowEvents: [],
+				agentAssignments: councilAssignments,
+			};
+			setConversations((prev) => [convToUse!, ...prev]);
+			setActiveId(convToUse.id);
+			saveConversation(convToUse);
+		}
+
+		await handleSendMessageWithConv(convToUse, userTopic, scenarioOverride);
+	};
+
+	const handleSendMessageWithConv = async (targetConv: Conversation, userTopic: string, scenarioOverride?: string) => {
+		if (isBusy) return;
+
+		const scenarioToUse = scenarioOverride || selectedScenario;
+		const topicToRun = userTopic || targetConv.topic || "Assess the Zetaris data available to this agent.";
 
 		// Assign / rotate friendly human names & job tasks for this deliberation
-		const councilAssignments = activeConv.agentAssignments || assignHumanCouncil();
+		const councilAssignments = targetConv.agentAssignments || assignHumanCouncil();
 
 		// Update active roster with the assigned human names and tasks
 		setAgentRoster((prev) =>
@@ -402,27 +458,28 @@ export const App: React.FC = () => {
 			timestamp: Date.now(),
 		};
 
-		const updatedMessages = [...activeConv.messages, userMsg];
+		const updatedMessages = [...targetConv.messages, userMsg];
 
 		const updatedConv: Conversation = {
-			...activeConv,
+			...targetConv,
 			topic: topicToRun,
-			title: activeConv.title.startsWith("AI Debate #") ? topicToRun.slice(0, 32) + "…" : activeConv.title,
+			scenarioId: scenarioToUse.replace(".json", ""),
+			title: targetConv.title.startsWith("AI Debate #") ? topicToRun.slice(0, 32) + "…" : targetConv.title,
 			messages: updatedMessages,
 			status: "running",
 			agentAssignments: councilAssignments,
 			updatedAt: Date.now(),
 		};
 
-		setConversations((prev) => prev.map((c) => (c.id === activeConv.id ? updatedConv : c)));
+		setConversations((prev) => prev.map((c) => (c.id === targetConv.id ? updatedConv : c)));
 		setIsBusy(true);
 
 		try {
 			const { runId } = await startRun({
 				mode,
-				scenario: selectedScenario,
+				scenario: scenarioToUse,
 				topic: topicToRun,
-				conversationId: activeConv.id,
+				conversationId: targetConv.id,
 			});
 
 			// Subscribe to SSE event stream
@@ -433,7 +490,7 @@ export const App: React.FC = () => {
 					handleStreamEvent(ev);
 				},
 				(err) => {
-					console.error("SSE stream error:", err);
+					console.warn("SSE stream closed/completed:", err);
 					setIsBusy(false);
 					setActiveAgentThinking(null);
 				},
@@ -553,7 +610,7 @@ export const App: React.FC = () => {
 					if (ev.event) {
 						updated.auditEvents = [...updated.auditEvents, ev.event];
 					}
-				} else if (ev.type === "complete") {
+				} else if (ev.type === "complete" || ev.type === "done") {
 					setActiveAgentThinking(null);
 					setIsBusy(false);
 					updated.status = "completed";
@@ -564,6 +621,11 @@ export const App: React.FC = () => {
 						updated.auditEvents = ev.auditEvents;
 					}
 					showToast("AI Deliberation complete · Cryptographic audit verified");
+				} else if (ev.type === "error") {
+					setActiveAgentThinking(null);
+					setIsBusy(false);
+					updated.status = "error";
+					showToast(`Run failed: ${ev.message || "Deliberation error"}`);
 				}
 
 				saveConversation(updated);
@@ -669,7 +731,7 @@ export const App: React.FC = () => {
 										rounds={2}
 										auditVerified={true}
 										onSelectAgent={handleSelectAgentFromChat}
-										onStartPrompt={(prompt) => handleSendMessage(prompt)}
+										onStartPrompt={(prompt) => handleSendMessage(prompt, activeScenarioItem?.file)}
 										onRateMessage={handleRateMessage}
 										activeScenario={activeScenarioItem}
 										allScenarios={scenarios}
@@ -683,7 +745,7 @@ export const App: React.FC = () => {
 										selectedScenarioFile={selectedScenario}
 										onSelectScenarioFile={handleSelectScenario}
 										isBusy={isBusy}
-										disabled={!activeConv}
+										disabled={false}
 										defaultTopic={activeScenarioItem?.topic}
 										hasCompletedMessages={Boolean(activeConv?.messages && activeConv.messages.length > 0)}
 									/>
