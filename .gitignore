@@ -7,6 +7,9 @@
 node_modules/
 dist/
 dist-*/**
+apps/web/dist/
+data/
+test-results/
 *.local
 .git/
 .nx/cache/

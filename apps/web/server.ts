@@ -2,14 +2,163 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import Database from "better-sqlite3";
 import { runDebate } from "../gateway/src/debateRunner.js";
 import { auditTrail } from "@governmindz/core/engine/AuditTrailEmitter";
 import { MeterlessProvider } from "@governmindz/core/providers/MeterlessProvider";
 import { zetarisQueryHandler } from "../gateway/src/tools/zetaris.tools.js";
 
 const PORT = Number(process.env.WEB_PORT || 8787);
-const ROOT = path.resolve(process.cwd(), "apps/web/public");
 
+// Resolve static root: prefer built React Vite app in apps/web/dist, fall back to apps/web/public
+const DIST_DIR = path.resolve(process.cwd(), "apps/web/dist");
+const PUBLIC_DIR = path.resolve(process.cwd(), "apps/web/public");
+const ROOT = fs.existsSync(DIST_DIR) ? DIST_DIR : PUBLIC_DIR;
+
+// ============================================================
+// SQLite Conversation Persistence
+// ============================================================
+const DATA_DIR = path.resolve(process.cwd(), "data");
+if (!fs.existsSync(DATA_DIR)) {
+	fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+const DB_PATH = path.join(DATA_DIR, "conversations.db");
+const db = new Database(DB_PATH);
+db.pragma("journal_mode = WAL");
+
+db.exec(`
+	CREATE TABLE IF NOT EXISTS conversations (
+		id TEXT PRIMARY KEY,
+		title TEXT NOT NULL,
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL,
+		topic TEXT NOT NULL,
+		mode TEXT NOT NULL,
+		scenario_id TEXT,
+		status TEXT NOT NULL,
+		final_confidence REAL,
+		inquiry_score INTEGER,
+		data_json TEXT NOT NULL
+	);
+`);
+
+function getAllConversations() {
+	const stmt = db.prepare("SELECT * FROM conversations ORDER BY updated_at DESC");
+	const rows = stmt.all() as any[];
+	return rows.map((r) => {
+		try {
+			const parsed = JSON.parse(r.data_json);
+			return {
+				id: r.id,
+				title: r.title,
+				createdAt: r.created_at,
+				updatedAt: r.updated_at,
+				topic: r.topic,
+				mode: r.mode,
+				scenarioId: r.scenario_id,
+				status: r.status,
+				finalConfidence: r.final_confidence,
+				inquiryScore: r.inquiry_score,
+				messages: parsed.messages || [],
+				auditEvents: parsed.auditEvents || [],
+				zetarisData: parsed.zetarisData || null,
+				workflowEvents: parsed.workflowEvents || [],
+			};
+		} catch {
+			return {
+				id: r.id,
+				title: r.title,
+				createdAt: r.created_at,
+				updatedAt: r.updated_at,
+				topic: r.topic,
+				mode: r.mode,
+				status: r.status,
+				messages: [],
+				auditEvents: [],
+			};
+		}
+	});
+}
+
+function getConversationById(id: string) {
+	const stmt = db.prepare("SELECT * FROM conversations WHERE id = ?");
+	const r = stmt.get(id) as any;
+	if (!r) return null;
+	try {
+		const parsed = JSON.parse(r.data_json);
+		return {
+			id: r.id,
+			title: r.title,
+			createdAt: r.created_at,
+			updatedAt: r.updated_at,
+			topic: r.topic,
+			mode: r.mode,
+			scenarioId: r.scenario_id,
+			status: r.status,
+			finalConfidence: r.final_confidence,
+			inquiryScore: r.inquiry_score,
+			messages: parsed.messages || [],
+			auditEvents: parsed.auditEvents || [],
+			zetarisData: parsed.zetarisData || null,
+			workflowEvents: parsed.workflowEvents || [],
+		};
+	} catch {
+		return null;
+	}
+}
+
+function upsertConversation(conv: any) {
+	const stmt = db.prepare(`
+		INSERT INTO conversations (id, title, created_at, updated_at, topic, mode, scenario_id, status, final_confidence, inquiry_score, data_json)
+		VALUES (@id, @title, @created_at, @updated_at, @topic, @mode, @scenario_id, @status, @final_confidence, @inquiry_score, @data_json)
+		ON CONFLICT(id) DO UPDATE SET
+			title = excluded.title,
+			updated_at = excluded.updated_at,
+			topic = excluded.topic,
+			mode = excluded.mode,
+			scenario_id = excluded.scenario_id,
+			status = excluded.status,
+			final_confidence = excluded.final_confidence,
+			inquiry_score = excluded.inquiry_score,
+			data_json = excluded.data_json
+	`);
+
+	const payload = {
+		messages: conv.messages || [],
+		auditEvents: conv.auditEvents || [],
+		zetarisData: conv.zetarisData || null,
+		workflowEvents: conv.workflowEvents || [],
+	};
+
+	stmt.run({
+		id: conv.id,
+		title: conv.title || "AI Debate",
+		created_at: conv.createdAt || Date.now(),
+		updated_at: conv.updatedAt || Date.now(),
+		topic: conv.topic || "",
+		mode: conv.mode || "sample",
+		scenario_id: conv.scenarioId || null,
+		status: conv.status || "idle",
+		final_confidence: conv.finalConfidence ?? null,
+		inquiry_score: conv.inquiryScore ?? null,
+		data_json: JSON.stringify(payload),
+	});
+}
+
+function updateConversationTitle(id: string, title: string) {
+	const stmt = db.prepare("UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?");
+	stmt.run(title, Date.now(), id);
+}
+
+function removeConversation(id: string) {
+	const stmt = db.prepare("DELETE FROM conversations WHERE id = ?");
+	stmt.run(id);
+}
+
+// ============================================================
+// Run Management
+// ============================================================
 interface RunRecord {
 	id: string;
 	events: Array<Record<string, unknown>>;
@@ -17,6 +166,7 @@ interface RunRecord {
 	done: boolean;
 	result: any;
 	error?: string;
+	conversationId?: string;
 }
 
 const runs = new Map<string, RunRecord>();
@@ -32,8 +182,15 @@ function serveStatic(req: http.IncomingMessage, res: http.ServerResponse) {
 	if (urlPath === "/") urlPath = "/index.html";
 	let base = ROOT;
 	if (urlPath.startsWith("/output_examples/")) base = path.resolve(process.cwd(), "output_examples");
-	else if (urlPath.startsWith("/assets/")) base = path.resolve(process.cwd(), "assets");
-	const rel = urlPath.startsWith("/output_examples/") ? urlPath.slice("/output_examples/".length) : (urlPath.startsWith("/assets/") ? urlPath.slice("/assets/".length) : urlPath);
+	else if (urlPath.startsWith("/assets/")) {
+		// Check both ROOT/assets and process.cwd()/assets
+		base = fs.existsSync(path.join(ROOT, urlPath)) ? ROOT : path.resolve(process.cwd(), "assets");
+	}
+	const rel = urlPath.startsWith("/output_examples/")
+		? urlPath.slice("/output_examples/".length)
+		: urlPath.startsWith("/assets/") && base !== ROOT
+			? urlPath.slice("/assets/".length)
+			: urlPath;
 	const filePath = path.join(base, rel);
 	const allowed = base === ROOT ? filePath.startsWith(ROOT) : true;
 	if (!allowed || !filePath.startsWith(base)) {
@@ -43,6 +200,15 @@ function serveStatic(req: http.IncomingMessage, res: http.ServerResponse) {
 	}
 	fs.readFile(filePath, (err, data) => {
 		if (err) {
+			// SPA fallback: for HTML requests, serve index.html
+			const indexPath = path.join(ROOT, "index.html");
+			if (fs.existsSync(indexPath)) {
+				fs.readFile(indexPath, (_err2, indexData) => {
+					res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+					res.end(indexData);
+				});
+				return;
+			}
 			res.writeHead(404);
 			res.end("not found");
 			return;
@@ -56,6 +222,7 @@ function serveStatic(req: http.IncomingMessage, res: http.ServerResponse) {
 			".png": "image/png",
 			".gif": "image/gif",
 			".svg": "image/svg+xml",
+			".ico": "image/x-icon",
 		};
 		res.writeHead(200, { "Content-Type": types[ext] || "application/octet-stream" });
 		res.end(data);
@@ -113,7 +280,14 @@ async function handleRun(req: http.IncomingMessage, res: http.ServerResponse) {
 			return;
 		}
 		const runId = randomUUID();
-		const run: RunRecord = { id: runId, events: [], listeners: new Set(), done: false, result: null };
+		const run: RunRecord = {
+			id: runId,
+			events: [],
+			listeners: new Set(),
+			done: false,
+			result: null,
+			conversationId: params.conversationId,
+		};
 		runs.set(runId, run);
 		activeRun = runId;
 
@@ -143,7 +317,7 @@ async function handleRun(req: http.IncomingMessage, res: http.ServerResponse) {
 		(async () => {
 			try {
 				let scenarioPath = params.scenario;
-				if (scenarioPath && !scenarioPath.includes("/") && !scenarioPath.includes("\\\\")) {
+				if (scenarioPath && !scenarioPath.includes("/") && !scenarioPath.includes("\\")) {
 					scenarioPath = "input_examples/" + scenarioPath;
 				}
 				const out = await runDebate({
@@ -154,6 +328,18 @@ async function handleRun(req: http.IncomingMessage, res: http.ServerResponse) {
 				});
 				run.result = out;
 				run.done = true;
+
+				// Update database persistence if conversation exists
+				if (run.conversationId) {
+					const existing = getConversationById(run.conversationId);
+					if (existing) {
+						existing.status = "completed";
+						existing.finalConfidence = out.result?.finalConfidence;
+						existing.updatedAt = Date.now();
+						upsertConversation(existing);
+					}
+				}
+
 				const doneEv = { type: "done", runId };
 				run.events.push(doneEv);
 				for (const r of run.listeners) {
@@ -216,7 +402,10 @@ async function handleHealth(_req: http.IncomingMessage, res: http.ServerResponse
 	}
 	let zetaris: any = { ok: false };
 	try {
-		const r = (await zetarisQueryHandler({ query: "SELECT 1", limit: 1 }, { callerRole: "analyst", correlationId: randomUUID() })) as any;
+		const r = (await zetarisQueryHandler(
+			{ query: "SELECT 1", limit: 1 },
+			{ callerRole: "analyst", correlationId: randomUUID() },
+		)) as any;
 		zetaris = { ok: true, rows: r.rows ? r.rows.length : 0 };
 	} catch (e) {
 		zetaris = { ok: false, reason: String(e) };
@@ -243,15 +432,107 @@ function handleScenarios(_req: http.IncomingMessage, res: http.ServerResponse) {
 	sendJson(res, 200, out);
 }
 
+function handleModels(_req: http.IncomingMessage, res: http.ServerResponse) {
+	sendJson(res, 200, {
+		models: [
+			{
+				id: "nemotron-3.5-lightning-30b-a3b",
+				name: "NVIDIA Nemotron 3.5 Lightning 30B",
+				provider: "meterless",
+				isDefault: true,
+			},
+			{
+				id: "gemini-3.8-flash",
+				name: "Gemini 3.8 Flash (Cloud Fallback)",
+				provider: "google",
+				isDefault: false,
+			},
+		],
+	});
+}
+
+function handleConversations(req: http.IncomingMessage, res: http.ServerResponse) {
+	if (req.method === "GET") {
+		const list = getAllConversations();
+		sendJson(res, 200, list);
+		return;
+	}
+
+	if (req.method === "POST") {
+		let body = "";
+		req.on("data", (c: any) => (body += c));
+		req.on("end", () => {
+			try {
+				const conv = JSON.parse(body);
+				upsertConversation(conv);
+				sendJson(res, 200, { success: true });
+			} catch {
+				sendJson(res, 400, { error: "invalid json" });
+			}
+		});
+		return;
+	}
+
+	res.writeHead(405);
+	res.end();
+}
+
+function handleSingleConversation(req: http.IncomingMessage, res: http.ServerResponse, id: string) {
+	if (req.method === "GET") {
+		const conv = getConversationById(id);
+		if (!conv) {
+			sendJson(res, 404, { error: "Conversation not found" });
+			return;
+		}
+		sendJson(res, 200, conv);
+		return;
+	}
+
+	if (req.method === "PATCH") {
+		let body = "";
+		req.on("data", (c: any) => (body += c));
+		req.on("end", () => {
+			try {
+				const { title } = JSON.parse(body);
+				if (title) {
+					updateConversationTitle(id, title);
+				}
+				sendJson(res, 200, { success: true });
+			} catch {
+				sendJson(res, 400, { error: "invalid json" });
+			}
+		});
+		return;
+	}
+
+	if (req.method === "DELETE") {
+		removeConversation(id);
+		sendJson(res, 200, { success: true });
+		return;
+	}
+
+	res.writeHead(405);
+	res.end();
+}
+
 const server = http.createServer((req: http.IncomingMessage, res: http.ServerResponse) => {
 	const url = (req.url || "/").split("?")[0];
 	if (req.method === "GET" && url === "/api/health") return handleHealth(req, res);
 	if (req.method === "GET" && url === "/api/scenarios") return handleScenarios(req, res);
+	if (req.method === "GET" && url === "/api/models") return handleModels(req, res);
+	if (url === "/api/conversations") return handleConversations(req, res);
+
+	const convMatch = url.match(/^\/api\/conversations\/([^/]+)$/);
+	if (convMatch) return handleSingleConversation(req, res, decodeURIComponent(convMatch[1]));
+
 	if (req.method === "POST" && url === "/api/run") return handleRun(req, res);
+
 	const m = url.match(/^\/api\/run\/([^/]+)\/events$/);
 	if (req.method === "GET" && m) return handleSSE(req, res, m[1] as string);
+
 	const m2 = url.match(/^\/api\/run\/([^/]+)\/result$/);
 	if (req.method === "GET" && m2) return handleResult(req, res, m2[1] as string);
+
 	if (req.method === "GET") return serveStatic(req, res);
 	res.writeHead(405);
 	res.end();

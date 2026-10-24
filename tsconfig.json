@@ -15,6 +15,7 @@
 		"allowJs": false,
 		"checkJs": false,
 		"resolveJsonModule": true,
+		"jsx": "react-jsx",
 		"paths": {
 			"@governmindz/core": ["./libs/core/src/index.ts"],
 			"@governmindz/core/*": ["./libs/core/src/*"],
@@ -26,6 +27,7 @@
 		"libs/**/src/**/*.ts",
 		"libs/**/test/**/*.ts",
 		"apps/**/src/**/*.ts",
+		"apps/**/src/**/*.tsx",
 		"src/types/environment.d.ts"
 	]
 }

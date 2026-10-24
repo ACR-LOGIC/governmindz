@@ -6,6 +6,9 @@
 	"type": "module",
 	"scripts": {
 		"typecheck": "tsc --noEmit",
+		"build": "vite build",
+		"dev": "vite",
+		"test:e2e": "playwright test",
 		"test": "set AUDIT_TRAIL_SECRET=test-workflow-secret-do-not-use-in-production && node --test --import tsx libs/core/test/gravity.test.ts libs/core/test/meterless.test.ts libs/core/test/zetaris.test.ts libs/core/test/workflow.test.ts",
 		"demo": "node --env-file=.env.local --import tsx apps/gateway/src/main.ts",
 		"demo:dry": "node --env-file=.env.local --import tsx apps/gateway/src/main.ts --dry-run",
@@ -16,10 +19,22 @@
 		"web": "node --env-file=.env.local --import tsx apps/web/server.ts"
 	},
 	"devDependencies": {
+		"@playwright/test": "^1.64.1",
+		"@tailwindcss/vite": "^4.3.3",
+		"@types/react": "^19.3.0",
+		"@types/react-dom": "^19.3.0",
+		"@vitejs/plugin-react": "^6.1.2",
+		"autoprefixer": "^10.6.1",
+		"postcss": "^8.5.31",
+		"tailwindcss": "^4.3.3",
 		"tsx": "^4.20.6",
-		"typescript": "^6.0.3"
+		"typescript": "^6.0.3",
+		"vite": "^8.3.5"
 	},
 	"dependencies": {
-		"better-sqlite3": "^13.0.3"
+		"better-sqlite3": "^13.0.3",
+		"lucide-react": "^1.61.0",
+		"react": "^19.3.1",
+		"react-dom": "^19.3.1"
 	}
 }
