@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
 	ShieldAlert,
 	CheckCircle2,
@@ -14,10 +14,15 @@ import {
 	Search,
 	Scale,
 	Lightbulb,
+	Copy,
+	Check,
+	Volume2,
+	VolumeX,
 } from "lucide-react";
 import type { ChatMessage } from "../../types";
 import { AGENT_REGISTRY } from "../../services/agentRegistry";
 import { AgentAvatar } from "../common/AgentAvatar";
+import { ttsService } from "../../services/ttsService";
 
 interface MessageBubbleProps {
 	message: ChatMessage;
@@ -41,6 +46,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 	onSelectAgent,
 }) => {
 	const [expanded, setExpanded] = useState(false);
+	const [copied, setCopied] = useState(false);
+	const [isSpeakingThis, setIsSpeakingThis] = useState(false);
+
 	const isUser = message.fromSeat === "user";
 	const isOrchestrator = message.fromSeat === "Orchestrator";
 
@@ -61,9 +69,34 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 	const supports = st?.supports || [];
 	const dissents = st?.dissents_from || st?.dissentsFrom || [];
 	const catchphrase = CATCHPHRASES[message.fromSeat];
+	const rawContent = st?.position || message.content;
+
+	// Listen to TTS state
+	useEffect(() => {
+		const unsub = ttsService.subscribe((isSpeaking, seatId, msgId) => {
+			setIsSpeakingThis(isSpeaking && msgId === message.id);
+		});
+		return unsub;
+	}, [message.id]);
 
 	const formatTime = (ts: number) => {
 		return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+	};
+
+	const handleCopy = () => {
+		if (navigator.clipboard) {
+			navigator.clipboard.writeText(rawContent);
+			setCopied(true);
+			setTimeout(() => setCopied(false), 2000);
+		}
+	};
+
+	const handleToggleSpeak = () => {
+		if (isSpeakingThis) {
+			ttsService.stop();
+		} else {
+			ttsService.speak(rawContent, message.fromSeat, message.id);
+		}
 	};
 
 	// Message type badge styling
@@ -95,20 +128,31 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 	if (isUser) {
 		return (
 			<div className="flex justify-end gap-3 mb-6 animate-fadeIn group">
-				<div className="max-w-2xl bg-gradient-to-r from-amber-950/30 via-[#18203a] to-[#12182b] border border-amber-500/30 rounded-2xl rounded-tr-sm p-4 shadow-xl shadow-black/40 relative">
+				<div className="max-w-2xl bg-gradient-to-r from-[#1e1e24] via-[#16161a] to-[#121214] border border-[#2e2e38] rounded-2xl rounded-tr-sm p-4 shadow-xl shadow-black/40 relative">
 					{/* Header */}
-					<div className="flex items-center justify-between gap-4 mb-2 text-xs border-b border-amber-500/20 pb-2">
+					<div className="flex items-center justify-between gap-4 mb-2 text-xs border-b border-[#2e2e38] pb-2">
 						<div className="flex items-center gap-2">
 							<span className="font-bold text-amber-300">You (Operator)</span>
-							<span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono">
+							<span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20 font-mono">
 								HUMAN REVIEWER
 							</span>
 						</div>
-						<span className="text-[10px] font-mono text-slate-400">{formatTime(message.timestamp)}</span>
+
+						<div className="flex items-center gap-2">
+							<button
+								type="button"
+								onClick={handleCopy}
+								className="p-1 rounded text-slate-400 hover:text-white transition-colors"
+								title="Copy to clipboard"
+							>
+								{copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+							</button>
+							<span className="text-[10px] font-mono text-slate-400">{formatTime(message.timestamp)}</span>
+						</div>
 					</div>
 
 					{/* Catchphrase */}
-					<div className="text-[11px] italic text-amber-200/70 mb-2 font-mono">
+					<div className="text-[11px] italic text-amber-200/60 mb-2 font-mono">
 						{catchphrase}
 					</div>
 
@@ -139,7 +183,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 					size="lg"
 					showStatusPip={true}
 					status={message.type === "challenge" ? "challenging" : message.type === "consensus" ? "completed" : "analyzing"}
-					className="ring-2 shadow-lg"
+					className={`ring-2 shadow-lg ${isSpeakingThis ? "ring-amber-400 animate-pulse" : ""}`}
 				/>
 			</button>
 
@@ -167,7 +211,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 					</span>
 
 					{message.round != null && (
-						<span className="text-[10px] font-mono text-slate-400 bg-[#18203a] px-2 py-0.5 rounded-md border border-[#2c385c]">
+						<span className="text-[10px] font-mono text-slate-400 bg-[#16161a] px-2 py-0.5 rounded-md border border-[#26262e]">
 							Round {message.round}
 						</span>
 					)}
@@ -179,17 +223,52 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 						</span>
 					)}
 
-					<span className="ml-auto text-[10px] font-mono text-slate-400 flex items-center gap-1">
-						{message.latency_ms != null && (
-							<span className="text-slate-400">{message.latency_ms}ms ·</span>
-						)}
-						{formatTime(message.timestamp)}
-					</span>
+					{/* Equalizer Visual Cue when actively speaking */}
+					{isSpeakingThis && (
+						<span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-mono border border-amber-500/30">
+							<span className="w-1 h-2 bg-amber-400 animate-bounce" />
+							<span className="w-1 h-3 bg-amber-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+							<span className="w-1 h-1.5 bg-amber-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+							<span className="ml-1 text-[9px]">Speaking…</span>
+						</span>
+					)}
+
+					{/* Header Actions: Copy + Text-to-Speech Toggle */}
+					<div className="ml-auto flex items-center gap-2 text-slate-400">
+						<button
+							type="button"
+							onClick={handleToggleSpeak}
+							className="p-1 rounded-md hover:text-amber-400 hover:bg-[#1a1a20] transition-colors"
+							title={isSpeakingThis ? "Stop speaking" : `Listen to ${profile.name}'s voice`}
+						>
+							{isSpeakingThis ? (
+								<VolumeX className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+							) : (
+								<Volume2 className="w-3.5 h-3.5" />
+							)}
+						</button>
+
+						<button
+							type="button"
+							onClick={handleCopy}
+							className="p-1 rounded-md hover:text-white hover:bg-[#1a1a20] transition-colors"
+							title="Copy position to clipboard"
+						>
+							{copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+						</button>
+
+						<span className="text-[10px] font-mono text-slate-400">
+							{message.latency_ms != null && <span>{message.latency_ms}ms · </span>}
+							{formatTime(message.timestamp)}
+						</span>
+					</div>
 				</div>
 
-				{/* Group Message Card Body with Left Role-Color Accent */}
+				{/* Group Message Card Body with Dark Graphite Accent */}
 				<div
-					className="bg-[#12182b] border border-[#1e2842] hover:border-[#2c385c] rounded-2xl rounded-tl-sm p-4 shadow-xl transition-all relative overflow-hidden"
+					className={`bg-[#16161a] border border-[#26262e] hover:border-[#383844] rounded-2xl rounded-tl-sm p-4 shadow-xl transition-all relative overflow-hidden ${
+						isSpeakingThis ? "ring-1 ring-amber-500/60 shadow-amber-950/20" : ""
+					}`}
 					style={{
 						borderLeftWidth: "4px",
 						borderLeftColor: profile.accentColor,
@@ -213,7 +292,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
 					{/* Quoted reply context if present */}
 					{message.replyToExcerpt && (
-						<div className="mb-3 px-3 py-1.5 rounded-lg bg-[#0c101e]/80 border-l-2 border-teal-500 text-xs text-slate-400 flex items-start gap-1.5">
+						<div className="mb-3 px-3 py-1.5 rounded-lg bg-[#0e0e12] border-l-2 border-teal-500 text-xs text-slate-400 flex items-start gap-1.5">
 							<CornerDownRight className="w-3.5 h-3.5 text-teal-400 shrink-0 mt-0.5" />
 							<span className="italic truncate">{message.replyToExcerpt}</span>
 						</div>
@@ -221,17 +300,17 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
 					{/* Main position text */}
 					<div className="text-sm text-slate-100 leading-relaxed whitespace-pre-wrap font-sans">
-						{st?.position || message.content}
+						{rawContent}
 					</div>
 
 					{/* Confidence bar row */}
 					{selfConf != null && (
-						<div className="mt-3 pt-3 border-t border-[#1e2842] flex items-center gap-3 text-xs flex-wrap">
+						<div className="mt-3 pt-3 border-t border-[#26262e] flex items-center gap-3 text-xs flex-wrap">
 							<span className="text-[11px] font-mono text-slate-400 flex items-center gap-1">
 								<Sparkles className="w-3 h-3 text-amber-400" />
 								<span>Self-Confidence:</span>
 							</span>
-							<div className="flex-1 h-2 bg-[#18203a] rounded-full overflow-hidden max-w-xs min-w-[100px]">
+							<div className="flex-1 h-2 bg-[#22222a] rounded-full overflow-hidden max-w-xs min-w-[100px]">
 								<div
 									className="h-full rounded-full transition-all duration-500"
 									style={{
@@ -245,7 +324,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 							</span>
 
 							{expertConf != null && (
-								<span className="text-[11px] font-mono text-slate-400 ml-auto bg-[#18203a] px-2 py-0.5 rounded-md border border-[#2c385c]">
+								<span className="text-[11px] font-mono text-slate-400 ml-auto bg-[#1e1e26] px-2 py-0.5 rounded-md border border-[#2e2e3a]">
 									Expert Agreement: <b className="text-slate-200">{(expertConf * 100).toFixed(0)}%</b>
 								</span>
 							)}

@@ -37,6 +37,7 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const [showScrollBottom, setShowScrollBottom] = useState(false);
+	const [filterMode, setFilterMode] = useState<"all" | "consensus">("all");
 
 	const scrollToBottom = () => {
 		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -64,6 +65,19 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 	const otherScenarios = allScenarios.filter(
 		(s) => s.file !== activeScenario?.file,
 	);
+
+	// Clean group chat filter: all deliberation vs consensus & conclusions only
+	const visibleMessages =
+		filterMode === "consensus"
+			? messages.filter(
+					(m) =>
+						m.type === "user" ||
+						m.type === "orchestrator" ||
+						m.type === "final" ||
+						m.type === "consensus" ||
+						m.type === "summary",
+				)
+			: messages;
 
 	return (
 		<div
@@ -186,8 +200,42 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 					</div>
 				)}
 
+				{/* Stream Mode Toggle Bar */}
+				{messages.length > 0 && (
+					<div className="flex items-center justify-between pb-3 border-b border-[#22222a] text-xs">
+						<div className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
+							Deliberation Stream Filter:
+						</div>
+						<div className="flex items-center gap-1 bg-[#16161c] p-1 rounded-xl border border-[#262630]">
+							<button
+								type="button"
+								onClick={() => setFilterMode("all")}
+								className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+									filterMode === "all"
+										? "bg-[#262632] text-amber-300 shadow-sm"
+										: "text-slate-400 hover:text-slate-200"
+								}`}
+							>
+								All Deliberation ({messages.length})
+							</button>
+							<button
+								type="button"
+								onClick={() => setFilterMode("consensus")}
+								className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+									filterMode === "consensus"
+										? "bg-[#262632] text-teal-300 shadow-sm"
+										: "text-slate-400 hover:text-slate-200"
+								}`}
+							>
+								<ShieldCheck className="w-3.5 h-3.5 text-teal-400" />
+								<span>Consensus & Conclusions Only</span>
+							</button>
+						</div>
+					</div>
+				)}
+
 				{/* Messages Stream */}
-				{messages.map((m) => {
+				{visibleMessages.map((m) => {
 					// If this is the final consensus message, we render the highlighted FinalAnswerCard!
 					if (m === finalMessage) {
 						return (

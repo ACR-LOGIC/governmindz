@@ -2,15 +2,15 @@
 
 @layer base {
   :root {
-    --bg-base: #0a0e1a;
-    --bg-surface: #0f1424;
-    --bg-panel: #12182b;
-    --bg-panel-elevated: #18203a;
-    --border-subtle: #1e2842;
-    --border-strong: #2c385c;
-    --text-primary: #e8ecf7;
-    --text-secondary: #94a3b8;
-    --text-muted: #64748b;
+    --bg-base: #111114;
+    --bg-surface: #16161a;
+    --bg-panel: #1a1a20;
+    --bg-panel-elevated: #22222a;
+    --border-subtle: #262630;
+    --border-strong: #363644;
+    --text-primary: #f2f2f6;
+    --text-secondary: #9ea0aa;
+    --text-muted: #666874;
     --accent-teal: #14b8a6;
     --accent-gold: #f4b942;
     --accent-cyan: #5eead4;
@@ -19,8 +19,8 @@
 
 body {
   font-family: 'Manrope', system-ui, -apple-system, sans-serif;
-  background-color: #0a0e1a;
-  color: #e8ecf7;
+  background-color: #111114;
+  color: #f2f2f6;
 }
 
 .font-display {
@@ -38,16 +38,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(15, 20, 36, 0.4);
+  background: rgba(22, 22, 26, 0.6);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(44, 56, 92, 0.6);
+  background: rgba(54, 54, 68, 0.7);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(94, 234, 212, 0.4);
+  background: rgba(244, 185, 66, 0.5);
 }
 
 /* Pulsing radar dot */
