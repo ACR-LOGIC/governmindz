@@ -11,6 +11,9 @@ import {
 	Key,
 	Terminal,
 	FileText,
+	Globe,
+	ExternalLink,
+	Sparkles,
 } from "lucide-react";
 import type { Conversation, ZetarisData, AuditEvent } from "../../types";
 
@@ -137,7 +140,75 @@ export const TrustEvidenceView: React.FC<TrustEvidenceViewProps> = ({ conversati
 					</div>
 				</div>
 
-				{/* Section 2: Cryptographic Audit Trail Ledger */}
+				{/* Section 2: Authoritative Web Citations & External Research */}
+				<div className="rounded-2xl bg-[#12182b] border border-[#1e2842] p-5 shadow-xl space-y-4">
+					<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#1e2842]">
+						<div className="flex items-center gap-2.5">
+							<div className="w-8 h-8 rounded-lg bg-sky-950/60 border border-sky-800/60 flex items-center justify-center text-sky-400">
+								<Globe className="w-4 h-4" />
+							</div>
+							<div>
+								<h2 className="font-display font-bold text-base text-slate-100">
+									Authoritative Web Citations & Regulatory References
+								</h2>
+								<p className="text-xs text-slate-400">
+									External domain verification & standards lookup via Imperial Web Intelligence Scout
+								</p>
+							</div>
+						</div>
+
+						{conversation.webSearchData && (
+							<span className="text-[10px] font-mono px-2.5 py-1 rounded-full bg-sky-950/40 border border-sky-700/40 text-sky-300 font-semibold">
+								{conversation.webSearchData.results.length} verified web sources
+							</span>
+						)}
+					</div>
+
+					{conversation.webSearchData && conversation.webSearchData.results.length > 0 ? (
+						<div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+							{conversation.webSearchData.results.map((res, i) => (
+								<div
+									key={i}
+									className="p-3.5 rounded-xl bg-[#0a0e1a] border border-[#1e2842] hover:border-sky-500/40 transition-all flex flex-col justify-between space-y-2 group"
+								>
+									<div>
+										<div className="flex items-start justify-between gap-2 mb-1">
+											<h4 className="text-xs font-bold text-sky-200 group-hover:text-sky-300 line-clamp-1">
+												{res.title}
+											</h4>
+											<span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-sky-950/80 border border-sky-800/60 text-sky-300 shrink-0">
+												{res.verificationStatus || "verified"}
+											</span>
+										</div>
+										<p className="text-[11px] text-slate-400 leading-relaxed line-clamp-3">
+											{res.snippet}
+										</p>
+									</div>
+
+									<div className="flex items-center justify-between pt-2 border-t border-[#1e2842]/50 text-[10px] font-mono text-slate-400">
+										<span className="truncate max-w-[200px]">{res.source}</span>
+										<a
+											href={res.url}
+											target="_blank"
+											rel="noreferrer"
+											className="inline-flex items-center gap-1 text-teal-400 hover:text-teal-300 hover:underline shrink-0"
+										>
+											<span>Source</span>
+											<ExternalLink className="w-2.5 h-2.5" />
+										</a>
+									</div>
+								</div>
+							))}
+						</div>
+					) : (
+						<div className="p-5 text-center text-xs text-slate-400 border border-dashed border-[#1e2842] rounded-xl font-mono">
+							🌐 Web search triggers automatically when topics reference external regulatory standards,
+							NIST frameworks, or when local Zetaris catalogs require supplementary verification.
+						</div>
+					)}
+				</div>
+
+				{/* Section 3: Cryptographic Audit Trail Ledger */}
 				<div className="rounded-2xl bg-[#12182b] border border-[#1e2842] p-5 shadow-xl space-y-4">
 					<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#1e2842]">
 						<div className="flex items-center gap-2.5">

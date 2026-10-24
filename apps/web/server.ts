@@ -7,6 +7,7 @@ import { runDebate } from "../gateway/src/debateRunner.js";
 import { auditTrail } from "@governmindz/core/engine/AuditTrailEmitter";
 import { MeterlessProvider } from "@governmindz/core/providers/MeterlessProvider";
 import { zetarisQueryHandler } from "../gateway/src/tools/zetaris.tools.js";
+import { executeWebSearch } from "../gateway/src/tools/webSearch.tools.js";
 
 const PORT = Number(process.env.WEB_PORT || 8787);
 
@@ -515,9 +516,35 @@ function handleSingleConversation(req: http.IncomingMessage, res: http.ServerRes
 	res.end();
 }
 
+async function handleWebSearch(req: http.IncomingMessage, res: http.ServerResponse) {
+	let query = "";
+	if (req.method === "GET") {
+		const parsedUrl = new URL(req.url || "/", "http://localhost");
+		query = parsedUrl.searchParams.get("q") || "";
+	} else if (req.method === "POST") {
+		let body = "";
+		req.on("data", (c: any) => (body += c));
+		await new Promise<void>((resolve) => req.on("end", () => resolve()));
+		try {
+			const parsed = JSON.parse(body || "{}");
+			query = parsed.query || parsed.q || "";
+		} catch {
+			query = "";
+		}
+	}
+
+	try {
+		const results = await executeWebSearch(query, 5);
+		sendJson(res, 200, results);
+	} catch (err: any) {
+		sendJson(res, 500, { error: err.message || "Web search failed" });
+	}
+}
+
 const server = http.createServer((req: http.IncomingMessage, res: http.ServerResponse) => {
 	const url = (req.url || "/").split("?")[0];
 	if (req.method === "GET" && url === "/api/health") return handleHealth(req, res);
+	if (url === "/api/search") return handleWebSearch(req, res);
 	if (req.method === "GET" && url === "/api/scenarios") return handleScenarios(req, res);
 	if (req.method === "GET" && url === "/api/models") return handleModels(req, res);
 	if (url === "/api/conversations") return handleConversations(req, res);

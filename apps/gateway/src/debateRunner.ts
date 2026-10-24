@@ -13,6 +13,7 @@ import { formatZetarisResult } from "./format.js";
 import { loadSampleScenario, type SampleScenario } from "./sampleScenario.js";
 import { SampleSeatClient } from "./sampleSeat.js";
 import { zetarisQueryHandler } from "./tools/zetaris.tools.js";
+import { executeWebSearch, type WebSearchResultItem } from "./tools/webSearch.tools.js";
 
 interface ZetarisToolResult {
 	columns: string[];
@@ -168,6 +169,36 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 		total: zetarisResult.total ?? zetarisResult.rows.length,
 	});
 
+	// Web Search for factual verification & authoritative domain research
+	let webCitationContext = "";
+	try {
+		const webSearchData = await executeWebSearch(topic, 3);
+		eventSink?.({
+			type: "web_search",
+			query: topic,
+			total: webSearchData.total,
+			source: webSearchData.source,
+			results: webSearchData.results,
+		});
+
+		if (webSearchData.results.length > 0) {
+			webCitationContext = [
+				"",
+				"External Web Research & Verified Standards:",
+				...webSearchData.results.map(
+					(r: WebSearchResultItem, idx: number) =>
+						`[Web Citation ${idx + 1}] "${r.title}" (${r.source}, URL: ${r.url}) [Status: ${r.verificationStatus}]: ${r.snippet}`,
+				),
+			].join("\n");
+		}
+	} catch (webErr) {
+		console.warn("Web search lookup fallback:", webErr);
+	}
+
+	const combinedEvidenceContext = webCitationContext
+		? `${evidenceContext}\n${webCitationContext}`
+		: evidenceContext;
+
 	const provider = isSample ? null : new MeterlessProvider();
 	if (!isSample) {
 		const status = await provider!.status();
@@ -228,7 +259,7 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 		seats,
 		topic,
 		eventSink,
-		evidenceContext,
+		combinedEvidenceContext,
 		rivalChallenger,
 		thinkerAgent,
 		inquiryScore,
@@ -236,7 +267,7 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 
 	eventSink?.({ type: "run_start", mode: isSample ? "sample" : "live", topic, scenarioId });
 
-	const resultDebate = await loop.run(buildTask(topic, evidenceContext));
+	const resultDebate = await loop.run(buildTask(topic, combinedEvidenceContext));
 	const auditEvents = auditTrail.getLog();
 
 	// H-MEM: mine this debate into hierarchical memory for future runs.

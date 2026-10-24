@@ -17,9 +17,18 @@ import {
 	Check,
 	Sparkles,
 	Sliders,
+	Download,
+	FileJson,
+	FileText,
+	Layers,
 } from "lucide-react";
-import type { ActiveTab, HealthStatus } from "../../types";
+import type { ActiveTab, HealthStatus, Conversation } from "../../types";
 import { ttsService } from "../../services/ttsService";
+import {
+	exportConversationAsJson,
+	exportConversationAsMarkdown,
+	exportAuditLogAsJsonl,
+} from "../../services/exportService";
 
 interface HeaderProps {
 	activeTab: ActiveTab;
@@ -33,6 +42,7 @@ interface HeaderProps {
 	openSettings: () => void;
 	mode: "live" | "sample";
 	isBusy: boolean;
+	activeConversation?: Conversation | null;
 }
 
 const AVAILABLE_MODELS = [
@@ -68,25 +78,31 @@ export const Header: React.FC<HeaderProps> = ({
 	openSettings,
 	mode,
 	isBusy,
+	activeConversation,
 }) => {
 	const meterlessOnline = health?.meterless?.state === "online";
 	const zetarisOnline = health?.zetaris?.ok;
 
 	const [ttsEnabled, setTtsEnabled] = useState(false);
 	const [modelMenuOpen, setModelMenuOpen] = useState(false);
+	const [exportMenuOpen, setExportMenuOpen] = useState(false);
 	const [selectedModel, setSelectedModel] = useState(AVAILABLE_MODELS[0].id);
 	const [nightshiftEnabled, setNightshiftEnabled] = useState(true);
 	const menuRef = useRef<HTMLDivElement>(null);
+	const exportRef = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
 		setTtsEnabled(ttsService.isTtsEnabled());
 	}, []);
 
-	// Close model menu when clicking outside
+	// Close menus when clicking outside
 	useEffect(() => {
 		const handleClickOutside = (e: MouseEvent) => {
 			if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
 				setModelMenuOpen(false);
+			}
+			if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+				setExportMenuOpen(false);
 			}
 		};
 		document.addEventListener("mousedown", handleClickOutside);
@@ -294,6 +310,91 @@ export const Header: React.FC<HeaderProps> = ({
 				>
 					<RefreshCw className={`w-4 h-4 ${isBusy ? "animate-spin text-teal-400" : ""}`} />
 				</button>
+
+				{/* Platform-Wide Export Menu */}
+				<div className="relative" ref={exportRef}>
+					<button
+						type="button"
+						onClick={() => setExportMenuOpen(!exportMenuOpen)}
+						disabled={!activeConversation}
+						className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+							exportMenuOpen
+								? "bg-[#1f1f28] border-amber-500/50 text-amber-300"
+								: "border-[#2e2e38] bg-[#16161a] text-slate-300 hover:text-white hover:border-[#3e3e4c]"
+						} ${!activeConversation ? "opacity-50 cursor-not-allowed" : ""}`}
+						title="Export conversation history and granular outputs"
+						aria-label="Export debate outputs"
+					>
+						<Download className="w-3.5 h-3.5 text-amber-400" />
+						<span className="hidden sm:inline">Export</span>
+						<ChevronDown className="w-3 h-3 text-slate-400" />
+					</button>
+
+					{exportMenuOpen && activeConversation && (
+						<div className="absolute right-0 mt-2 w-64 bg-[#141418] border border-[#2a2a36] rounded-xl shadow-2xl p-2 z-50 animate-fadeIn space-y-1">
+							<div className="px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-slate-400 border-b border-[#22222c]">
+								Platform Export Options
+							</div>
+
+							<button
+								type="button"
+								onClick={() => {
+									exportConversationAsJson(activeConversation);
+									setExportMenuOpen(false);
+								}}
+								className="w-full flex items-start gap-2.5 p-2 rounded-lg text-left hover:bg-[#1f1f28] text-slate-200 transition-colors group"
+							>
+								<FileJson className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+								<div>
+									<div className="text-xs font-semibold group-hover:text-amber-300">
+										Granular Outputs (.JSON)
+									</div>
+									<div className="text-[10px] text-slate-400 leading-tight">
+										Full audit ledger, citations, telemetry & messages
+									</div>
+								</div>
+							</button>
+
+							<button
+								type="button"
+								onClick={() => {
+									exportConversationAsMarkdown(activeConversation);
+									setExportMenuOpen(false);
+								}}
+								className="w-full flex items-start gap-2.5 p-2 rounded-lg text-left hover:bg-[#1f1f28] text-slate-200 transition-colors group"
+							>
+								<FileText className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+								<div>
+									<div className="text-xs font-semibold group-hover:text-emerald-300">
+										Executive Briefing (.MD)
+									</div>
+									<div className="text-[10px] text-slate-400 leading-tight">
+										Formatted synthesis, verified positions & citations
+									</div>
+								</div>
+							</button>
+
+							<button
+								type="button"
+								onClick={() => {
+									exportAuditLogAsJsonl(activeConversation);
+									setExportMenuOpen(false);
+								}}
+								className="w-full flex items-start gap-2.5 p-2 rounded-lg text-left hover:bg-[#1f1f28] text-slate-200 transition-colors group"
+							>
+								<Layers className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+								<div>
+									<div className="text-xs font-semibold group-hover:text-purple-300">
+										Audit Ledger Stream (.JSONL)
+									</div>
+									<div className="text-[10px] text-slate-400 leading-tight">
+										Cryptographic chain events for SIEM compliance
+									</div>
+								</div>
+							</button>
+						</div>
+					)}
+				</div>
 
 				{/* Settings button */}
 				<button

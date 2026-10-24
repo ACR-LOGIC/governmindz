@@ -56,6 +56,8 @@ export const App: React.FC = () => {
 		getAgentProfile("Synthesizer"),
 		getAgentProfile("RivalChallenger"),
 		getAgentProfile("Thinker"),
+		getAgentProfile("CredibleSourcesResearchAgent"),
+		getAgentProfile("ContextAgent"),
 	]);
 
 	// Confidence chart points
@@ -199,6 +201,42 @@ export const App: React.FC = () => {
 		);
 	}, []);
 
+	// Append Live Reasoning & Hypothesis Scratchpad steps
+	const appendAgentReasoning = useCallback((seatId: string, reasoningChunk: string) => {
+		setAgentRoster((prev) =>
+			prev.map((a) => {
+				if (a.id === seatId) {
+					const existing = a.liveReasoning || [];
+					return {
+						...a,
+						status: "analyzing",
+						liveReasoning: [...existing, reasoningChunk],
+						lastActiveTime: Date.now(),
+					};
+				}
+				return a;
+			}),
+		);
+	}, []);
+
+	// Handle thumbs up / down message ratings
+	const handleRateMessage = (messageId: string, rating: "up" | "down" | null) => {
+		if (!activeId) return;
+		setConversations((prev) => {
+			const curr = prev.find((c) => c.id === activeId);
+			if (!curr) return prev;
+			const updatedMessages = curr.messages.map((m) =>
+				m.id === messageId ? { ...m, userRating: rating } : m,
+			);
+			const updated = { ...curr, messages: updatedMessages, updatedAt: Date.now() };
+			saveConversation(updated);
+			return prev.map((c) => (c.id === activeId ? updated : c));
+		});
+		if (rating) {
+			showToast(`Feedback recorded: ${rating === "up" ? "Thumbs Up 👍" : "Thumbs Down 👎"}`);
+		}
+	};
+
 	// Run Debate Submission
 	const handleSendMessage = async (userTopic: string) => {
 		if (isBusy || !activeConv) return;
@@ -271,16 +309,40 @@ export const App: React.FC = () => {
 				let updated = { ...curr };
 
 				if (ev.type === "run_start") {
-					// Add orchestrator announcement
+					// Announce the active agent roster upon task delegation
+					const rosterAnnouncement = [
+						"🏛️ Council Convened for Task Delegation: Inquiry initiated in " + ev.mode.toUpperCase() + " mode.",
+						"",
+						"• Chief Forensic Truth Arbiter (Fact Checker) — Epistemic Verification & Schema Provenance",
+						"• High Zero-Trust Sentinel (Cloud Architect) — Least-Privilege Bastion & Firewall Enforcer",
+						"• Chancellor of Calibrated Synthesis (Synthesizer) — Multi-Agent Consensus & Final Decree",
+						"• Grand Adversarial Inquisitor (Rival Challenger) — Interrogation & Falsification Engine",
+						"• High Cosmic Ontologist (Thinker Agent) — Edge-Case Dialectics & Temporal Horizon Analysis",
+						"• Imperial Web Intelligence Scout (Credible Research) — Live Web Telemetry & Citations",
+						"",
+						"Council active. Initiating federated evidence analysis, web verification, and multi-round deliberation...",
+					].join("\n");
+
 					const orchMsg: ChatMessage = {
 						id: `msg_orch_${Date.now()}`,
 						fromSeat: "Orchestrator",
 						type: "orchestrator",
-						content: `Inquiry initiated in ${ev.mode.toUpperCase()} mode. Initializing multi-seat deliberation across FactChecker, CloudArchitect, and Synthesizer.`,
+						content: rosterAnnouncement,
 						timestamp: Date.now(),
 					};
 					updated.messages = [...updated.messages, orchMsg];
 					updated.status = "running";
+				} else if (ev.type === "web_search") {
+					updated.webSearchData = {
+						query: ev.query,
+						total: ev.total || ev.results?.length || 0,
+						source: ev.source,
+						results: ev.results || [],
+					};
+					appendAgentReasoning(
+						"CredibleSourcesResearchAgent",
+						`Dispatched online web search query: "${ev.query}". Retrieved ${ev.results?.length || 0} authoritative external standards and citations.`,
+					);
 				} else if (ev.type === "zetaris") {
 					updated.zetarisData = {
 						query: ev.query,
@@ -288,11 +350,17 @@ export const App: React.FC = () => {
 						rows: ev.rows,
 						total: ev.total || ev.rows?.length || 0,
 					};
+					appendAgentReasoning(
+						"FactChecker",
+						`Connected to Zetaris virtual fabric. Executed query: "${ev.query}" (${ev.rows?.length || 0} rows retrieved).`,
+					);
 				} else if (ev.type === "inquiry_score") {
 					updated.inquiryScore = ev.score;
 				} else if (ev.type === "seat_thinking") {
 					setActiveAgentThinking(ev.seatId);
 					updateAgentStatus(ev.seatId, "analyzing");
+					const note = ev.step || `Formulating epistemic position and examining schema provenance...`;
+					appendAgentReasoning(ev.seatId, note);
 				} else if (ev.type === "message") {
 					setActiveAgentThinking(null);
 					const rawMsg = ev.message;
@@ -311,6 +379,12 @@ export const App: React.FC = () => {
 
 					updated.messages = [...updated.messages, newMsg];
 
+					// Record contribution step in live scratchpad
+					appendAgentReasoning(
+						rawMsg.fromSeat,
+						`Deliberation Round ${rawMsg.round || 1}: Committed position [Confidence: ${((newMsg.confidence || 0.8) * 100).toFixed(0)}%].`,
+					);
+
 					// Update confidence chart
 					const s = rawMsg.fromSeat;
 					const conf = newMsg.confidence || 0;
@@ -324,8 +398,16 @@ export const App: React.FC = () => {
 					updateAgentStatus(s, "completed", conf);
 				} else if (ev.type === "rival_trigger") {
 					updateAgentStatus("RivalChallenger", "challenging");
+					appendAgentReasoning(
+						"RivalChallenger",
+						"Detected unverified consensus assumption. Probing boundary cases and raising formal challenge.",
+					);
 				} else if (ev.type === "thinker_question") {
 					updateAgentStatus("Thinker", "analyzing");
+					appendAgentReasoning(
+						"Thinker",
+						"Exploring hidden governance angles and long-term retention policies.",
+					);
 				} else if (ev.type === "audit") {
 					if (ev.event) {
 						updated.auditEvents = [...updated.auditEvents, ev.event];
@@ -365,6 +447,12 @@ export const App: React.FC = () => {
 	const activeScenarioItem =
 		scenarios.find((s) => s.file === selectedScenario) || (scenarios.length > 0 ? scenarios[0] : null);
 
+	// Dynamically track selected agent from roster to reflect live reasoning scratchpad updates
+	const currentSelectedAgent = useMemo(() => {
+		if (!selectedAgentForDrawer) return null;
+		return agentRoster.find((a) => a.id === selectedAgentForDrawer.id) || selectedAgentForDrawer;
+	}, [selectedAgentForDrawer, agentRoster]);
+
 	// Select Scenario Template handler
 	const handleSelectScenario = (file: string) => {
 		setSelectedScenario(file);
@@ -400,6 +488,7 @@ export const App: React.FC = () => {
 				openSettings={() => setSettingsModalOpen(true)}
 				mode={mode}
 				isBusy={isBusy}
+				activeConversation={activeConv}
 			/>
 
 			{/* Main Workspace 3-Pane Layout */}
@@ -436,6 +525,7 @@ export const App: React.FC = () => {
 										auditVerified={true}
 										onSelectAgent={handleSelectAgentFromChat}
 										onStartPrompt={(prompt) => handleSendMessage(prompt)}
+										onRateMessage={handleRateMessage}
 										activeScenario={activeScenarioItem}
 										allScenarios={scenarios}
 										onSelectScenario={handleSelectScenario}
@@ -478,7 +568,7 @@ export const App: React.FC = () => {
 
 			{/* Slide-over Agent Detail Drawer */}
 			<AgentDetailDrawer
-				agent={selectedAgentForDrawer}
+				agent={currentSelectedAgent}
 				messages={activeConv?.messages || []}
 				onClose={() => setSelectedAgentForDrawer(null)}
 			/>

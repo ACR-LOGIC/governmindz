@@ -18,6 +18,8 @@ import {
 	Check,
 	Volume2,
 	VolumeX,
+	ThumbsUp,
+	ThumbsDown,
 } from "lucide-react";
 import type { ChatMessage } from "../../types";
 import { AGENT_REGISTRY } from "../../services/agentRegistry";
@@ -27,6 +29,7 @@ import { ttsService } from "../../services/ttsService";
 interface MessageBubbleProps {
 	message: ChatMessage;
 	onSelectAgent?: (seatId: string) => void;
+	onRateMessage?: (messageId: string, rating: "up" | "down" | null) => void;
 }
 
 // Funny character catchphrases matching each seat's persona
@@ -44,10 +47,22 @@ const CATCHPHRASES: Record<string, string> = {
 export const MessageBubble: React.FC<MessageBubbleProps> = ({
 	message,
 	onSelectAgent,
+	onRateMessage,
 }) => {
 	const [expanded, setExpanded] = useState(false);
 	const [copied, setCopied] = useState(false);
 	const [isSpeakingThis, setIsSpeakingThis] = useState(false);
+	const [rating, setRating] = useState<"up" | "down" | null>(message.userRating || null);
+
+	useEffect(() => {
+		setRating(message.userRating || null);
+	}, [message.userRating]);
+
+	const handleRate = (newRating: "up" | "down") => {
+		const next = rating === newRating ? null : newRating;
+		setRating(next);
+		onRateMessage?.(message.id, next);
+	};
 
 	const isUser = message.fromSeat === "user";
 	const isOrchestrator = message.fromSeat === "Orchestrator";
@@ -202,6 +217,20 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
 					<span className="text-[11px] text-slate-400 font-medium">· {profile.role}</span>
 
+					{/* Creative Stylized Title */}
+					{profile.creativeTitle && (
+						<span
+							className="text-[10px] font-mono px-2 py-0.5 rounded-md font-semibold border shadow-sm"
+							style={{
+								backgroundColor: `${profile.accentColor}15`,
+								borderColor: `${profile.accentColor}40`,
+								color: profile.accentColor,
+							}}
+						>
+							{profile.creativeTitle}
+						</span>
+					)}
+
 					{/* Message type badge with icon */}
 					<span
 						className={`inline-flex items-center gap-1 text-[9px] font-mono uppercase px-2.5 py-0.5 rounded-full border font-semibold ${badge.bg}`}
@@ -233,8 +262,39 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 						</span>
 					)}
 
-					{/* Header Actions: Copy + Text-to-Speech Toggle */}
-					<div className="ml-auto flex items-center gap-2 text-slate-400">
+					{/* Header Actions: Copy + Text-to-Speech Toggle + Thumbs Rating */}
+					<div className="ml-auto flex items-center gap-1.5 text-slate-400">
+						{/* Thumbs Up / Down ratings */}
+						<div className="flex items-center gap-0.5 border-r border-[#26262e] pr-1.5 mr-0.5">
+							<button
+								type="button"
+								onClick={() => handleRate("up")}
+								className={`p-1 rounded-md transition-all ${
+									rating === "up"
+										? "text-emerald-400 bg-emerald-950/60 ring-1 ring-emerald-500/50"
+										: "text-slate-400 hover:text-emerald-300 hover:bg-[#1a1a20]"
+								}`}
+								title="Rate response accurate & verified (Thumbs Up)"
+								aria-label="Thumbs up rating"
+							>
+								<ThumbsUp className={`w-3.5 h-3.5 ${rating === "up" ? "fill-emerald-400/30" : ""}`} />
+							</button>
+
+							<button
+								type="button"
+								onClick={() => handleRate("down")}
+								className={`p-1 rounded-md transition-all ${
+									rating === "down"
+										? "text-rose-400 bg-rose-950/60 ring-1 ring-rose-500/50"
+										: "text-slate-400 hover:text-rose-300 hover:bg-[#1a1a20]"
+								}`}
+								title="Rate response disputed or flawed (Thumbs Down)"
+								aria-label="Thumbs down rating"
+							>
+								<ThumbsDown className={`w-3.5 h-3.5 ${rating === "down" ? "fill-rose-400/30" : ""}`} />
+							</button>
+						</div>
+
 						<button
 							type="button"
 							onClick={handleToggleSpeak}

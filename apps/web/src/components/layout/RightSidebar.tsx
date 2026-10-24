@@ -9,6 +9,8 @@ import {
 	AlertTriangle,
 	HelpCircle,
 	Bot,
+	BrainCircuit,
+	Radio,
 } from "lucide-react";
 import type { AgentProfile } from "../../types";
 import { AgentAvatar } from "../common/AgentAvatar";
@@ -65,7 +67,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 		<aside className="w-80 bg-[#0c101e] border-l border-[#1e2842] flex flex-col shrink-0 h-[calc(100vh-3.5rem)] select-none overflow-y-auto">
 			{/* Section 1: Active Roster */}
 			<div className="p-4 border-b border-[#1e2842]">
-				<div className="flex items-center justify-between mb-3">
+				<div className="flex items-center justify-between mb-2">
 					<div className="flex items-center gap-1.5 text-xs font-bold text-slate-300 uppercase tracking-wider">
 						<Users className="w-3.5 h-3.5 text-teal-400" />
 						<span>Agent Roster</span>
@@ -75,7 +77,12 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 					</span>
 				</div>
 
-				<div className="space-y-1.5">
+				<div className="text-[10px] text-slate-400 mb-2.5 flex items-center gap-1">
+					<BrainCircuit className="w-3 h-3 text-amber-400 shrink-0" />
+					<span>Click any agent to watch live reasoning</span>
+				</div>
+
+				<div className="space-y-2">
 					{agents.map((agent) => {
 						const isWorking = agent.status !== "idle" && agent.status !== "completed";
 						return (
@@ -83,9 +90,10 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 								type="button"
 								key={agent.id}
 								onClick={() => onSelectAgent(agent)}
-								className="w-full flex items-center justify-between p-2 rounded-xl bg-[#12182b] hover:bg-[#18203a] border border-[#1e2842] hover:border-[#2c385c] transition-all text-left group"
+								className="w-full flex items-center justify-between p-2.5 rounded-xl bg-[#12182b] hover:bg-[#18203a] border border-[#1e2842] hover:border-[#2c385c] transition-all text-left group"
+								title={`Click to watch ${agent.name}'s live reasoning scratchpad & epistemic hypotheses`}
 							>
-								<div className="flex items-center gap-2.5 truncate">
+								<div className="flex items-center gap-2.5 truncate flex-1 min-w-0">
 									{/* Character Avatar with status pip */}
 									<AgentAvatar
 										seatId={agent.id}
@@ -94,24 +102,37 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 										status={isWorking ? "analyzing" : agent.status}
 									/>
 
-									<div className="truncate">
-										<div className="text-xs font-semibold text-slate-200 group-hover:text-white truncate">
-											{agent.name}
+									<div className="truncate flex-1 min-w-0">
+										<div className="text-xs font-semibold text-slate-200 group-hover:text-white truncate flex items-center gap-1">
+											<span>{agent.name}</span>
 										</div>
-										<div className="text-[10px] text-slate-400 truncate">{agent.role}</div>
+										{agent.creativeTitle ? (
+											<div className="text-[10px] font-mono text-amber-300/90 truncate font-medium">
+												{agent.creativeTitle}
+											</div>
+										) : (
+											<div className="text-[10px] text-slate-400 truncate">{agent.role}</div>
+										)}
 									</div>
 								</div>
 
-								{/* Confidence badge if available */}
-								{agent.confidence != null ? (
-									<span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#18203a] text-teal-300 shrink-0">
-										{(agent.confidence * 100).toFixed(0)}%
-									</span>
-								) : (
-									<span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-[#18203a] text-slate-400 shrink-0">
-										{agent.status}
-									</span>
-								)}
+								{/* Live Watch indicator or confidence */}
+								<div className="ml-2 shrink-0 flex items-center gap-1">
+									{isWorking ? (
+										<span className="flex items-center gap-1 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-950/70 border border-emerald-700/60 text-emerald-300 animate-pulse">
+											<Radio className="w-2.5 h-2.5 text-emerald-400" />
+											<span>WATCH</span>
+										</span>
+									) : agent.confidence != null ? (
+										<span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#18203a] text-teal-300">
+											{(agent.confidence * 100).toFixed(0)}%
+										</span>
+									) : (
+										<span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-[#18203a] text-slate-400">
+											{agent.status}
+										</span>
+									)}
+								</div>
 							</button>
 						);
 					})}

@@ -24,6 +24,8 @@ export interface AgentProfile {
 	id: string;
 	name: string;
 	role: string;
+	creativeTitle?: string;
+	domainExpertise?: string;
 	initials: string;
 	avatarGradient: string;
 	accentColor: string;
@@ -32,6 +34,7 @@ export interface AgentProfile {
 	evidenceCount?: number;
 	confidence?: number | null;
 	lastActiveTime?: number;
+	liveReasoning?: string[];
 }
 
 export interface StructuredOutput {
@@ -73,6 +76,16 @@ export interface ChatMessage {
 	latency_ms?: number;
 	replyToId?: string;
 	replyToExcerpt?: string;
+	userRating?: "up" | "down" | null;
+}
+
+export interface WebSearchResultItem {
+	title: string;
+	url: string;
+	snippet: string;
+	source: string;
+	publishedDate?: string;
+	verificationStatus?: "verified" | "authoritative" | "provisional";
 }
 
 export interface AuditEvent {
@@ -125,6 +138,12 @@ export interface Conversation {
 	status: "idle" | "running" | "completed" | "error";
 	inquiryScore?: number;
 	workflowEvents: WorkflowTimelineEvent[];
+	webSearchData?: {
+		query: string;
+		total: number;
+		source: string;
+		results: WebSearchResultItem[];
+	} | null;
 }
 
 export interface HealthStatus {

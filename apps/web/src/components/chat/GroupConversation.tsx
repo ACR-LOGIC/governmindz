@@ -15,6 +15,7 @@ interface GroupConversationProps {
 	auditVerified?: boolean;
 	onSelectAgent: (seatId: string) => void;
 	onStartPrompt: (prompt: string) => void;
+	onRateMessage?: (messageId: string, rating: "up" | "down" | null) => void;
 	activeScenario?: ScenarioItem | null;
 	allScenarios?: ScenarioItem[];
 	onSelectScenario?: (file: string) => void;
@@ -30,6 +31,7 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 	auditVerified,
 	onSelectAgent,
 	onStartPrompt,
+	onRateMessage,
 	activeScenario,
 	allScenarios = [],
 	onSelectScenario,
@@ -240,7 +242,7 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 					if (m === finalMessage) {
 						return (
 							<React.Fragment key={m.id}>
-								<MessageBubble message={m} onSelectAgent={onSelectAgent} />
+								<MessageBubble message={m} onSelectAgent={onSelectAgent} onRateMessage={onRateMessage} />
 								<FinalAnswerCard
 									message={m}
 									finalConfidence={finalConfidence}
@@ -252,7 +254,14 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 						);
 					}
 
-					return <MessageBubble key={m.id} message={m} onSelectAgent={onSelectAgent} />;
+					return (
+						<MessageBubble
+							key={m.id}
+							message={m}
+							onSelectAgent={onSelectAgent}
+							onRateMessage={onRateMessage}
+						/>
+					);
 				})}
 
 				{/* Active Agent Thinking Indicator */}
