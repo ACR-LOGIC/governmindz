@@ -338,7 +338,7 @@ async function main(): Promise<void> {
 		for (const s of result.stateHistory) {
 			console.log(`  [${s.state}] ${s.trigger}`);
 		}
-		code = result.unresolvedIssues.length > 0 ? 1 : 0;
+		code = result.stateHistory.some((s) => s.state === "HALTED") ? 1 : 0;
 	} else if (process.env.SAMPLE_MODE === "true" || hasFlag("--sample")) {
 		code = await runSampleDebate();
 	} else {

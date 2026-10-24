@@ -1,6 +1,6 @@
 {
   "mode": "sample",
-  "generated_at": "2026-10-22T13:00:14.919Z",
+  "generated_at": "2026-10-24T12:33:35.378Z",
   "scenario_id": "governance-readiness",
   "scenario_file": "01-governance-readiness.json",
   "topic": "Which governance controls should a data team verify before exposing Zetaris federated data to an external agent, and what evidence supports the recommendation?",
@@ -31,104 +31,87 @@
     "total": 3
   },
   "result": {
-    "session_id": "9a225bb6-551a-49ef-a762-53e5ade745c1",
-    "query_hash": "qh_mvjjtmmd",
+    "session_id": "7c11700e-2d7e-495c-a4a8-317410ee51b8",
+    "query_hash": "qh_mvmdr1qi",
     "transcript": [
       {
-        "id": "0615dbfa-c6dc-4973-98a8-d60234fa8041",
+        "id": "summary-2-5",
+        "fromSeat": "DebateSummary",
+        "toSeat": "all",
+        "type": "summary",
+        "content": "Debate Summary through round 0: condensed history for dropped rounds.\nFactChecker: Inventory every Lightning database before granting access, then verify the owner and classification for each source. The cached evidence shows three sources with two internal and one confidential classification.\nRivalChallenger: No correction needed in sample mode. | No correction needed in sample mode.\nCloudArchitect: Put the agent behind a policy gate and give it a read-only Zetaris role. The agent should receive only the minimum evidence needed for the question, not wholesale database access.\nSynthesizer: The evidence points to a governance-first workflow: inventory sources, apply least privilege, and preserve evidence for review. Confidential data needs an explicit approval boundary.",
+        "structured": {
+          "position": "Debate Summary through round 0: condensed history for dropped rounds.\nFactChecker: Inventory every Lightning database before granting access, then verify the owner and classification for each source. The cached evidence shows three sources with two internal and one confidential classification.\nRivalChallenger: No correction needed in sample mode. | No correction needed in sample mode.\nCloudArchitect: Put the agent behind a policy gate and give it a read-only Zetaris role. The agent should receive only the minimum evidence needed for the question, not wholesale database access.\nSynthesizer: The evidence points to a governance-first workflow: inventory sources, apply least privilege, and preserve evidence for review. Confidential data needs an explicit approval boundary.",
+          "confidenceSelf": 0.7620000000000001,
+          "confidence_self": 0.7620000000000001,
+          "confidenceExpertAgreement": 0.7620000000000001,
+          "confidence_expert_agreement": 0.7620000000000001,
+          "evidence": [],
+          "caveats": [
+            "Earlier raw transcript messages were compacted into this summary window."
+          ],
+          "dissents_from": [],
+          "supports": []
+        },
+        "confidence": 0.7620000000000001,
+        "round": 0,
+        "timestamp": 1792845215370,
+        "token_count": 195
+      },
+      {
+        "id": "rival-Synthesizer-r0-1792845215364",
+        "fromSeat": "RivalChallenger",
+        "toSeat": "Synthesizer",
+        "type": "challenge",
+        "content": "Rival Challenger (sample): claims appear consistent with cached evidence; verify against live Zetaris before production.",
+        "structured": {
+          "position": "No correction needed in sample mode.",
+          "confidenceSelf": 0.7,
+          "confidence_self": 0.7,
+          "confidenceExpertAgreement": 0.7,
+          "confidence_expert_agreement": 0.7,
+          "evidence": [
+            "Cached evidence present"
+          ],
+          "caveats": [],
+          "dissentsFrom": [],
+          "dissents_from": [],
+          "supports": []
+        },
+        "confidence": 0.7,
+        "round": 0,
+        "timestamp": 1792845215364
+      },
+      {
+        "id": "thinker-q-0-1792845215365",
+        "fromSeat": "Thinker",
+        "toSeat": "all",
+        "type": "action_items",
+        "content": "Have current access reviews and retention policies been verified for the confidential source?",
+        "structured": {
+          "position": "Have current access reviews and retention policies been verified for the confidential source?",
+          "confidenceSelf": 0.7,
+          "confidence_self": 0.7,
+          "confidenceExpertAgreement": 0.7,
+          "confidence_expert_agreement": 0.7,
+          "evidence": [],
+          "caveats": [
+            "Missing angle: production readiness depends on access reviews."
+          ],
+          "dissents_from": [],
+          "supports": [
+            "FactChecker"
+          ]
+        },
+        "confidence": 0.7,
+        "round": 0,
+        "timestamp": 1792845215365
+      },
+      {
+        "id": "452c052e-ec5c-4524-8206-89f3747132b9",
         "fromSeat": "FactChecker",
-        "toSeat": "all",
-        "type": "proposal",
-        "content": "Inventory every Lightning database before granting access, then verify the owner and classification for each source. The cached evidence shows three sources with two internal and one confidential classification.",
-        "confidence": 0.78,
-        "structured": {
-          "position": "Inventory every Lightning database before granting access, then verify the owner and classification for each source. The cached evidence shows three sources with two internal and one confidential classification.",
-          "confidenceSelf": 0.78,
-          "confidence_self": 0.78,
-          "confidenceExpertAgreement": 0.72,
-          "confidence_expert_agreement": 0.72,
-          "evidence": [
-            "governance_demo: internal, owner data-governance",
-            "finance_demo: confidential, owner finance"
-          ],
-          "caveats": [
-            "Owner labels do not prove that access reviews are current."
-          ],
-          "outputs": [],
-          "dissentsFrom": [],
-          "dissents_from": [],
-          "supports": []
-        },
-        "round": 0,
-        "timestamp": 1792674014912,
-        "latency_ms": 1,
-        "token_count": 75
-      },
-      {
-        "id": "ad055e11-5992-4bda-b676-da59b90b0c5f",
-        "fromSeat": "CloudArchitect",
-        "toSeat": "all",
-        "type": "proposal",
-        "content": "Put the agent behind a policy gate and give it a read-only Zetaris role. The agent should receive only the minimum evidence needed for the question, not wholesale database access.",
-        "confidence": 0.8,
-        "structured": {
-          "position": "Put the agent behind a policy gate and give it a read-only Zetaris role. The agent should receive only the minimum evidence needed for the question, not wholesale database access.",
-          "confidenceSelf": 0.8,
-          "confidence_self": 0.8,
-          "confidenceExpertAgreement": 0.76,
-          "confidence_expert_agreement": 0.76,
-          "evidence": [
-            "The gateway already enforces a read-only SQL guard",
-            "The Zetaris tool is policy-gated"
-          ],
-          "caveats": [
-            "Client-side guards are defense in depth, not a substitute for Zetaris RBAC."
-          ],
-          "outputs": [],
-          "dissentsFrom": [],
-          "dissents_from": [],
-          "supports": []
-        },
-        "round": 0,
-        "timestamp": 1792674014913,
-        "latency_ms": 1,
-        "token_count": 66
-      },
-      {
-        "id": "72bc5090-bcdf-4b77-8f10-6b6805a4da86",
-        "fromSeat": "Synthesizer",
-        "toSeat": "all",
-        "type": "proposal",
-        "content": "The evidence points to a governance-first workflow: inventory sources, apply least privilege, and preserve evidence for review. Confidential data needs an explicit approval boundary.",
-        "confidence": 0.83,
-        "structured": {
-          "position": "The evidence points to a governance-first workflow: inventory sources, apply least privilege, and preserve evidence for review. Confidential data needs an explicit approval boundary.",
-          "confidenceSelf": 0.83,
-          "confidence_self": 0.83,
-          "confidenceExpertAgreement": 0.8,
-          "confidence_expert_agreement": 0.8,
-          "evidence": [
-            "Three sources with mixed classifications",
-            "Finance source is confidential"
-          ],
-          "caveats": [
-            "Missing evidence includes current access reviews and retention policy."
-          ],
-          "outputs": [],
-          "dissentsFrom": [],
-          "dissents_from": [],
-          "supports": []
-        },
-        "round": 0,
-        "timestamp": 1792674014913,
-        "latency_ms": 0,
-        "token_count": 63
-      },
-      {
-        "id": "592e2ac5-3b00-4c24-927e-a5ec73902c8f",
-        "fromSeat": "FactChecker",
-        "toSeat": "all",
-        "type": "consensus",
+        "toSeat": "RivalChallenger",
+        "type": "refinement",
         "content": "The inventory supports a least-privilege review: require a read-only Zetaris role, confirm ownership for all three sources, and treat finance_demo as confidential until a separate approval exists.",
         "confidence": 0.9,
         "structured": {
@@ -152,15 +135,40 @@
           ]
         },
         "round": 1,
-        "timestamp": 1792674014914,
-        "latency_ms": 0,
-        "token_count": 65
+        "timestamp": 1792845215367,
+        "latency_ms": 1,
+        "token_count": 65,
+        "inReplyTo": "rival-FactChecker-r0-1792845215363"
       },
       {
-        "id": "85cc9d90-8a29-4d45-97b7-23c1e5ef6a15",
+        "id": "rival-FactChecker-r1-1792845215367",
+        "fromSeat": "RivalChallenger",
+        "toSeat": "FactChecker",
+        "type": "challenge",
+        "content": "Rival Challenger (sample): claims appear consistent with cached evidence; verify against live Zetaris before production.",
+        "structured": {
+          "position": "No correction needed in sample mode.",
+          "confidenceSelf": 0.7,
+          "confidence_self": 0.7,
+          "confidenceExpertAgreement": 0.7,
+          "confidence_expert_agreement": 0.7,
+          "evidence": [
+            "Cached evidence present"
+          ],
+          "caveats": [],
+          "dissentsFrom": [],
+          "dissents_from": [],
+          "supports": []
+        },
+        "confidence": 0.7,
+        "round": 1,
+        "timestamp": 1792845215367
+      },
+      {
+        "id": "0e007812-e8d1-4191-9f95-82fbc474431d",
         "fromSeat": "CloudArchitect",
-        "toSeat": "all",
-        "type": "consensus",
+        "toSeat": "RivalChallenger",
+        "type": "refinement",
         "content": "Adopt three controls: a read-only Zetaris role, a policy-gated query tool with statement limits, and a signed audit record for every recommendation. Escalate confidential sources for explicit approval.",
         "confidence": 0.91,
         "structured": {
@@ -184,15 +192,40 @@
           ]
         },
         "round": 1,
-        "timestamp": 1792674014915,
-        "latency_ms": 1,
-        "token_count": 72
+        "timestamp": 1792845215368,
+        "latency_ms": 0,
+        "token_count": 72,
+        "inReplyTo": "rival-CloudArchitect-r0-1792845215364"
       },
       {
-        "id": "d5f37475-81be-463e-a7de-79cf4f328783",
+        "id": "rival-CloudArchitect-r1-1792845215368",
+        "fromSeat": "RivalChallenger",
+        "toSeat": "CloudArchitect",
+        "type": "challenge",
+        "content": "Rival Challenger (sample): claims appear consistent with cached evidence; verify against live Zetaris before production.",
+        "structured": {
+          "position": "No correction needed in sample mode.",
+          "confidenceSelf": 0.7,
+          "confidence_self": 0.7,
+          "confidenceExpertAgreement": 0.7,
+          "confidence_expert_agreement": 0.7,
+          "evidence": [
+            "Cached evidence present"
+          ],
+          "caveats": [],
+          "dissentsFrom": [],
+          "dissents_from": [],
+          "supports": []
+        },
+        "confidence": 0.7,
+        "round": 1,
+        "timestamp": 1792845215368
+      },
+      {
+        "id": "891259a6-79a8-4818-a87a-79fda2e633cd",
         "fromSeat": "Synthesizer",
-        "toSeat": "all",
-        "type": "consensus",
+        "toSeat": "RivalChallenger",
+        "type": "refinement",
         "content": "Recommended workflow: inventory each Zetaris source, require a read-only role, route queries through the policy gate, flag confidential sources, and attach the signed audit trail to the answer. Confidence is high for the control pattern but not for production readiness.",
         "confidence": 0.92,
         "structured": {
@@ -219,15 +252,165 @@
           ]
         },
         "round": 1,
-        "timestamp": 1792674014916,
-        "latency_ms": 1,
-        "token_count": 98
+        "timestamp": 1792845215368,
+        "latency_ms": 0,
+        "token_count": 98,
+        "inReplyTo": "rival-Synthesizer-r0-1792845215364"
+      },
+      {
+        "id": "rival-Synthesizer-r1-1792845215368",
+        "fromSeat": "RivalChallenger",
+        "toSeat": "Synthesizer",
+        "type": "challenge",
+        "content": "Rival Challenger (sample): claims appear consistent with cached evidence; verify against live Zetaris before production.",
+        "structured": {
+          "position": "No correction needed in sample mode.",
+          "confidenceSelf": 0.7,
+          "confidence_self": 0.7,
+          "confidenceExpertAgreement": 0.7,
+          "confidence_expert_agreement": 0.7,
+          "evidence": [
+            "Cached evidence present"
+          ],
+          "caveats": [],
+          "dissentsFrom": [],
+          "dissents_from": [],
+          "supports": []
+        },
+        "confidence": 0.7,
+        "round": 1,
+        "timestamp": 1792845215368
+      },
+      {
+        "id": "35cc36ac-0451-46d4-b280-bfaabd6a173d",
+        "fromSeat": "FactChecker",
+        "toSeat": "RivalChallenger",
+        "type": "refinement",
+        "content": "The inventory supports a least-privilege review: require a read-only Zetaris role, confirm ownership for all three sources, and treat finance_demo as confidential until a separate approval exists.",
+        "confidence": 0.9,
+        "structured": {
+          "position": "The inventory supports a least-privilege review: require a read-only Zetaris role, confirm ownership for all three sources, and treat finance_demo as confidential until a separate approval exists.",
+          "confidenceSelf": 0.9,
+          "confidence_self": 0.9,
+          "confidenceExpertAgreement": 0.88,
+          "confidence_expert_agreement": 0.88,
+          "evidence": [
+            "Three databases returned",
+            "finance_demo is classified confidential"
+          ],
+          "caveats": [
+            "The sample does not include role assignments or review timestamps."
+          ],
+          "outputs": [],
+          "dissentsFrom": [],
+          "dissents_from": [],
+          "supports": [
+            "CloudArchitect"
+          ]
+        },
+        "round": 2,
+        "timestamp": 1792845215369,
+        "latency_ms": 0,
+        "token_count": 65,
+        "inReplyTo": "rival-FactChecker-r1-1792845215367"
+      },
+      {
+        "id": "02063fee-aa1e-4bb6-8d07-5263ee9c6da5",
+        "fromSeat": "CloudArchitect",
+        "toSeat": "RivalChallenger",
+        "type": "refinement",
+        "content": "Adopt three controls: a read-only Zetaris role, a policy-gated query tool with statement limits, and a signed audit record for every recommendation. Escalate confidential sources for explicit approval.",
+        "confidence": 0.91,
+        "structured": {
+          "position": "Adopt three controls: a read-only Zetaris role, a policy-gated query tool with statement limits, and a signed audit record for every recommendation. Escalate confidential sources for explicit approval.",
+          "confidenceSelf": 0.91,
+          "confidence_self": 0.91,
+          "confidenceExpertAgreement": 0.89,
+          "confidence_expert_agreement": 0.89,
+          "evidence": [
+            "Read-only guard and policy gate are implemented",
+            "Audit trail is hash-chained and signed"
+          ],
+          "caveats": [
+            "Production deployment still needs identity, tenancy, and key management review."
+          ],
+          "outputs": [],
+          "dissentsFrom": [],
+          "dissents_from": [],
+          "supports": [
+            "FactChecker"
+          ]
+        },
+        "round": 2,
+        "timestamp": 1792845215369,
+        "latency_ms": 0,
+        "token_count": 72,
+        "inReplyTo": "rival-CloudArchitect-r1-1792845215368"
+      },
+      {
+        "id": "84036edf-5672-4dd9-b8d0-b3bb47af337a",
+        "fromSeat": "Synthesizer",
+        "toSeat": "RivalChallenger",
+        "type": "refinement",
+        "content": "Recommended workflow: inventory each Zetaris source, require a read-only role, route queries through the policy gate, flag confidential sources, and attach the signed audit trail to the answer. Confidence is high for the control pattern but not for production readiness.",
+        "confidence": 0.92,
+        "structured": {
+          "position": "Recommended workflow: inventory each Zetaris source, require a read-only role, route queries through the policy gate, flag confidential sources, and attach the signed audit trail to the answer. Confidence is high for the control pattern but not for production readiness.",
+          "confidenceSelf": 0.92,
+          "confidence_self": 0.92,
+          "confidenceExpertAgreement": 0.9,
+          "confidence_expert_agreement": 0.9,
+          "evidence": [
+            "Read-only guard rejects writes and multiple statements",
+            "Audit integrity can be verified locally",
+            "finance_demo is confidential"
+          ],
+          "caveats": [
+            "Sample evidence is synthetic",
+            "Production IAM and data-retention decisions remain open."
+          ],
+          "outputs": [],
+          "dissentsFrom": [],
+          "dissents_from": [],
+          "supports": [
+            "FactChecker",
+            "CloudArchitect"
+          ]
+        },
+        "round": 2,
+        "timestamp": 1792845215369,
+        "latency_ms": 0,
+        "token_count": 98,
+        "inReplyTo": "rival-Synthesizer-r1-1792845215368"
+      },
+      {
+        "id": "uncertainty-report-1792845215370",
+        "fromSeat": "RivalChallenger",
+        "toSeat": "all",
+        "type": "escalation",
+        "content": "Unresolved interventions escalated: RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); Thinker(One unexplored governance angle.); RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification). Final answer carries residual uncertainty.",
+        "structured": {
+          "position": "Unresolved interventions escalated: RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); Thinker(One unexplored governance angle.); RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification). Final answer carries residual uncertainty.",
+          "confidenceSelf": 0.5,
+          "confidence_self": 0.5,
+          "confidenceExpertAgreement": 0.5,
+          "confidence_expert_agreement": 0.5,
+          "evidence": [],
+          "caveats": [
+            "RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); Thinker(One unexplored governance angle.); RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification)"
+          ],
+          "dissents_from": [],
+          "supports": []
+        },
+        "confidence": 0.5,
+        "round": 2,
+        "timestamp": 1792845215370
       }
     ],
-    "rounds": 1,
-    "consensusReached": true,
-    "finalConfidence": 0.91,
-    "consensus_method": "threshold",
+    "rounds": 2,
+    "consensusReached": false,
+    "finalConfidence": 0.8075,
+    "consensus_method": "max_rounds",
     "quarantined_seats": [],
     "seat_votes": {
       "FactChecker": {
@@ -246,13 +429,13 @@
         "dissented": false
       }
     },
-    "timestamp": 1792674014917,
+    "timestamp": 1792845215370,
     "halted": false,
     "transportMode": "in_process",
     "compression": {
-      "tokenEstimateBefore": 154,
-      "tokenEstimateAfter": 178,
-      "compactionCount": 0
+      "tokenEstimateBefore": 655,
+      "tokenEstimateAfter": 941,
+      "compactionCount": 1
     }
   },
   "audit": {
@@ -260,18 +443,18 @@
     "events": [
       {
         "event_type": "session_complete",
-        "session_id": "9a225bb6-551a-49ef-a762-53e5ade745c1",
-        "timestamp": 1792674014917,
+        "session_id": "7c11700e-2d7e-495c-a4a8-317410ee51b8",
+        "timestamp": 1792845215370,
         "payload": {
-          "rounds": 1,
-          "consensus_reached": true,
-          "final_confidence": 0.91,
+          "rounds": 2,
+          "consensus_reached": false,
+          "final_confidence": 0.8075,
           "seat_vote_count": 3
         },
-        "id": "audit_1792674014917_erlag",
+        "id": "audit_1792845215371_yv0zi",
         "previous_hash": "c910699e010057fee5424ddcb6751ac88b20169be78af84a4741e0754e5d8b59",
-        "hash": "95d9fbcdd14ec22b7fd4603c2a7ac07596eb92a11b20af8ca68a60d713dbbac1",
-        "signature": "c21bde05e4dfddadae1a1cd12ef8dc2c1714372e25e507bcd545974fba941185"
+        "hash": "f948fec3d578112a614f676085f9d31594de0e6c0d5f3dce96db063546025bca",
+        "signature": "462a341a9f652073a74640bea8e31fd63c775ecb284a50be215f22ae482c2130"
       }
     ]
   }

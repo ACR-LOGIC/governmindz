@@ -1,6 +1,6 @@
 {
   "mode": "sample",
-  "generated_at": "2026-10-22T19:57:06.065Z",
+  "generated_at": "2026-10-24T12:44:34.489Z",
   "scenario_id": "governance-readiness",
   "scenario_file": "01-governance-readiness.json",
   "topic": "Which governance controls should a data team verify before exposing Zetaris federated data to an external agent, and what evidence supports the recommendation?",
@@ -31,21 +31,21 @@
     "total": 3
   },
   "result": {
-    "session_id": "0b46f9db-6ae1-489e-8388-ecd62285fe7b",
-    "query_hash": "qh_mvjyppcd",
+    "session_id": "0f198ffe-dbe3-4c44-aa79-2a2bc6def67c",
+    "query_hash": "qh_mvme568w",
     "transcript": [
       {
-        "id": "summary-2-6",
+        "id": "summary-2-5",
         "fromSeat": "DebateSummary",
         "toSeat": "all",
         "type": "summary",
         "content": "Debate Summary through round 0: condensed history for dropped rounds.\nFactChecker: Inventory every Lightning database before granting access, then verify the owner and classification for each source. The cached evidence shows three sources with two internal and one confidential classification.\nRivalChallenger: No correction needed in sample mode. | No correction needed in sample mode.\nCloudArchitect: Put the agent behind a policy gate and give it a read-only Zetaris role. The agent should receive only the minimum evidence needed for the question, not wholesale database access.\nSynthesizer: The evidence points to a governance-first workflow: inventory sources, apply least privilege, and preserve evidence for review. Confidential data needs an explicit approval boundary.",
         "structured": {
           "position": "Debate Summary through round 0: condensed history for dropped rounds.\nFactChecker: Inventory every Lightning database before granting access, then verify the owner and classification for each source. The cached evidence shows three sources with two internal and one confidential classification.\nRivalChallenger: No correction needed in sample mode. | No correction needed in sample mode.\nCloudArchitect: Put the agent behind a policy gate and give it a read-only Zetaris role. The agent should receive only the minimum evidence needed for the question, not wholesale database access.\nSynthesizer: The evidence points to a governance-first workflow: inventory sources, apply least privilege, and preserve evidence for review. Confidential data needs an explicit approval boundary.",
-          "confidenceSelf": 0.7516666666666668,
-          "confidence_self": 0.7516666666666668,
-          "confidenceExpertAgreement": 0.7516666666666668,
-          "confidence_expert_agreement": 0.7516666666666668,
+          "confidenceSelf": 0.7620000000000001,
+          "confidence_self": 0.7620000000000001,
+          "confidenceExpertAgreement": 0.7620000000000001,
+          "confidence_expert_agreement": 0.7620000000000001,
           "evidence": [],
           "caveats": [
             "Earlier raw transcript messages were compacted into this summary window."
@@ -53,13 +53,37 @@
           "dissents_from": [],
           "supports": []
         },
-        "confidence": 0.7516666666666668,
+        "confidence": 0.7620000000000001,
         "round": 0,
-        "timestamp": 1792699026059,
+        "timestamp": 1792845874400,
         "token_count": 195
       },
       {
-        "id": "thinker-q-0-1792699026055",
+        "id": "rival-Synthesizer-r0-1792845874396",
+        "fromSeat": "RivalChallenger",
+        "toSeat": "Synthesizer",
+        "type": "challenge",
+        "content": "Rival Challenger (sample): claims appear consistent with cached evidence; verify against live Zetaris before production.",
+        "structured": {
+          "position": "No correction needed in sample mode.",
+          "confidenceSelf": 0.7,
+          "confidence_self": 0.7,
+          "confidenceExpertAgreement": 0.7,
+          "confidence_expert_agreement": 0.7,
+          "evidence": [
+            "Cached evidence present"
+          ],
+          "caveats": [],
+          "dissentsFrom": [],
+          "dissents_from": [],
+          "supports": []
+        },
+        "confidence": 0.7,
+        "round": 0,
+        "timestamp": 1792845874396
+      },
+      {
+        "id": "thinker-q-0-1792845874396",
         "fromSeat": "Thinker",
         "toSeat": "all",
         "type": "action_items",
@@ -81,10 +105,10 @@
         },
         "confidence": 0.7,
         "round": 0,
-        "timestamp": 1792699026055
+        "timestamp": 1792845874397
       },
       {
-        "id": "6ff748af-5140-474d-9e03-c8b3fda632bb",
+        "id": "e639b580-b159-4479-80a4-c5eb2891880e",
         "fromSeat": "FactChecker",
         "toSeat": "RivalChallenger",
         "type": "refinement",
@@ -111,13 +135,13 @@
           ]
         },
         "round": 1,
-        "timestamp": 1792699026056,
+        "timestamp": 1792845874398,
         "latency_ms": 1,
         "token_count": 65,
-        "inReplyTo": "rival-FactChecker-r0-1792699026053"
+        "inReplyTo": "rival-FactChecker-r0-1792845874395"
       },
       {
-        "id": "rival-FactChecker-r1-1792699026056",
+        "id": "rival-FactChecker-r1-1792845874398",
         "fromSeat": "RivalChallenger",
         "toSeat": "FactChecker",
         "type": "challenge",
@@ -138,10 +162,10 @@
         },
         "confidence": 0.7,
         "round": 1,
-        "timestamp": 1792699026056
+        "timestamp": 1792845874398
       },
       {
-        "id": "b507cd2a-dd43-4d69-9834-40c8e15a9fca",
+        "id": "e2a04f84-9df6-4eef-8ab2-d4b73d2d1f1c",
         "fromSeat": "CloudArchitect",
         "toSeat": "RivalChallenger",
         "type": "refinement",
@@ -168,13 +192,13 @@
           ]
         },
         "round": 1,
-        "timestamp": 1792699026056,
+        "timestamp": 1792845874398,
         "latency_ms": 0,
         "token_count": 72,
-        "inReplyTo": "rival-CloudArchitect-r0-1792699026054"
+        "inReplyTo": "rival-CloudArchitect-r0-1792845874395"
       },
       {
-        "id": "rival-CloudArchitect-r1-1792699026056",
+        "id": "rival-CloudArchitect-r1-1792845874398",
         "fromSeat": "RivalChallenger",
         "toSeat": "CloudArchitect",
         "type": "challenge",
@@ -195,10 +219,10 @@
         },
         "confidence": 0.7,
         "round": 1,
-        "timestamp": 1792699026056
+        "timestamp": 1792845874398
       },
       {
-        "id": "980e0c16-4fa5-47ea-acab-fd4ebc924cdc",
+        "id": "e5f52c41-3296-4aef-84b4-0f4bca1f7c98",
         "fromSeat": "Synthesizer",
         "toSeat": "RivalChallenger",
         "type": "refinement",
@@ -228,13 +252,13 @@
           ]
         },
         "round": 1,
-        "timestamp": 1792699026057,
-        "latency_ms": 1,
+        "timestamp": 1792845874398,
+        "latency_ms": 0,
         "token_count": 98,
-        "inReplyTo": "rival-Synthesizer-r0-1792699026054"
+        "inReplyTo": "rival-Synthesizer-r0-1792845874396"
       },
       {
-        "id": "rival-Synthesizer-r1-1792699026057",
+        "id": "rival-Synthesizer-r1-1792845874398",
         "fromSeat": "RivalChallenger",
         "toSeat": "Synthesizer",
         "type": "challenge",
@@ -255,10 +279,10 @@
         },
         "confidence": 0.7,
         "round": 1,
-        "timestamp": 1792699026057
+        "timestamp": 1792845874398
       },
       {
-        "id": "0b245f17-9ac1-4172-af5f-222a5ab1cb30",
+        "id": "fee9c49c-3a29-4af9-84a8-b6b13ae84ae9",
         "fromSeat": "FactChecker",
         "toSeat": "RivalChallenger",
         "type": "refinement",
@@ -285,13 +309,13 @@
           ]
         },
         "round": 2,
-        "timestamp": 1792699026058,
-        "latency_ms": 1,
+        "timestamp": 1792845874399,
+        "latency_ms": 0,
         "token_count": 65,
-        "inReplyTo": "rival-FactChecker-r1-1792699026056"
+        "inReplyTo": "rival-FactChecker-r1-1792845874398"
       },
       {
-        "id": "155f9787-8afc-4d22-a3bf-4d73831440b9",
+        "id": "ad6c7335-5220-4ba0-b8d0-062d425e2c40",
         "fromSeat": "CloudArchitect",
         "toSeat": "RivalChallenger",
         "type": "refinement",
@@ -318,13 +342,13 @@
           ]
         },
         "round": 2,
-        "timestamp": 1792699026058,
+        "timestamp": 1792845874399,
         "latency_ms": 0,
         "token_count": 72,
-        "inReplyTo": "rival-CloudArchitect-r1-1792699026056"
+        "inReplyTo": "rival-CloudArchitect-r1-1792845874398"
       },
       {
-        "id": "373909e9-ea52-4184-b2e8-64e82958f831",
+        "id": "f752f637-1932-405f-acf6-8998a2e4fda6",
         "fromSeat": "Synthesizer",
         "toSeat": "RivalChallenger",
         "type": "refinement",
@@ -354,63 +378,38 @@
           ]
         },
         "round": 2,
-        "timestamp": 1792699026059,
+        "timestamp": 1792845874400,
         "latency_ms": 1,
         "token_count": 98,
-        "inReplyTo": "rival-Synthesizer-r1-1792699026057"
+        "inReplyTo": "rival-Synthesizer-r1-1792845874398"
       },
       {
-        "id": "thinker-q-2-1792699026059",
-        "fromSeat": "Thinker",
-        "toSeat": "all",
-        "type": "action_items",
-        "content": "Have current access reviews and retention policies been verified for the confidential source?",
-        "structured": {
-          "position": "Have current access reviews and retention policies been verified for the confidential source?",
-          "confidenceSelf": 0.7,
-          "confidence_self": 0.7,
-          "confidenceExpertAgreement": 0.7,
-          "confidence_expert_agreement": 0.7,
-          "evidence": [],
-          "caveats": [
-            "Missing angle: production readiness depends on access reviews."
-          ],
-          "dissents_from": [],
-          "supports": [
-            "FactChecker"
-          ]
-        },
-        "confidence": 0.7,
-        "round": 2,
-        "timestamp": 1792699026059
-      },
-      {
-        "id": "uncertainty-report-1792699026059",
+        "id": "uncertainty-report-1792845874400",
         "fromSeat": "RivalChallenger",
         "toSeat": "all",
         "type": "escalation",
-        "content": "Unresolved interventions escalated: RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); Thinker(One unexplored governance angle.); RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); Thinker(One unexplored governance angle.). Final answer carries residual uncertainty.",
+        "content": "Unresolved interventions escalated: RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); Thinker(One unexplored governance angle.); RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification). Final answer carries residual uncertainty.",
         "structured": {
-          "position": "Unresolved interventions escalated: RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); Thinker(One unexplored governance angle.); RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); Thinker(One unexplored governance angle.). Final answer carries residual uncertainty.",
+          "position": "Unresolved interventions escalated: RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); Thinker(One unexplored governance angle.); RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification). Final answer carries residual uncertainty.",
           "confidenceSelf": 0.5,
           "confidence_self": 0.5,
           "confidenceExpertAgreement": 0.5,
           "confidence_expert_agreement": 0.5,
           "evidence": [],
           "caveats": [
-            "RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); Thinker(One unexplored governance angle.); RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); Thinker(One unexplored governance angle.)"
+            "RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); Thinker(One unexplored governance angle.); RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification); RivalChallenger(routine challenge to force verification)"
           ],
           "dissents_from": [],
           "supports": []
         },
         "confidence": 0.5,
         "round": 2,
-        "timestamp": 1792699026059
+        "timestamp": 1792845874400
       }
     ],
     "rounds": 2,
     "consensusReached": false,
-    "finalConfidence": 0.7859999999999999,
+    "finalConfidence": 0.8075,
     "consensus_method": "max_rounds",
     "quarantined_seats": [],
     "seat_votes": {
@@ -430,7 +429,7 @@
         "dissented": false
       }
     },
-    "timestamp": 1792699026061,
+    "timestamp": 1792845874401,
     "halted": false,
     "transportMode": "in_process",
     "compression": {
@@ -444,18 +443,18 @@
     "events": [
       {
         "event_type": "session_complete",
-        "session_id": "0b46f9db-6ae1-489e-8388-ecd62285fe7b",
-        "timestamp": 1792699026061,
+        "session_id": "0f198ffe-dbe3-4c44-aa79-2a2bc6def67c",
+        "timestamp": 1792845874401,
         "payload": {
           "rounds": 2,
           "consensus_reached": false,
-          "final_confidence": 0.7859999999999999,
+          "final_confidence": 0.8075,
           "seat_vote_count": 3
         },
-        "id": "audit_1792699026061_ngwit",
+        "id": "audit_1792845874401_fn6ah",
         "previous_hash": "c910699e010057fee5424ddcb6751ac88b20169be78af84a4741e0754e5d8b59",
-        "hash": "3add4a581a1b162209a387f89fe99b47616b2ca96d49cadb404261d9baa44847",
-        "signature": "cb2b1ba527d8e0bcf8c69a002cea399a3ed56386fde6270222aa5435cfd26a5b"
+        "hash": "413de4eae042e9fd63012f7a2b609266e2a82e01db43290faa2e119a04185630",
+        "signature": "7674845855b230d98ad866117b47bc1484a5b3b4d906ee47f28770e38b6c905a"
       }
     ]
   }

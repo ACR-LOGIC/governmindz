@@ -1,9 +1,9 @@
 // biome-ignore-all lint/style/noNonNullAssertion: legacy code pending refactor
 
-import { AuditEvent, AuditTrailEmitter, verifySqliteIntegrity, sqliteAudit } from "./AuditTrailEmitter";
+import { AuditTrailEmitter } from "../engine/AuditTrailEmitter";
 import { randomUUID } from "node:crypto";
 import type { HandoffMessage, WorkflowRun, WorkflowState, ExecutionPlan, InterventionRecord } from "../orchestration/WorkflowStateMachine";
-import type { AgentMessage } from "./AgentMessage";
+import type { AgentMessage } from "../debate/AgentMessage";
 
 // ============================================================
 // Agent task descriptor
@@ -38,6 +38,8 @@ interface ScheduledAgent {
 	error?: string;
 	dependsOn: string[];
 	dependents: string[]; // tasks that depend on this one
+	priority?: number;
+	cancelAfterMs?: number;
 }
 
 interface SchedulerMetrics {
@@ -64,7 +66,7 @@ export class ParallelAgentScheduler {
 		averageDurationMs: 0,
 	};
 	private runningAgents: Set<string> = new Set();
-	private timeoutHandlers: Map<string, NodeJS.Timeout> = new Map();
+	private timeoutHandlers: Map<string, any> = new Map();
 
 	constructor(eventEmitter: AuditTrailEmitter) {
 		this.eventEmitter = eventEmitter;
@@ -77,6 +79,7 @@ export class ParallelAgentScheduler {
 		interventions: InterventionRecord[],
 		handoffs: HandoffMessage[],
 	): ScheduledAgent[] {
+		this.tasks.clear();
 		const agents: ScheduledAgent[] = [];
 
 		// Define the core agent tasks based on the workflow state machine
@@ -144,16 +147,21 @@ export class ParallelAgentScheduler {
 				durationMs: null,
 				dependsOn: def.dependsOn,
 				dependents,
+				priority: def.priority,
+				cancelAfterMs: def.cancelAfterMs,
 			};
 
 			this.tasks.set(def.id, agent);
+			agents.push(agent);
 		}
 
 		// Set up dependents relationships reverse
 		for (const [id, agent] of this.tasks) {
 			for (const depId of agent.dependsOn) {
 				if (this.tasks.has(depId)) {
-					this.tasks.get(depId)!.dependents.push(id);
+					if (!this.tasks.get(depId)!.dependents.includes(id)) {
+						this.tasks.get(depId)!.dependents.push(id);
+					}
 				}
 			}
 		}
@@ -250,7 +258,7 @@ export class ParallelAgentScheduler {
 
 		agent.status = "CANCELLED";
 		agent.endTime = Date.now();
-		agent.durationMs = agent.endTime - agent.startTime ?? 0;
+		agent.durationMs = agent.startTime ? agent.endTime - agent.startTime : 0;
 		agent.error = reason;
 
 		this.metrics.cancelledAgents++;
@@ -278,7 +286,7 @@ export class ParallelAgentScheduler {
 		}
 
 		const eventType = `agent_${event}`;
-		this.eventEmitter.emit({
+		(this.eventEmitter as any).emit({
 			event_type: eventType,
 			session_id: "scheduler",
 			timestamp: Date.now(),
@@ -313,7 +321,7 @@ export class ParallelAgentScheduler {
 
 		agent.status = "COMPLETED";
 		agent.endTime = Date.now();
-		agent.durationMs = agent.endTime - agent.startTime ?? 0;
+		agent.durationMs = agent.startTime ? agent.endTime - agent.startTime : 0;
 
 		if (result) {
 			agent.error = undefined;
@@ -361,16 +369,16 @@ export class ParallelAgentScheduler {
 	}
 
 	// Force cancel all running agents
-	cancelAll(reason: string = "manual_cancellation": void {
+	cancelAll(reason: string = "manual_cancellation"): void {
 		for (const agentId of Array.from(this.runningAgents)) {
 			this.cancelAgent(agentId, reason);
 		}
 		this.state = "CANCELLED";
-	});
+	}
 
 	// Emit completion event
 	private emitCompletion(): void {
-		this.eventEmitter.emit({
+		(this.eventEmitter as any).emit({
 			event_type: "scheduler_complete",
 			session_id: "scheduler",
 			timestamp: Date.now(),

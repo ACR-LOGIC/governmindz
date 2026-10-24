@@ -1,18 +1,18 @@
 // biome-ignore-all lint/style/noNonNullAssertion: legacy code pending refactor
 
 import Database from "better-sqlite3";
-import { AuditEvent, AuditTrailEmitter } from "./AuditTrailEmitter";
+import { AuditEvent, AuditTrailEmitter, auditTrail } from "./AuditTrailEmitter";
 import { randomUUID } from "node:crypto";
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 
-const DB_PATH = "audit.db";
+let DB_PATH = "audit.db";
 
 // ============================================================
 // SQLite schema management
 // ============================================================
 
-function initializeDatabase(): Database.Database {
-	const db = new Database(DB_PATH);
+function initializeDatabase(dbPath: string = DB_PATH): Database.Database {
+	const db = new Database(dbPath);
 	db.pragma("journal_mode = WAL");
 	db.pragma("synchronous = FULL");
 
@@ -22,7 +22,7 @@ function initializeDatabase(): Database.Database {
 			config_fingerprint TEXT,
 			start_time INTEGER NOT NULL,
 			end_time INTEGER,
-			terminal_status TEXT NOT NULL DEFAULT "RUNNING"
+			terminal_status TEXT NOT NULL DEFAULT 'RUNNING'
 		);
 
 		CREATE TABLE IF NOT EXISTS audit_events (
@@ -62,6 +62,7 @@ interface PersistEventOptions {
 	payload: AuditEvent["payload"];
 	previousHash: AuditEvent["previous_hash"];
 	linkedDecayHash?: AuditEvent["linked_decay_hash"];
+	secret?: string;
 }
 
 function persistEvent(db: Database.Database, opts: PersistEventOptions): AuditEvent {
@@ -81,7 +82,7 @@ function persistEvent(db: Database.Database, opts: PersistEventOptions): AuditEv
 	event.hash = calculateHash(event);
 
 	// Sign the hash
-	event.signature = signHash(event.hash);
+	event.signature = opts.secret ? signHash(event.hash, opts.secret) : "";
 
 	// Insert into database
 	const stmt = db.prepare(`
@@ -130,9 +131,9 @@ export class SqliteAuditPersistence {
 	constructor(secret: string, dbPath?: string) {
 		this.secret = secret;
 		if (dbPath) {
-			DB_PATH dbPath;
+			DB_PATH = dbPath;
 		}
-		this.db = initializeDatabase();
+		this.db = initializeDatabase(dbPath ?? DB_PATH);
 		this.headHash = this.hashGenesis();
 	}
 
@@ -144,7 +145,7 @@ export class SqliteAuditPersistence {
 	startRun(runId: string, configFingerprint: string): void {
 		this.currentRunId = runId;
 		const stmt = this.db.prepare(
-			`INSERT OR REPLACE INTO runs (run_id, config_fingerprint, start_time, terminal_status) VALUES (?, ?, ?, "RUNNING")`,
+			`INSERT OR REPLACE INTO runs (run_id, config_fingerprint, start_time, terminal_status) VALUES (?, ?, ?, 'RUNNING')`,
 		);
 		stmt.run(runId, configFingerprint, Date.now());
 	}
@@ -179,6 +180,7 @@ export class SqliteAuditPersistence {
 			payload,
 			previousHash,
 			linkedDecayHash,
+			secret: this.secret,
 		};
 
 		return persistEvent(this.db, opts);
@@ -223,14 +225,14 @@ export class SqliteAuditPersistence {
 
 		return rows.map((row) => ({
 			id: row.id,
-			event_type: row.event_type,
+			event_type: row.event_type as AuditEvent["event_type"],
 			session_id: row.run_id,
 			timestamp: row.timestamp,
 			payload: JSON.parse(row.payload),
 			previous_hash: row.previous_hash,
 			hash: row.hash,
 			signature: row.signature,
-			linked_decay_hash: row.linked_decay_hash,
+			linked_decay_hash: row.linked_decay_hash ?? undefined,
 		}));
 	}
 
@@ -259,12 +261,17 @@ export function persistCurrentEvent(
 	forceNewHash = false,
 ): void {
 	// Update the in-memory head hash to match the new event
-	const existingHead = auditTrail["headHash"] as string;
+	const existingHead = (auditTrail as any)["headHash"] as string;
 	const eventCopy = { ...event };
 	eventCopy.previous_hash = existingHead;
-	eventCopy.hash = auditTrail.calculateHash(eventCopy);
-	eventCopy.signature = auditTrail.sign(eventCopy.hash);
-	auditTrail["headHash"] = eventCopy.hash as string;
+	eventCopy.hash = (auditTrail as any).calculateHash(eventCopy);
+	eventCopy.signature = (auditTrail as any).sign(eventCopy.hash);
+	(auditTrail as any)["headHash"] = eventCopy.hash as string;
+
+	// Ensure SQLite has an active run
+	if (!(sqliteAudit as any).currentRunId) {
+		sqliteAudit.startRun(runId, "auto-started");
+	}
 
 	// Also persist to SQLite
 	sqliteAudit.persistEvent(
@@ -274,7 +281,7 @@ export function persistCurrentEvent(
 		eventCopy.payload,
 		eventCopy.previous_hash,
 		eventCopy.linked_decay_hash,
-	));
+	);
 }
 
 // Export the verifyIntegrity function from the SQLite layer so that

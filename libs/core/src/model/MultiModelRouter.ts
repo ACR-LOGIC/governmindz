@@ -2,7 +2,7 @@
 
 import { AuditEvent } from "../engine/AuditTrailEmitter";
 import { randomUUID } from "node:crypto";
-import type { AgentMessage } from "./AgentMessage";
+import type { AgentMessage } from "../debate/AgentMessage";
 
 // ============================================================
 // Model capability descriptor
@@ -50,7 +50,7 @@ export class MultiModelRouter {
 	}
 
 	// Set the routing policy
-	setRoutingPolicy(policy: "sequential" | "parallel" | "fallback": void {
+	setRoutingPolicy(policy: "sequential" | "parallel" | "fallback"): void {
 		this.routingPolicy = policy;
 	}
 
@@ -247,7 +247,7 @@ export class MultiModelRouter {
 		};
 	}
 
-	private routeFallback(
+	private async routeFallback(
 		question: string,
 		evidence: string[],
 		modelIds: string[],

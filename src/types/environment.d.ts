@@ -92,8 +92,30 @@ declare module "node:test" {
 	): void;
 }
 
+declare module "node:assert" {
+	export function ok(value: any, message?: string): void;
+	const assert: {
+		ok(value: any, message?: string): void;
+		equal(actual: any, expected: any, message?: string): void;
+		deepEqual(actual: any, expected: any, message?: string): void;
+		match(value: string, pattern: RegExp, message?: string): void;
+		doesNotThrow(fn: () => any, message?: string): void;
+		throws(
+			fn: () => any,
+			expected?: RegExp | ((error: any) => boolean),
+			message?: string,
+		): void;
+		rejects(
+			fn: () => Promise<any>,
+			expected?: RegExp | ((error: any) => boolean),
+		): Promise<void>;
+	};
+	export default assert;
+}
+
 declare module "node:assert/strict" {
 	const assert: {
+		ok(value: any, message?: string): void;
 		equal(actual: any, expected: any, message?: string): void;
 		deepEqual(actual: any, expected: any, message?: string): void;
 		match(value: string, pattern: RegExp, message?: string): void;
