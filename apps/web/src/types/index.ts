@@ -138,7 +138,7 @@ export interface Conversation {
 	createdAt: number;
 	updatedAt: number;
 	topic: string;
-	mode: "live" | "sample";
+	mode: "live" | "demo" | "sample";
 	scenarioId?: string;
 	messages: ChatMessage[];
 	auditEvents: AuditEvent[];
@@ -159,12 +159,14 @@ export interface Conversation {
 export interface HealthStatus {
 	meterless?: {
 		state: string;
+		configured?: boolean;
 		model?: string;
 		reason?: string;
 		endpoint?: string;
 	};
 	zetaris?: {
 		ok: boolean;
+		configured?: boolean;
 		rows?: number;
 		reason?: string;
 	};

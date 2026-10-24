@@ -18,6 +18,8 @@ interface SettingsModalProps {
 	health: HealthStatus | null;
 	activeConversation: Conversation | null;
 	onClearAll: () => void;
+	onReplayTour?: () => void;
+	onOpenCredentials?: () => void;
 }
 
 type TabType = "general" | "models" | "data" | "about";
@@ -28,6 +30,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 	health,
 	activeConversation,
 	onClearAll,
+	onReplayTour,
+	onOpenCredentials,
 }) => {
 	const [activeTab, setActiveTab] = useState<TabType>("general");
 	const [defaultMode, setDefaultMode] = useState<"live" | "sample">("sample");
@@ -124,6 +128,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
 								<div className="flex items-center justify-between p-3 rounded-xl bg-[#12182b] border border-[#1e2842]">
 									<div>
+										<div className="font-semibold text-slate-200">Interactive Product Tour</div>
+										<div className="text-[11px] text-slate-400">
+											Walk through GovernMindz multi-agent chat, live agent roster, and audit verification.
+										</div>
+									</div>
+									{onReplayTour && (
+										<button
+											type="button"
+											onClick={() => {
+												onClose();
+												onReplayTour();
+											}}
+											className="px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-semibold text-xs border border-amber-500/40 transition-colors"
+										>
+											Replay UI Tour
+										</button>
+									)}
+								</div>
+
+								<div className="flex items-center justify-between p-3 rounded-xl bg-[#12182b] border border-[#1e2842]">
+									<div>
 										<div className="font-semibold text-slate-200">Automatic Smooth Scroll</div>
 										<div className="text-[11px] text-slate-400">
 											Keep conversation pinned to latest message while agents are actively debating.
@@ -141,7 +166,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
 						{activeTab === "models" && (
 							<div className="space-y-4">
-								<h4 className="font-bold text-sm text-slate-100 mb-2">Inference & Data Providers</h4>
+								<div className="flex items-center justify-between">
+									<h4 className="font-bold text-sm text-slate-100">Inference & Data Providers</h4>
+									{onOpenCredentials && (
+										<button
+											type="button"
+											onClick={() => {
+												onClose();
+												onOpenCredentials();
+											}}
+											className="px-3 py-1.5 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 font-semibold text-xs border border-teal-500/40 transition-colors"
+										>
+											Configure Credentials
+										</button>
+									)}
+								</div>
 
 								{/* Meterless status */}
 								<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842] space-y-2">

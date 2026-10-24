@@ -85,6 +85,7 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 
 	return (
 		<div
+			id="tour-chat"
 			ref={containerRef}
 			onScroll={handleScroll}
 			className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 space-y-6 relative"

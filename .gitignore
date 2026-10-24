@@ -9,6 +9,8 @@ dist/
 dist-*/**
 apps/web/dist/
 data/
+*.key
+*.enc
 test-results/
 playwright-report/
 blob-report/

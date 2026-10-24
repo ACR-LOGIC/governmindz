@@ -144,7 +144,18 @@ npm ci
 npm run web
 ```
 
-Open **`http://127.0.0.1:8787`** in your browser. The web UI operates out of the box in key-free sample mode or live mode with SQLite conversation persistence.
+Open **`http://127.0.0.1:8787`** in your browser. The web UI operates out of the box in key-free Demo mode or Live mode with SQLite conversation persistence.
+
+- **First-Launch Demo Experience:** Launches automatically in Demo mode on fresh installations without requiring upfront credentials or API keys.
+- **Interactive UI Tour:** Includes an intuitive 5-step guided introduction highlighting the multi-agent chat, live agent roster, debate history, mode switcher, and execution explorer. Re-launch anytime from Settings.
+- **3 Distinct Demo Scenarios:** Selectable prompt bubbles for:
+  1. *Research & Evidence:* Investigate disparate tables (CRM, Billing, Support) across freshness windows to ensure cross-source provenance.
+  2. *Technical Decision:* Evaluate least privilege, read-only SQL guards, byte quotas, and role-based policy gates.
+  3. *Conflicting Claims:* Examine conflicting retention claims, challenge assumptions, and enforce verifiable tamper-evident signatures.
+- **Restricted Free-Text in Demo Mode:** Free-text is disabled during Demo mode to guarantee deterministic offline execution, featuring a prominent **Start Over** action once a run concludes.
+- **Live Mode Transition & Preference Persistence:** Confirming the switch to Live mode saves future launch preferences (`Yes — Show Demo Again` vs `No — Open Live Mode Next Time`) persistently in `localStorage` and server SQLite (`data/conversations.db`).
+- **AES-256-GCM Credential Vault:** Secure modal for configuring Zetaris Lightning and Meterless credentials. Encrypted at rest in local master key vault and written safely to `.env.local`. Plaintext secrets are never exposed back to the client.
+- **Independent Connection Indicators:** Dedicated pills in the header displaying verified connectivity (Green = live connected, Red = failed/offline, Yellow/Gray = demo/unconfigured) with contextual diagnostics.
 
 For frontend development with Vite Hot Module Replacement (HMR):
 
@@ -198,6 +209,15 @@ Executes the complete test suite (**57 / 57 passing**):
 | `npm run demo:dry` | Verify Zetaris and Meterless connectivity | Yes |
 | `npm run demo` | Run live multi-agent debate | Yes |
 | `npm run smoke` | Preflight contract and API health checks | Yes |
+
+---
+
+## Continuous Integration & Security Automation
+
+GovernMindz includes automated GitHub Actions workflows:
+- **Cross-Platform CI (`.github/workflows/ci.yml`):** Runs type checking (`npm run typecheck`), core test suite (`npm test`), and web application compilation (`npm run build`) on both **Ubuntu** (`ubuntu-latest`) and **Windows** (`windows-latest`) on every push and pull request to `main`.
+- **CodeQL Security Analysis (`.github/workflows/codeql.yml`):** Scans TypeScript and JavaScript source code for vulnerabilities and adherence to security best practices.
+- **Dependabot (`.github/dependabot.yml`):** Automated weekly vulnerability monitoring and dependency updates for both npm and GitHub Actions.
 
 ---
 

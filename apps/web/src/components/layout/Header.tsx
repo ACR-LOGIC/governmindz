@@ -43,6 +43,8 @@ interface HeaderProps {
 	mode: "live" | "sample";
 	isBusy: boolean;
 	activeConversation?: Conversation | null;
+	onToggleMode?: () => void;
+	onOpenCredentials?: () => void;
 }
 
 const AVAILABLE_MODELS = [
@@ -79,6 +81,8 @@ export const Header: React.FC<HeaderProps> = ({
 	mode,
 	isBusy,
 	activeConversation,
+	onToggleMode,
+	onOpenCredentials,
 }) => {
 	const meterlessOnline = health?.meterless?.state === "online";
 	const zetarisOnline = health?.zetaris?.ok;
@@ -140,7 +144,7 @@ export const Header: React.FC<HeaderProps> = ({
 			</div>
 
 			{/* Center: 3 Integrated Views Navigation */}
-			<div className="flex items-center bg-[#16161c] border border-[#262630] p-1 rounded-xl gap-1">
+			<div id="tour-explorer" className="flex items-center bg-[#16161c] border border-[#262630] p-1 rounded-xl gap-1">
 				<button
 					type="button"
 					onClick={() => setActiveTab("chat")}
@@ -284,21 +288,90 @@ export const Header: React.FC<HeaderProps> = ({
 					{ttsEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
 				</button>
 
-				{/* Mode pill */}
-				<span
-					className={`hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono uppercase font-semibold border ${
+				{/* Independent Infrastructure Connection Indicators */}
+				<div className="hidden lg:flex items-center gap-1.5 text-[11px] font-mono">
+					{/* Meterless Indicator */}
+					<button
+						type="button"
+						onClick={onOpenCredentials}
+						className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md border transition-colors ${
+							meterlessOnline
+								? "bg-emerald-950/40 border-emerald-800 text-emerald-300"
+								: mode === "live"
+								? "bg-rose-950/40 border-rose-800 text-rose-300 cursor-pointer"
+								: "bg-[#181822] border-[#2a2a38] text-slate-400"
+						}`}
+						title={
+							meterlessOnline
+								? "Meterless Runtime: Online at 127.0.0.1:8088"
+								: mode === "live"
+								? "Meterless: Offline or Unreachable (Click to configure)"
+								: "Meterless: Demo Simulation Active"
+						}
+					>
+						<span
+							className={`w-1.5 h-1.5 rounded-full ${
+								meterlessOnline
+									? "bg-emerald-400 animate-pulse"
+									: mode === "live"
+									? "bg-rose-400"
+									: "bg-slate-500"
+							}`}
+						/>
+						<span>Meterless</span>
+					</button>
+
+					{/* Zetaris Indicator */}
+					<button
+						type="button"
+						onClick={onOpenCredentials}
+						className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md border transition-colors ${
+							zetarisOnline
+								? "bg-emerald-950/40 border-emerald-800 text-emerald-300"
+								: mode === "live"
+								? "bg-rose-950/40 border-rose-800 text-rose-300 cursor-pointer"
+								: "bg-[#181822] border-[#2a2a38] text-slate-400"
+						}`}
+						title={
+							zetarisOnline
+								? "Zetaris Lightning: Connected & Queryable"
+								: mode === "live"
+								? "Zetaris: Connection Failed (Click to configure)"
+								: "Zetaris: Demo Simulation Active"
+						}
+					>
+						<span
+							className={`w-1.5 h-1.5 rounded-full ${
+								zetarisOnline
+									? "bg-emerald-400 animate-pulse"
+									: mode === "live"
+									? "bg-rose-400"
+									: "bg-slate-500"
+							}`}
+						/>
+						<span>Zetaris</span>
+					</button>
+				</div>
+
+				{/* Mode pill & Mode Switcher */}
+				<button
+					id="tour-mode"
+					type="button"
+					onClick={onToggleMode}
+					className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono uppercase font-semibold border transition-all cursor-pointer ${
 						mode === "live"
-							? "bg-emerald-950/40 border-emerald-700/50 text-emerald-300"
-							: "bg-amber-950/40 border-amber-700/50 text-amber-300"
+							? "bg-emerald-950/50 border-emerald-600/60 text-emerald-300 hover:border-emerald-400"
+							: "bg-amber-950/50 border-amber-600/60 text-amber-300 hover:border-amber-400"
 					}`}
+					title={`Current mode: ${mode.toUpperCase()} (Click to change mode)`}
 				>
 					<span
 						className={`w-1.5 h-1.5 rounded-full ${
 							mode === "live" ? "bg-emerald-400 animate-pulse" : "bg-amber-400"
 						}`}
 					/>
-					{mode} mode
-				</span>
+					<span>{mode === "live" ? "Live Mode" : "Demo Mode"}</span>
+				</button>
 
 				{/* Refresh health button */}
 				<button

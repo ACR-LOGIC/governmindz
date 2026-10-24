@@ -28,6 +28,9 @@ declare module "node:crypto" {
 	): { update(data: string): { digest(encoding?: string): string } };
 	export function timingSafeEqual(a: any, b: any): boolean;
 	export function randomUUID(): string;
+	export function randomBytes(size: number): any;
+	export function createCipheriv(algorithm: string, key: any, iv: any): any;
+	export function createDecipheriv(algorithm: string, key: any, iv: any): any;
 }
 
 declare module "node:fs" {
@@ -44,6 +47,7 @@ declare module "node:fs" {
 		data: string,
 		options?: string | { encoding?: string; mode?: number },
 	): void;
+	export function renameSync(oldPath: string, newPath: string): void;
 	export function unlinkSync(path: string): void;
 	export function rmSync(
 		path: string,

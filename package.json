@@ -9,7 +9,7 @@
 		"build": "vite build",
 		"dev": "vite",
 		"test:e2e": "playwright test",
-		"test": "set AUDIT_TRAIL_SECRET=test-workflow-secret-do-not-use-in-production && node --test --import tsx libs/core/test/gravity.test.ts libs/core/test/meterless.test.ts libs/core/test/zetaris.test.ts libs/core/test/workflow.test.ts",
+		"test": "node scripts/run-tests.mjs",
 		"demo": "node --env-file=.env.local --import tsx apps/gateway/src/main.ts",
 		"demo:dry": "node --env-file=.env.local --import tsx apps/gateway/src/main.ts --dry-run",
 		"demo:sample": "node --import tsx apps/gateway/src/sample.ts",

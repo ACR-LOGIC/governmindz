@@ -28,6 +28,7 @@ interface LeftSidebarProps {
 	setSelectedScenario: (file: string) => void;
 	openSettings: () => void;
 	isOpen: boolean;
+	onRequestLiveMode?: () => void;
 }
 
 export const LeftSidebar: React.FC<LeftSidebarProps> = ({
@@ -44,6 +45,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
 	setSelectedScenario,
 	openSettings,
 	isOpen,
+	onRequestLiveMode,
 }) => {
 	const [searchQuery, setSearchQuery] = useState("");
 	const [editingId, setEditingId] = useState<string | null>(null);
@@ -149,19 +151,25 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
 								: "bg-[#12182b] border-[#1e2842] text-slate-400 hover:text-slate-200"
 						}`}
 					>
-						Sample (Keyless)
+						Demo Mode
 					</button>
 
 					<button
 						type="button"
-						onClick={() => setMode("live")}
+						onClick={() => {
+							if (mode !== "live" && onRequestLiveMode) {
+								onRequestLiveMode();
+							} else {
+								setMode("live");
+							}
+						}}
 						className={`px-2 py-1.5 rounded-lg text-xs font-semibold border transition-all text-center ${
 							mode === "live"
 								? "bg-emerald-950/50 border-emerald-500/60 text-emerald-300"
 								: "bg-[#12182b] border-[#1e2842] text-slate-400 hover:text-slate-200"
 						}`}
 					>
-						Live Zetaris
+						Live Mode
 					</button>
 				</div>
 
@@ -187,7 +195,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
 			</div>
 
 			{/* Conversation History List */}
-			<div className="flex-1 overflow-y-auto px-2 py-2 space-y-4">
+			<div id="tour-history" className="flex-1 overflow-y-auto px-2 py-2 space-y-4">
 				{[
 					{ label: "Today", items: today },
 					{ label: "Yesterday", items: yesterday },

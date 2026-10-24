@@ -8,6 +8,7 @@ import { auditTrail } from "@governmindz/core/engine/AuditTrailEmitter";
 import { MeterlessProvider } from "@governmindz/core/providers/MeterlessProvider";
 import { zetarisQueryHandler } from "../gateway/src/tools/zetaris.tools.js";
 import { executeWebSearch } from "../gateway/src/tools/webSearch.tools.js";
+import { getConfigStatus, saveSecureConfig } from "../gateway/src/services/cryptoConfig.js";
 
 const PORT = Number(process.env.WEB_PORT || 8787);
 
@@ -42,7 +43,29 @@ db.exec(`
 		inquiry_score INTEGER,
 		data_json TEXT NOT NULL
 	);
+
+	CREATE TABLE IF NOT EXISTS system_preferences (
+		key TEXT PRIMARY KEY,
+		value TEXT NOT NULL
+	);
 `);
+
+function getPreference(key: string, defaultValue = ""): string {
+	try {
+		const row = db.prepare("SELECT value FROM system_preferences WHERE key = ?").get(key) as any;
+		return row ? row.value : defaultValue;
+	} catch {
+		return defaultValue;
+	}
+}
+
+function setPreference(key: string, value: string): void {
+	try {
+		db.prepare("INSERT INTO system_preferences (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(key, value);
+	} catch (e) {
+		console.warn("Failed to set preference:", e);
+	}
+}
 
 function getAllConversations() {
 	const stmt = db.prepare("SELECT * FROM conversations ORDER BY updated_at DESC");
@@ -401,22 +424,34 @@ function handleResult(req: http.IncomingMessage, res: http.ServerResponse, runId
 
 async function handleHealth(_req: http.IncomingMessage, res: http.ServerResponse) {
 	const provider = new MeterlessProvider();
+	const hasMeterless = Boolean((process.env.METERLESS_BASE_URL || process.env.METERLESS_ENDPOINT)?.trim());
+	const hasZetaris = Boolean(process.env.ZETARIS_HOST?.trim());
+
 	let meterless: any = null;
 	try {
 		meterless = await provider.status();
+		if (meterless) {
+			meterless.configured = hasMeterless;
+		}
 	} catch (e) {
-		meterless = { state: "error", reason: String(e) };
+		meterless = { state: "error", configured: hasMeterless, reason: String(e) };
 	}
-	let zetaris: any = { ok: false };
-	try {
-		const r = (await zetarisQueryHandler(
-			{ query: "SELECT 1", limit: 1 },
-			{ callerRole: "analyst", correlationId: randomUUID() },
-		)) as any;
-		zetaris = { ok: true, rows: r.rows ? r.rows.length : 0 };
-	} catch (e) {
-		zetaris = { ok: false, reason: String(e) };
+
+	let zetaris: any = { ok: false, configured: hasZetaris };
+	if (hasZetaris) {
+		try {
+			const r = (await zetarisQueryHandler(
+				{ query: "SELECT 1", limit: 1 },
+				{ callerRole: "analyst", correlationId: randomUUID() },
+			)) as any;
+			zetaris = { ok: true, configured: true, rows: r.rows ? r.rows.length : 0 };
+		} catch (e) {
+			zetaris = { ok: false, configured: true, reason: String(e) };
+		}
+	} else {
+		zetaris = { ok: false, configured: false, reason: "Zetaris host not configured" };
 	}
+
 	sendJson(res, 200, { meterless, zetaris });
 }
 
@@ -547,9 +582,75 @@ async function handleWebSearch(req: http.IncomingMessage, res: http.ServerRespon
 	}
 }
 
+function handlePreferences(req: http.IncomingMessage, res: http.ServerResponse) {
+	if (req.method === "GET") {
+		const launchMode = getPreference("launch_mode", "demo");
+		const futureLaunchPreference = getPreference("future_launch_preference", "demo");
+		const tourCompleted = getPreference("tour_completed", "false") === "true";
+		sendJson(res, 200, {
+			launchMode,
+			futureLaunchPreference,
+			tourCompleted,
+		});
+		return;
+	}
+
+	if (req.method === "POST") {
+		let body = "";
+		req.on("data", (c: any) => (body += c));
+		req.on("end", () => {
+			try {
+				const { launchMode, futureLaunchPreference, tourCompleted } = JSON.parse(body || "{}");
+				if (launchMode !== undefined) setPreference("launch_mode", String(launchMode));
+				if (futureLaunchPreference !== undefined) setPreference("future_launch_preference", String(futureLaunchPreference));
+				if (tourCompleted !== undefined) setPreference("tour_completed", String(tourCompleted));
+				sendJson(res, 200, { success: true });
+			} catch {
+				sendJson(res, 400, { error: "invalid json" });
+			}
+		});
+		return;
+	}
+
+	res.writeHead(405);
+	res.end();
+}
+
+function handleConfig(req: http.IncomingMessage, res: http.ServerResponse) {
+	if (req.method === "GET") {
+		const status = getConfigStatus();
+		sendJson(res, 200, status);
+		return;
+	}
+
+	if (req.method === "POST") {
+		let body = "";
+		req.on("data", (c: any) => (body += c));
+		req.on("end", () => {
+			try {
+				const payload = JSON.parse(body || "{}");
+				saveSecureConfig(payload);
+				sendJson(res, 200, {
+					success: true,
+					message: "Credentials saved securely and encrypted at rest.",
+					status: getConfigStatus(),
+				});
+			} catch (err: any) {
+				sendJson(res, 500, { error: err.message || "Failed to save configuration" });
+			}
+		});
+		return;
+	}
+
+	res.writeHead(405);
+	res.end();
+}
+
 const server = http.createServer((req: http.IncomingMessage, res: http.ServerResponse) => {
 	const url = (req.url || "/").split("?")[0];
 	if (req.method === "GET" && url === "/api/health") return handleHealth(req, res);
+	if (url === "/api/preferences") return handlePreferences(req, res);
+	if (url === "/api/config") return handleConfig(req, res);
 	if (url === "/api/search") return handleWebSearch(req, res);
 	if (req.method === "GET" && url === "/api/scenarios") return handleScenarios(req, res);
 	if (req.method === "GET" && url === "/api/models") return handleModels(req, res);

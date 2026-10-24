@@ -8,6 +8,9 @@ import { ExecutionExplorer } from "./components/explorer/ExecutionExplorer";
 import { TrustEvidenceView } from "./components/evidence/TrustEvidenceView";
 import { AgentDetailDrawer } from "./components/modals/AgentDetailDrawer";
 import { SettingsModal } from "./components/modals/SettingsModal";
+import { TourGuide } from "./components/common/TourGuide";
+import { LiveModeConfirmModal } from "./components/modals/LiveModeConfirmModal";
+import { LiveConfigModal } from "./components/modals/LiveConfigModal";
 import {
 	fetchHealth,
 	fetchScenarios,
@@ -17,6 +20,8 @@ import {
 	deleteConversation,
 	startRun,
 	subscribeRunEvents,
+	fetchPreferences,
+	savePreferences,
 } from "./services/api";
 import { AGENT_REGISTRY, getAgentProfile } from "./services/agentRegistry";
 import { assignHumanCouncil, generateTaskDelegationAnnouncement } from "./services/nameRotation";
@@ -43,6 +48,9 @@ export const App: React.FC = () => {
 	const [scenarios, setScenarios] = useState<ScenarioItem[]>([]);
 	const [selectedScenario, setSelectedScenario] = useState<string>("01-governance-readiness.json");
 	const [mode, setMode] = useState<"live" | "sample">("sample");
+	const [tourOpen, setTourOpen] = useState(false);
+	const [liveConfirmModalOpen, setLiveConfirmModalOpen] = useState(false);
+	const [liveConfigModalOpen, setLiveConfigModalOpen] = useState(false);
 
 	const [conversations, setConversations] = useState<Conversation[]>([]);
 	const [activeId, setActiveId] = useState<string | null>(null);
@@ -147,6 +155,25 @@ export const App: React.FC = () => {
 		} catch (e) {
 			console.warn("Conversation load error:", e);
 		}
+
+		try {
+			const prefs = await fetchPreferences();
+			const localPref = localStorage.getItem("governmindz_launch_preference");
+			const savedPref = localPref || prefs.futureLaunchPreference || "demo";
+			if (savedPref === "live") {
+				setMode("live");
+			} else {
+				setMode("sample");
+			}
+
+			const localTour = localStorage.getItem("governmindz_tour_completed");
+			const tourDone = localTour !== null ? localTour === "true" : prefs.tourCompleted;
+			if (!tourDone) {
+				setTourOpen(true);
+			}
+		} catch (e) {
+			console.warn("Preferences load error:", e);
+		}
 	}, []);
 
 	useEffect(() => {
@@ -178,6 +205,56 @@ export const App: React.FC = () => {
 		} finally {
 			setIsBusy(false);
 		}
+	};
+
+	// Toggle execution mode
+	const handleToggleMode = () => {
+		if (mode === "live") {
+			setMode("sample");
+			showToast("Switched to Demo Mode (Keyless Simulation)");
+			savePreferences({ launchMode: "demo" });
+			localStorage.setItem("governmindz_mode_preference", "demo");
+		} else {
+			setLiveConfirmModalOpen(true);
+		}
+	};
+
+	// Confirm Live Mode transition
+	const handleConfirmLiveMode = (futureLaunchPref: "demo" | "live") => {
+		setMode("live");
+		setLiveConfirmModalOpen(false);
+		localStorage.setItem("governmindz_mode_preference", "live");
+		localStorage.setItem("governmindz_launch_preference", futureLaunchPref);
+		savePreferences({ launchMode: "live", futureLaunchPreference: futureLaunchPref });
+
+		const isZetarisConfigured = Boolean(health?.zetaris?.configured || health?.zetaris?.ok);
+		const isMeterlessConfigured = Boolean(health?.meterless?.configured || health?.meterless?.state === "online");
+		if (!isZetarisConfigured || !isMeterlessConfigured) {
+			showToast("Live mode enabled. Real credentials required for queries.");
+			setLiveConfigModalOpen(true);
+		} else {
+			showToast("Switched to Live Mode");
+		}
+	};
+
+	// Start Demo scenario directly
+	const handleStartDemoScenario = (scenarioFile: string, question: string) => {
+		setSelectedScenario(scenarioFile);
+		handleSendMessage(question);
+	};
+
+	// Start Over in Demo mode
+	const handleStartOver = () => {
+		handleNewConversation();
+		showToast("Demo restarted. Choose a scenario to begin.");
+	};
+
+	// Finish Tour
+	const handleFinishTour = () => {
+		setTourOpen(false);
+		localStorage.setItem("governmindz_tour_completed", "true");
+		savePreferences({ tourCompleted: true });
+		showToast("Tour completed! Enjoy exploring GovernMindz.");
 	};
 
 	// Create New Conversation
@@ -553,6 +630,8 @@ export const App: React.FC = () => {
 				mode={mode}
 				isBusy={isBusy}
 				activeConversation={activeConv}
+				onToggleMode={handleToggleMode}
+				onOpenCredentials={() => setLiveConfigModalOpen(true)}
 			/>
 
 			{/* Main Workspace 3-Pane Layout */}
@@ -572,6 +651,7 @@ export const App: React.FC = () => {
 					setSelectedScenario={handleSelectScenario}
 					openSettings={() => setSettingsModalOpen(true)}
 					isOpen={leftSidebarOpen}
+					onRequestLiveMode={() => setLiveConfirmModalOpen(true)}
 				/>
 
 				{/* Center: Selected View */}
@@ -596,10 +676,16 @@ export const App: React.FC = () => {
 										onSelectScenario={handleSelectScenario}
 									/>
 									<MessageComposer
+										mode={mode}
 										onSendMessage={handleSendMessage}
+										onStartDemoScenario={handleStartDemoScenario}
+										onStartOver={handleStartOver}
+										selectedScenarioFile={selectedScenario}
+										onSelectScenarioFile={handleSelectScenario}
 										isBusy={isBusy}
 										disabled={!activeConv}
 										defaultTopic={activeScenarioItem?.topic}
+										hasCompletedMessages={Boolean(activeConv?.messages && activeConv.messages.length > 0)}
 									/>
 								</>
 							)}
@@ -650,6 +736,32 @@ export const App: React.FC = () => {
 					setSettingsModalOpen(false);
 					showToast("Active session cleared");
 				}}
+				onReplayTour={() => setTourOpen(true)}
+				onOpenCredentials={() => setLiveConfigModalOpen(true)}
+			/>
+
+			{/* Guided Onboarding UI Tour */}
+			<TourGuide
+				isOpen={tourOpen}
+				onClose={() => setTourOpen(false)}
+				onFinish={handleFinishTour}
+			/>
+
+			{/* Live Mode Confirmation Dialog */}
+			<LiveModeConfirmModal
+				isOpen={liveConfirmModalOpen}
+				onConfirm={handleConfirmLiveMode}
+				onCancel={() => setLiveConfirmModalOpen(false)}
+				onOpenConfig={() => setLiveConfigModalOpen(true)}
+				meterlessConfigured={Boolean(health?.meterless?.configured || health?.meterless?.state === "online")}
+				zetarisConfigured={Boolean(health?.zetaris?.configured || health?.zetaris?.ok)}
+			/>
+
+			{/* Live Mode Secure Credential Configuration */}
+			<LiveConfigModal
+				isOpen={liveConfigModalOpen}
+				onClose={() => setLiveConfigModalOpen(false)}
+				onConfigSaved={handleRefreshHealth}
 			/>
 
 			{/* Toast Notification */}

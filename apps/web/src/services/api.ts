@@ -119,3 +119,71 @@ export function subscribeRunEvents(
 		evtSource.close();
 	};
 }
+
+export interface PreferencesResponse {
+	launchMode: "demo" | "live";
+	futureLaunchPreference: "demo" | "live";
+	tourCompleted: boolean;
+}
+
+export async function fetchPreferences(): Promise<PreferencesResponse> {
+	try {
+		const res = await fetch(`${BASE_URL}/api/preferences`);
+		if (res.ok) {
+			return await res.json();
+		}
+	} catch (e) {
+		console.warn("Failed to fetch preferences:", e);
+	}
+	return {
+		launchMode: "demo",
+		futureLaunchPreference: "demo",
+		tourCompleted: false,
+	};
+}
+
+export async function savePreferences(prefs: Partial<PreferencesResponse>): Promise<void> {
+	try {
+		await fetch(`${BASE_URL}/api/preferences`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(prefs),
+		});
+	} catch (e) {
+		console.warn("Failed to save preferences:", e);
+	}
+}
+
+export interface ConfigStatusResponse {
+	meterlessConfigured: boolean;
+	meterlessHost: string;
+	meterlessModel: string;
+	hasMeterlessKey: boolean;
+	zetarisConfigured: boolean;
+	zetarisHost: string;
+	zetarisPort: string;
+	zetarisUser: string;
+	zetarisDatabase: string;
+	hasZetarisPassword: boolean;
+	auditSecretConfigured: boolean;
+}
+
+export async function fetchConfigStatus(): Promise<ConfigStatusResponse> {
+	const res = await fetch(`${BASE_URL}/api/config`);
+	if (!res.ok) throw new Error("Failed to load configuration status");
+	return res.json();
+}
+
+export async function saveConfig(payload: Record<string, string>): Promise<{ success: boolean; message: string }> {
+	const res = await fetch(`${BASE_URL}/api/config`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(payload),
+	});
+	if (!res.ok) {
+		const err = await res.json().catch(() => ({ error: "Failed to save configuration" }));
+		throw new Error(err.error || `HTTP ${res.status}`);
+	}
+	return res.json();
+}
+

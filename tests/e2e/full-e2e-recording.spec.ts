@@ -3,6 +3,14 @@ import fs from "node:fs";
 import path from "node:path";
 
 test.describe("GovernMindz Complete End-to-End Recording & Journey", () => {
+	test.beforeEach(async ({ page }) => {
+		await page.addInitScript(() => {
+			window.localStorage.setItem("governmindz_tour_completed", "true");
+			window.localStorage.setItem("governmindz_launch_preference", "live");
+			window.localStorage.setItem("governmindz_mode_preference", "live");
+		});
+	});
+
 	test("Full interactive journey across all views, agent deliberation, and audit trail", async ({ page }) => {
 		test.setTimeout(90000);
 

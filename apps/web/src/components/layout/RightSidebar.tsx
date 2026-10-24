@@ -64,7 +64,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 	const thrY = H - pad - 0.75 * (H - 2 * pad);
 
 	return (
-		<aside className="w-80 bg-[#0c101e] border-l border-[#1e2842] flex flex-col shrink-0 h-[calc(100vh-3.5rem)] select-none overflow-y-auto">
+		<aside id="tour-roster" className="w-80 bg-[#0c101e] border-l border-[#1e2842] flex flex-col shrink-0 h-[calc(100vh-3.5rem)] select-none overflow-y-auto">
 			{/* Section 1: Active Roster */}
 			<div className="p-4 border-b border-[#1e2842]">
 				<div className="flex items-center justify-between mb-2">
