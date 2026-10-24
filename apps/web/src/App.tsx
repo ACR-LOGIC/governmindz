@@ -361,6 +361,30 @@ export const App: React.FC = () => {
 		setSelectedAgentForDrawer(profile);
 	};
 
+	// Active scenario metadata
+	const activeScenarioItem =
+		scenarios.find((s) => s.file === selectedScenario) || (scenarios.length > 0 ? scenarios[0] : null);
+
+	// Select Scenario Template handler
+	const handleSelectScenario = (file: string) => {
+		setSelectedScenario(file);
+		const found = scenarios.find((s) => s.file === file);
+		if (found) {
+			showToast(`Governance Template loaded: ${found.id || found.file}`);
+			if (activeConv && activeConv.messages.length === 0) {
+				const updated: Conversation = {
+					...activeConv,
+					scenarioId: found.id || found.file.replace(".json", ""),
+					topic: found.topic,
+					title: found.id || found.file.replace(".json", ""),
+					updatedAt: Date.now(),
+				};
+				setConversations((prev) => prev.map((c) => (c.id === activeConv.id ? updated : c)));
+				saveConversation(updated);
+			}
+		}
+	};
+
 	return (
 		<div className="h-screen w-screen flex flex-col bg-[#0a0e1a] text-[#e8ecf7] overflow-hidden select-none">
 			{/* Top Bar Header */}
@@ -392,7 +416,7 @@ export const App: React.FC = () => {
 					setMode={setMode}
 					scenarios={scenarios}
 					selectedScenario={selectedScenario}
-					setSelectedScenario={setSelectedScenario}
+					setSelectedScenario={handleSelectScenario}
 					openSettings={() => setSettingsModalOpen(true)}
 					isOpen={leftSidebarOpen}
 				/>
@@ -412,11 +436,15 @@ export const App: React.FC = () => {
 										auditVerified={true}
 										onSelectAgent={handleSelectAgentFromChat}
 										onStartPrompt={(prompt) => handleSendMessage(prompt)}
+										activeScenario={activeScenarioItem}
+										allScenarios={scenarios}
+										onSelectScenario={handleSelectScenario}
 									/>
 									<MessageComposer
 										onSendMessage={handleSendMessage}
 										isBusy={isBusy}
 										disabled={!activeConv}
+										defaultTopic={activeScenarioItem?.topic}
 									/>
 								</>
 							)}

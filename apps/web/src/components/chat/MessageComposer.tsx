@@ -5,6 +5,7 @@ interface MessageComposerProps {
 	onSendMessage: (topic: string) => void;
 	isBusy: boolean;
 	disabled?: boolean;
+	defaultTopic?: string;
 }
 
 const TEMPLATE_QUESTIONS = [
@@ -17,9 +18,13 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 	onSendMessage,
 	isBusy,
 	disabled,
+	defaultTopic,
 }) => {
 	const [text, setText] = useState("");
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+	// When defaultTopic changes and text is empty, we offer it
+	const questions = defaultTopic ? [defaultTopic, ...TEMPLATE_QUESTIONS.filter((q) => q !== defaultTopic)] : TEMPLATE_QUESTIONS;
 
 	const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
 		if (e.key === "Enter" && !e.shiftKey) {
@@ -58,15 +63,20 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 						<Sparkles className="w-3 h-3 text-amber-400" />
 						Templates:
 					</span>
-					{TEMPLATE_QUESTIONS.map((q, i) => (
+					{questions.map((q, i) => (
 						<button
 							key={i}
 							type="button"
 							onClick={() => handleSelectTemplate(q)}
 							disabled={isBusy}
-							className="px-2.5 py-1 rounded-full bg-[#12182b] hover:bg-[#18203a] border border-[#1e2842] hover:border-[#2c385c] text-slate-300 hover:text-white text-[11px] truncate shrink-0 max-w-xs transition-colors"
+							className={`px-2.5 py-1 rounded-full border text-[11px] truncate shrink-0 max-w-xs transition-colors ${
+								i === 0 && defaultTopic
+									? "bg-amber-950/60 border-amber-500/50 text-amber-300 hover:text-white"
+									: "bg-[#12182b] hover:bg-[#18203a] border-[#1e2842] hover:border-[#2c385c] text-slate-300 hover:text-white"
+							}`}
+							title={q}
 						>
-							{q}
+							{i === 0 && defaultTopic ? `★ ${q}` : q}
 						</button>
 					))}
 				</div>

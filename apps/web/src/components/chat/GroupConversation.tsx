@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { MessageBubble } from "./MessageBubble";
 import { FinalAnswerCard } from "./FinalAnswerCard";
-import type { ChatMessage, AgentProfile } from "../../types";
+import type { ChatMessage, AgentProfile, ScenarioItem } from "../../types";
 import { AGENT_REGISTRY } from "../../services/agentRegistry";
-import { ArrowDown, Bot, ShieldCheck, Sparkles, AlertCircle } from "lucide-react";
+import { ArrowDown, Bot, ShieldCheck, Sparkles, AlertCircle, Database, Play, ArrowRight, Layers } from "lucide-react";
 
 interface GroupConversationProps {
 	messages: ChatMessage[];
@@ -15,6 +15,9 @@ interface GroupConversationProps {
 	auditVerified?: boolean;
 	onSelectAgent: (seatId: string) => void;
 	onStartPrompt: (prompt: string) => void;
+	activeScenario?: ScenarioItem | null;
+	allScenarios?: ScenarioItem[];
+	onSelectScenario?: (file: string) => void;
 }
 
 export const GroupConversation: React.FC<GroupConversationProps> = ({
@@ -27,6 +30,9 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 	auditVerified,
 	onSelectAgent,
 	onStartPrompt,
+	activeScenario,
+	allScenarios = [],
+	onSelectScenario,
 }) => {
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -54,19 +60,23 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 			(m.type === "consensus" && m.fromSeat === "Synthesizer" && (m.round || 0) >= 1),
 	);
 
+	// Get other scenarios for the quick switch cards
+	const otherScenarios = allScenarios.filter(
+		(s) => s.file !== activeScenario?.file,
+	);
+
 	return (
 		<div
 			ref={containerRef}
 			onScroll={handleScroll}
-			className="flex-1 overflow-y-auto px-4 py-6 relative"
+			className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 space-y-6 relative"
 		>
-			<div className="max-w-4xl mx-auto space-y-2">
-				{/* Inquiry Score Banner if available */}
+			<div className="max-w-4xl mx-auto space-y-6">
+				{/* Top Status Bar: Inquiry Assessment & Mode banner if score exists */}
 				{inquiryScore != null && (
-					<div className="mb-6 p-3 rounded-xl bg-[#12182b] border border-[#1e2842] flex items-center justify-between text-xs animate-fadeIn">
+					<div className="p-3.5 rounded-xl bg-[#12182b] border border-[#1e2842] flex items-center justify-between text-xs animate-fadeIn">
 						<div className="flex items-center gap-2">
-							<span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-							<span className="text-slate-400">Inquiry Complexity Assessment:</span>
+							<span className="text-slate-400 font-mono">Assessed Inquiry Score:</span>
 							<span className="font-mono font-bold text-amber-300">{inquiryScore} / 10</span>
 						</div>
 						<div className="text-[11px] text-slate-400">
@@ -79,9 +89,9 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 					</div>
 				)}
 
-				{/* Empty State Welcome Card */}
+				{/* Empty State: Active Template Showcase & Quick Launch */}
 				{messages.length === 0 && (
-					<div className="my-12 text-center max-w-xl mx-auto space-y-6">
+					<div className="my-8 text-center max-w-2xl mx-auto space-y-6 animate-fadeIn">
 						<div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-400/20 via-teal-500/20 to-sky-500/20 border border-[#2c385c] shadow-xl shadow-black/40">
 							<ShieldCheck className="w-8 h-8 text-[#f4b942]" />
 						</div>
@@ -97,43 +107,82 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 							</p>
 						</div>
 
-						<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left pt-2">
-							<button
-								type="button"
-								onClick={() =>
-									onStartPrompt(
-										"Which governance controls should a data team verify before exposing Zetaris federated data to an external agent, and what evidence supports the recommendation?",
-									)
-								}
-								className="p-3 rounded-xl bg-[#12182b] hover:bg-[#18203a] border border-[#1e2842] hover:border-[#2c385c] transition-all group"
-							>
-								<div className="flex items-center gap-2 text-xs font-bold text-amber-300 mb-1">
-									<Sparkles className="w-3.5 h-3.5" />
-									<span>Federated Data Access</span>
+						{/* Active Template Hero Card */}
+						{activeScenario && (
+							<div className="p-5 rounded-2xl bg-gradient-to-b from-[#18203a] via-[#12182b] to-[#0c101e] border-2 border-amber-500/40 shadow-2xl text-left space-y-3 relative overflow-hidden">
+								<div className="flex items-center justify-between border-b border-[#2c385c] pb-3">
+									<div className="flex items-center gap-2">
+										<Database className="w-4 h-4 text-amber-400" />
+										<span className="text-xs font-mono font-bold text-amber-300 uppercase tracking-wider">
+											Active Governance Template: {activeScenario.id || activeScenario.file.replace(".json", "")}
+										</span>
+									</div>
+									<span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-teal-950/60 border border-teal-800 text-teal-300">
+										{activeScenario.rows || 3} Federated Rows
+									</span>
 								</div>
-								<div className="text-xs text-slate-400 group-hover:text-slate-200">
-									Verify database ownership and least-privilege SQL roles before exposing data.
-								</div>
-							</button>
 
-							<button
-								type="button"
-								onClick={() =>
-									onStartPrompt(
-										"How should read-only query statement limits and confidential classifications be enforced on federated tables?",
-									)
-								}
-								className="p-3 rounded-xl bg-[#12182b] hover:bg-[#18203a] border border-[#1e2842] hover:border-[#2c385c] transition-all group"
-							>
-								<div className="flex items-center gap-2 text-xs font-bold text-teal-300 mb-1">
-									<Bot className="w-3.5 h-3.5" />
-									<span>Safety & Policy Gates</span>
+								<div>
+									<div className="text-[10px] uppercase font-mono text-slate-400 mb-1">
+										Compliance Inquiry Question:
+									</div>
+									<p className="text-sm font-semibold text-slate-100 leading-relaxed">
+										“{activeScenario.topic}”
+									</p>
 								</div>
-								<div className="text-xs text-slate-400 group-hover:text-slate-200">
-									Review client-side statement guards and HMAC cryptographic audit verification.
+
+								<div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+									<div className="text-xs text-slate-400">
+										Ready to run multi-agent deliberation over cached Zetaris federated catalog.
+									</div>
+									<button
+										type="button"
+										onClick={() => onStartPrompt(activeScenario.topic)}
+										className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs shadow-lg shadow-amber-950/50 transition-all active:scale-[0.98] shrink-0"
+									>
+										<Play className="w-3.5 h-3.5 fill-current" />
+										<span>Run Deliberation on this Template</span>
+									</button>
 								</div>
-							</button>
-						</div>
+							</div>
+						)}
+
+						{/* Alternative Governance Templates Quick Switch */}
+						{otherScenarios.length > 0 && (
+							<div className="space-y-3 pt-2 text-left">
+								<div className="text-xs font-mono uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+									<Layers className="w-3.5 h-3.5 text-teal-400" />
+									<span>Or switch to another Governance Benchmark:</span>
+								</div>
+
+								<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+									{otherScenarios.map((sc) => (
+										<button
+											key={sc.file}
+											type="button"
+											onClick={() => {
+												onSelectScenario?.(sc.file);
+											}}
+											className="p-3.5 rounded-xl bg-[#12182b] hover:bg-[#18203a] border border-[#1e2842] hover:border-[#2c385c] transition-all text-left group flex flex-col justify-between"
+										>
+											<div>
+												<div className="flex items-center justify-between text-xs font-bold text-teal-300 mb-1 group-hover:text-teal-200">
+													<span>{sc.id || sc.file.replace(".json", "")}</span>
+													<span className="text-[10px] font-mono text-slate-400">{sc.rows || 3} rows</span>
+												</div>
+												<div className="text-xs text-slate-400 group-hover:text-slate-200 line-clamp-2">
+													{sc.topic}
+												</div>
+											</div>
+											<div className="mt-2 text-[11px] font-semibold text-amber-400 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+												<span>Select Template</span>
+												<ArrowRight className="w-3 h-3" />
+											</div>
+										</button>
+									))}
+								</div>
+							</div>
+						)}
 					</div>
 				)}
 
@@ -154,25 +203,21 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 							</React.Fragment>
 						);
 					}
+
 					return <MessageBubble key={m.id} message={m} onSelectAgent={onSelectAgent} />;
 				})}
 
 				{/* Active Agent Thinking Indicator */}
 				{activeAgentThinking && (
-					<div className="flex items-center gap-3 p-3 rounded-xl bg-[#12182b]/80 border border-[#1e2842] max-w-sm animate-pulse">
-						<div
-							className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold text-white shrink-0"
-							style={{
-								backgroundColor: AGENT_REGISTRY[activeAgentThinking]?.accentColor || "#5eead4",
-							}}
-						>
-							{AGENT_REGISTRY[activeAgentThinking]?.initials || "AG"}
+					<div className="flex items-center gap-3 p-3.5 rounded-2xl bg-[#12182b]/80 border border-[#1e2842] max-w-md animate-pulse shadow-lg">
+						<div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0">
+							<Bot className="w-4 h-4 animate-spin" />
 						</div>
 						<div className="text-xs text-slate-300">
-							<span className="font-semibold text-slate-100">
+							<span className="font-bold text-amber-300">
 								{AGENT_REGISTRY[activeAgentThinking]?.name || activeAgentThinking}
 							</span>{" "}
-							is investigating & reasoning…
+							is evaluating evidence and formulating arguments…
 						</div>
 					</div>
 				)}
@@ -180,13 +225,13 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 				<div ref={messagesEndRef} />
 			</div>
 
-			{/* Scroll to bottom button */}
+			{/* Floating Scroll to Bottom button */}
 			{showScrollBottom && (
 				<button
 					type="button"
 					onClick={scrollToBottom}
-					className="fixed bottom-20 right-8 sm:right-96 p-2 rounded-full bg-[#18203a] hover:bg-teal-600 text-white shadow-xl border border-[#2c385c] transition-all z-10"
-					title="Scroll to latest message"
+					className="fixed bottom-24 right-8 p-3 rounded-full bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-xl transition-all hover:scale-105 active:scale-95 z-20"
+					title="Scroll to latest deliberation message"
 				>
 					<ArrowDown className="w-4 h-4" />
 				</button>
