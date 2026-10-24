@@ -10,6 +10,10 @@ dist-*/**
 apps/web/dist/
 data/
 test-results/
+playwright-report/
+blob-report/
+*.webm
+*.mp4
 *.local
 .git/
 .nx/cache/
