@@ -97,6 +97,8 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 									{/* Character Avatar with status pip */}
 									<AgentAvatar
 										seatId={agent.id}
+										avatarId={agent.avatarId}
+										humanName={agent.humanName}
 										size="sm"
 										showStatusPip={true}
 										status={isWorking ? "analyzing" : agent.status}

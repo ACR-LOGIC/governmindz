@@ -36,7 +36,7 @@ export const AGENT_VOICE_PROFILES: Record<string, AgentVoiceProfile> = {
 		seatId: "RivalChallenger",
 		piperModel: "en_US-bryce-medium",
 		lang: "en-US",
-		pitch: 1.15,
+		pitch: 1.2,
 		rate: 1.15,
 	},
 	Thinker: {
@@ -45,6 +45,13 @@ export const AGENT_VOICE_PROFILES: Record<string, AgentVoiceProfile> = {
 		lang: "en-US",
 		pitch: 0.95,
 		rate: 0.88,
+	},
+	CredibleSourcesResearchAgent: {
+		seatId: "CredibleSourcesResearchAgent",
+		piperModel: "en_US-lessac-medium",
+		lang: "en-US",
+		pitch: 1.08,
+		rate: 1.02,
 	},
 	Orchestrator: {
 		seatId: "Orchestrator",
@@ -60,19 +67,43 @@ export const AGENT_VOICE_PROFILES: Record<string, AgentVoiceProfile> = {
 		pitch: 1.0,
 		rate: 1.0,
 	},
+	// Cartoon character mappings
+	vicky: { seatId: "vicky", piperModel: "en_US-amy-medium", lang: "en-US", pitch: 1.18, rate: 1.08 },
+	arturo: { seatId: "arturo", piperModel: "en_US-ryan-medium", lang: "en-US", pitch: 0.9, rate: 1.0 },
+	luis: { seatId: "luis", piperModel: "en_US-bryce-medium", lang: "en-US", pitch: 1.06, rate: 1.1 },
+	shaniqua: { seatId: "shaniqua", piperModel: "en_GB-alan-medium", lang: "en-GB", pitch: 1.04, rate: 0.98 },
+	rj: { seatId: "rj", piperModel: "en_US-norman-medium", lang: "en-US", pitch: 1.22, rate: 1.14 },
+	lucy: { seatId: "lucy", piperModel: "en_US-lessac-high", lang: "en-US", pitch: 1.14, rate: 1.02 },
+	tom: { seatId: "tom", piperModel: "en_US-ryan-medium", lang: "en-US", pitch: 0.82, rate: 0.92 },
+	jovita: { seatId: "jovita", piperModel: "en_US-amy-medium", lang: "en-US", pitch: 1.02, rate: 1.0 },
+	elvia: { seatId: "elvia", piperModel: "en_US-lessac-medium", lang: "en-US", pitch: 0.96, rate: 0.96 },
+	raul: { seatId: "raul", piperModel: "en_US-norman-medium", lang: "en-US", pitch: 0.88, rate: 0.94 },
+	alex: { seatId: "alex", piperModel: "en_US-bryce-medium", lang: "en-US", pitch: 1.08, rate: 1.08 },
+	meche: { seatId: "meche", piperModel: "en_US-lessac-high", lang: "en-US", pitch: 1.12, rate: 1.04 },
+	emely: { seatId: "emely", piperModel: "en_US-amy-medium", lang: "en-US", pitch: 1.16, rate: 1.12 },
+	val: { seatId: "val", piperModel: "en_GB-alan-medium", lang: "en-GB", pitch: 0.94, rate: 0.95 },
+	leah: { seatId: "leah", piperModel: "en_US-lessac-medium", lang: "en-US", pitch: 1.06, rate: 1.0 },
+	abby: { seatId: "abby", piperModel: "en_US-lessac-high", lang: "en-US", pitch: 1.15, rate: 1.06 },
 };
 
 type SpeakCallback = (isSpeaking: boolean, seatId?: string | null, messageId?: string | null) => void;
+
+interface QueuedUtterance {
+	text: string;
+	seatId: string;
+	messageId?: string;
+}
 
 class TTSService {
 	private enabled = false;
 	private currentSpeakingSeat: string | null = null;
 	private currentSpeakingMessageId: string | null = null;
 	private listeners: Set<SpeakCallback> = new Set();
-	private piperEndpoint = "http://127.0.0.1:5000/api/tts"; // local piper daemon if present
+	private piperEndpoint = "http://127.0.0.1:5000/api/tts";
+	private queue: QueuedUtterance[] = [];
+	private isProcessingQueue = false;
 
 	constructor() {
-		// Read persisted preference
 		if (typeof window !== "undefined") {
 			this.enabled = localStorage.getItem("governmindz_tts_enabled") === "true";
 		}
@@ -118,6 +149,8 @@ class TTSService {
 	}
 
 	public stop() {
+		this.queue = [];
+		this.isProcessingQueue = false;
 		if (typeof window !== "undefined" && "speechSynthesis" in window) {
 			window.speechSynthesis.cancel();
 		}
@@ -126,26 +159,74 @@ class TTSService {
 		this.notify();
 	}
 
-	public async speak(text: string, seatId = "Synthesizer", messageId?: string) {
+	/**
+	 * Queues an utterance to be spoken in order so agents sound like a conversation
+	 */
+	public queueSpeak(text: string, seatId = "Synthesizer", messageId?: string) {
 		if (!this.enabled || !text) return;
+		this.queue.push({ text, seatId, messageId });
+		if (!this.isProcessingQueue) {
+			this.processQueue();
+		}
+	}
+
+	private async processQueue() {
+		if (!this.enabled || this.queue.length === 0) {
+			this.isProcessingQueue = false;
+			this.currentSpeakingSeat = null;
+			this.currentSpeakingMessageId = null;
+			this.notify();
+			return;
+		}
+
+		this.isProcessingQueue = true;
+		const next = this.queue.shift();
+		if (!next) {
+			this.isProcessingQueue = false;
+			return;
+		}
+
+		await this.speak(next.text, next.seatId, next.messageId, () => {
+			setTimeout(() => {
+				this.processQueue();
+			}, 300);
+		});
+	}
+
+	public async speak(
+		text: string,
+		seatId = "Synthesizer",
+		messageId?: string,
+		onComplete?: () => void,
+	) {
+		if (!this.enabled || !text) {
+			onComplete?.();
+			return;
+		}
 
 		// Clean markdown and citations for speech
 		const cleanText = text
 			.replace(/```[\s\S]*?```/g, "Code block omitted.")
 			.replace(/`([^`]+)`/g, "$1")
-			.replace(/https?:\/\/\S+/g, "link")
+			.replace(/https?:\/\/\S+/g, "external reference")
 			.replace(/[*_#~]/g, "")
 			.replace(/\([^)]+\)/g, "")
 			.trim();
 
-		if (!cleanText) return;
+		if (!cleanText) {
+			onComplete?.();
+			return;
+		}
 
-		this.stop();
 		this.currentSpeakingSeat = seatId;
 		this.currentSpeakingMessageId = messageId || null;
 		this.notify();
 
-		const profile = AGENT_VOICE_PROFILES[seatId] || AGENT_VOICE_PROFILES.Synthesizer;
+		const lookupKey = seatId.toLowerCase();
+		const profile =
+			AGENT_VOICE_PROFILES[seatId] ||
+			AGENT_VOICE_PROFILES[lookupKey] ||
+			AGENT_VOICE_PROFILES.Synthesizer;
 
 		// 1. Attempt local Piper HTTP API daemon if available
 		try {
@@ -170,35 +251,43 @@ class TTSService {
 					this.currentSpeakingSeat = null;
 					this.currentSpeakingMessageId = null;
 					this.notify();
+					onComplete?.();
 				};
 				audio.onerror = () => {
-					this.fallbackSpeechSynthesis(cleanText, profile);
+					this.fallbackSpeechSynthesis(cleanText, profile, onComplete);
 				};
 				await audio.play();
 				return;
 			}
 		} catch {
-			// Piper daemon not running locally — fall back seamlessly to local browser synthesis
+			// Piper daemon fallback
 		}
 
-		// 2. High-performance Browser Speech Synthesis fallback with custom voice parameters
-		this.fallbackSpeechSynthesis(cleanText, profile);
+		// 2. High-performance Browser Speech Synthesis fallback
+		this.fallbackSpeechSynthesis(cleanText, profile, onComplete);
 	}
 
-	private fallbackSpeechSynthesis(cleanText: string, profile: AgentVoiceProfile) {
+	private fallbackSpeechSynthesis(
+		cleanText: string,
+		profile: AgentVoiceProfile,
+		onComplete?: () => void,
+	) {
 		if (typeof window === "undefined" || !("speechSynthesis" in window)) {
 			this.currentSpeakingSeat = null;
 			this.currentSpeakingMessageId = null;
 			this.notify();
+			onComplete?.();
 			return;
 		}
+
+		// Cancel any hanging utterance
+		window.speechSynthesis.cancel();
 
 		const utter = new SpeechSynthesisUtterance(cleanText);
 		utter.pitch = profile.pitch;
 		utter.rate = profile.rate;
 		utter.lang = profile.lang;
 
-		// Try to select a fitting voice
 		const voices = window.speechSynthesis.getVoices();
 		if (voices.length > 0) {
 			const matching = voices.find((v) => v.lang.startsWith(profile.lang.slice(0, 2)));
@@ -211,12 +300,14 @@ class TTSService {
 			this.currentSpeakingSeat = null;
 			this.currentSpeakingMessageId = null;
 			this.notify();
+			onComplete?.();
 		};
 
 		utter.onerror = () => {
 			this.currentSpeakingSeat = null;
 			this.currentSpeakingMessageId = null;
 			this.notify();
+			onComplete?.();
 		};
 
 		window.speechSynthesis.speak(utter);

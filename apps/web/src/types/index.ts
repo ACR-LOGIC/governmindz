@@ -24,6 +24,7 @@ export interface AgentProfile {
 	id: string;
 	name: string;
 	humanName?: string;
+	avatarId?: string;
 	role: string;
 	jobTask?: string;
 	creativeTitle?: string;
@@ -128,6 +129,7 @@ export interface ScenarioItem {
 export interface SeatAssignment {
 	seatId?: string;
 	humanName: string;
+	avatarId?: string;
 	role?: string;
 	jobTask: string;
 }

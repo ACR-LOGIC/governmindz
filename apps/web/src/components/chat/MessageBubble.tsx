@@ -191,6 +191,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 			>
 				<AgentAvatar
 					seatId={message.fromSeat}
+					avatarId={profile.avatarId}
+					humanName={profile.humanName}
 					size="lg"
 					showStatusPip={true}
 					status={message.type === "challenge" ? "challenging" : message.type === "consensus" ? "completed" : "analyzing"}

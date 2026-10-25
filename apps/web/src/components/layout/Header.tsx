@@ -47,26 +47,7 @@ interface HeaderProps {
 	onOpenCredentials?: () => void;
 }
 
-const AVAILABLE_MODELS = [
-	{
-		id: "nemotron-3.5-lightning-30b-a3b",
-		name: "NVIDIA Nemotron 3.5 Lightning 30B",
-		provider: "Meterless (Local Runtime)",
-		recommended: true,
-	},
-	{
-		id: "gemini-3.8-flash",
-		name: "Gemini 3.8 Flash",
-		provider: "Cloud Fallback Route",
-		recommended: false,
-	},
-	{
-		id: "mistral-7b-nightshift",
-		name: "Mistral 7B Instruct",
-		provider: "Nightshift Offline Queue",
-		recommended: false,
-	},
-];
+
 
 export const Header: React.FC<HeaderProps> = ({
 	activeTab,
@@ -88,11 +69,7 @@ export const Header: React.FC<HeaderProps> = ({
 	const zetarisOnline = health?.zetaris?.ok;
 
 	const [ttsEnabled, setTtsEnabled] = useState(false);
-	const [modelMenuOpen, setModelMenuOpen] = useState(false);
 	const [exportMenuOpen, setExportMenuOpen] = useState(false);
-	const [selectedModel, setSelectedModel] = useState(AVAILABLE_MODELS[0].id);
-	const [nightshiftEnabled, setNightshiftEnabled] = useState(true);
-	const menuRef = useRef<HTMLDivElement>(null);
 	const exportRef = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
@@ -102,9 +79,6 @@ export const Header: React.FC<HeaderProps> = ({
 	// Close menus when clicking outside
 	useEffect(() => {
 		const handleClickOutside = (e: MouseEvent) => {
-			if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-				setModelMenuOpen(false);
-			}
 			if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
 				setExportMenuOpen(false);
 			}
@@ -185,90 +159,8 @@ export const Header: React.FC<HeaderProps> = ({
 				</button>
 			</div>
 
-			{/* Right side: Infrastructure pills, Model Selector, Audio Toggle, and Settings */}
+			{/* Right side: Audio Toggle and Infrastructure indicators */}
 			<div className="flex items-center gap-2">
-				{/* Model & Feature Selection Dropdown */}
-				<div className="relative" ref={menuRef}>
-					<button
-						type="button"
-						onClick={() => setModelMenuOpen(!modelMenuOpen)}
-						className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#16161c] hover:bg-[#202028] border border-[#282834] text-[11px] font-mono text-slate-300 transition-colors"
-						title="Select active model & features"
-					>
-						<Cpu className="w-3.5 h-3.5 text-amber-400" />
-						<span className="truncate max-w-[130px]">
-							{AVAILABLE_MODELS.find((m) => m.id === selectedModel)?.name.replace("NVIDIA ", "")}
-						</span>
-						<ChevronDown className="w-3 h-3 text-slate-400" />
-					</button>
-
-					{/* Dropdown Menu */}
-					{modelMenuOpen && (
-						<div className="absolute right-0 top-full mt-1.5 w-72 bg-[#121216] border border-[#2a2a36] rounded-xl shadow-2xl p-2 z-50 animate-fadeIn space-y-2 text-xs">
-							<div className="px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-slate-400 border-b border-[#22222c]">
-								Model Architecture (Meterless / Nightshift)
-							</div>
-
-							{AVAILABLE_MODELS.map((mod) => (
-								<button
-									key={mod.id}
-									type="button"
-									onClick={() => {
-										setSelectedModel(mod.id);
-										setModelMenuOpen(false);
-									}}
-									className={`w-full flex items-start justify-between p-2 rounded-lg text-left transition-colors ${
-										selectedModel === mod.id
-											? "bg-[#1e1e28] border border-amber-500/40 text-amber-300"
-											: "hover:bg-[#1a1a22] text-slate-300"
-									}`}
-								>
-									<div>
-										<div className="font-semibold text-xs flex items-center gap-1.5">
-											<span>{mod.name}</span>
-											{mod.recommended && (
-												<span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 font-mono">
-													DEFAULT
-												</span>
-											)}
-										</div>
-										<div className="text-[10px] text-slate-400 font-mono">{mod.provider}</div>
-									</div>
-									{selectedModel === mod.id && <Check className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />}
-								</button>
-							))}
-
-							<div className="px-2 pt-2 pb-1 text-[10px] font-mono uppercase tracking-wider text-slate-400 border-t border-[#22222c]">
-								Features & Runtime Architecture
-							</div>
-
-							<div className="space-y-1.5 px-2 pb-1">
-								<label className="flex items-center justify-between text-xs text-slate-300 cursor-pointer">
-									<span>Nightshift Offline Processing</span>
-									<input
-										type="checkbox"
-										checked={nightshiftEnabled}
-										onChange={(e) => setNightshiftEnabled(e.target.checked)}
-										className="rounded bg-[#1a1a24] border-[#2e2e3c] text-teal-400 focus:ring-0"
-									/>
-								</label>
-								<label className="flex items-center justify-between text-xs text-slate-300 cursor-pointer">
-									<span>Piper Voice Synthesis</span>
-									<input
-										type="checkbox"
-										checked={ttsEnabled}
-										onChange={(e) => {
-											ttsService.setTtsEnabled(e.target.checked);
-											setTtsEnabled(e.target.checked);
-										}}
-										className="rounded bg-[#1a1a24] border-[#2e2e3c] text-teal-400 focus:ring-0"
-									/>
-								</label>
-							</div>
-						</div>
-					)}
-				</div>
-
 				{/* Speaker Icon Toggle: Local Text-to-Speech (Piper / Web Speech) */}
 				<button
 					type="button"
@@ -280,8 +172,8 @@ export const Header: React.FC<HeaderProps> = ({
 					}`}
 					title={
 						ttsEnabled
-							? "Local Voice Synthesis ACTIVE (Piper / Speech API) — Click to mute"
-							: "Voice Synthesis MUTED — Click to activate local speech"
+							? "Voice Synthesis ACTIVE — Click to mute"
+							: "Voice Synthesis MUTED — Click to activate speech"
 					}
 					aria-label="Toggle voice synthesis"
 				>

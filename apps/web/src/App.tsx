@@ -25,6 +25,7 @@ import {
 } from "./services/api";
 import { AGENT_REGISTRY, getAgentProfile } from "./services/agentRegistry";
 import { assignHumanCouncil, generateTaskDelegationAnnouncement } from "./services/nameRotation";
+import { ttsService } from "./services/ttsService";
 import type {
 	ActiveTab,
 	ChatMessage,
@@ -121,7 +122,7 @@ export const App: React.FC = () => {
 					setAgentRoster((prev) =>
 						prev.map((a) => {
 							const m = assigns[a.id];
-							return m ? { ...a, humanName: m.humanName, jobTask: m.jobTask } : a;
+							return m ? { ...a, humanName: m.humanName, jobTask: m.jobTask, avatarId: m.avatarId } : a;
 						}),
 					);
 				}
@@ -312,6 +313,7 @@ export const App: React.FC = () => {
 						...a,
 						humanName: match.humanName,
 						jobTask: match.jobTask,
+						avatarId: match.avatarId,
 					};
 				}
 				return a;
@@ -397,8 +399,14 @@ export const App: React.FC = () => {
 	};
 
 	// Run Debate Submission
-	const handleSendMessage = async (userTopic: string, scenarioOverride?: string) => {
+	const handleSendMessage = async (
+		userTopic: string,
+		optionsOrOverride?: string | { searchModes?: string[]; model?: string; attachments?: any[] },
+	) => {
 		if (isBusy) return;
+
+		const scenarioOverride = typeof optionsOrOverride === "string" ? optionsOrOverride : undefined;
+		const options = typeof optionsOrOverride === "object" ? optionsOrOverride : undefined;
 
 		let convToUse = activeConv;
 		if (!convToUse) {
@@ -422,10 +430,15 @@ export const App: React.FC = () => {
 			saveConversation(convToUse);
 		}
 
-		await handleSendMessageWithConv(convToUse, userTopic, scenarioOverride);
+		await handleSendMessageWithConv(convToUse, userTopic, scenarioOverride, options);
 	};
 
-	const handleSendMessageWithConv = async (targetConv: Conversation, userTopic: string, scenarioOverride?: string) => {
+	const handleSendMessageWithConv = async (
+		targetConv: Conversation,
+		userTopic: string,
+		scenarioOverride?: string,
+		options?: { searchModes?: string[]; model?: string; attachments?: any[] },
+	) => {
 		if (isBusy) return;
 
 		const scenarioToUse = scenarioOverride || selectedScenario;
@@ -443,18 +456,30 @@ export const App: React.FC = () => {
 						...a,
 						humanName: match.humanName,
 						jobTask: match.jobTask,
+						avatarId: match.avatarId,
 					};
 				}
 				return a;
 			}),
 		);
 
+		// Format user message content if files or sources are attached
+		let formattedContent = topicToRun;
+		if (options?.attachments && options.attachments.length > 0) {
+			const names = options.attachments.map((a: any) => a.name).join(", ");
+			formattedContent += `\n\n📎 Attached Files: ${names}`;
+		}
+		if (options?.searchModes && options.searchModes.length > 0) {
+			const modesStr = options.searchModes.map((m) => (m === "zetaris" ? "Zetaris AI" : m === "web" ? "Web Search" : m)).join(" + ");
+			formattedContent += `\n🔍 Sources Consulted: ${modesStr}`;
+		}
+
 		// Add user message to conversation
 		const userMsg: ChatMessage = {
 			id: `msg_user_${Date.now()}`,
 			fromSeat: "user",
 			type: "user",
-			content: topicToRun,
+			content: formattedContent,
 			timestamp: Date.now(),
 		};
 
@@ -480,6 +505,9 @@ export const App: React.FC = () => {
 				scenario: scenarioToUse,
 				topic: topicToRun,
 				conversationId: targetConv.id,
+				searchModes: options?.searchModes,
+				model: options?.model,
+				attachments: options?.attachments,
 			});
 
 			// Subscribe to SSE event stream
@@ -576,6 +604,15 @@ export const App: React.FC = () => {
 					};
 
 					updated.messages = [...updated.messages, newMsg];
+
+					// Live text-to-speech reading if voice enabled
+					if (ttsService.isTtsEnabled()) {
+						const speakerName = updated.agentAssignments?.[rawMsg.fromSeat]?.humanName || rawMsg.fromSeat;
+						const speechText = newMsg.content || "";
+						if (speechText) {
+							ttsService.queueSpeak(speechText, speakerName, newMsg.id);
+						}
+					}
 
 					// Record contribution step in live scratchpad
 					appendAgentReasoning(
@@ -723,6 +760,7 @@ export const App: React.FC = () => {
 							{activeTab === "chat" && (
 								<>
 									<GroupConversation
+										mode={mode}
 										messages={activeConv.messages}
 										agentRoster={agentRoster}
 										activeAgentThinking={activeAgentThinking}

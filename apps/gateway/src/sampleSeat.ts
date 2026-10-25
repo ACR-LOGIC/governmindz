@@ -7,7 +7,7 @@ export class SampleSeatClient implements ILLMClient {
 	constructor(
 		private readonly seatId: string,
 		private readonly replies: SampleReply[],
-		private readonly delayMs: number = 300,
+		private readonly delayMs: number = 2000,
 	) {}
 
 	async complete(_system: string, _prompt: string): Promise<LLMResult> {

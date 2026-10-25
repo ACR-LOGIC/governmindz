@@ -361,6 +361,9 @@ async function handleRun(req: http.IncomingMessage, res: http.ServerResponse) {
 					scenarioPath: scenarioPath,
 					topicOverride: params.topic,
 					eventSink: sink,
+					searchModes: params.searchModes,
+					model: params.model,
+					attachments: params.attachments,
 				});
 				run.result = out;
 				run.done = true;

@@ -3,6 +3,7 @@ import { MessageBubble } from "./MessageBubble";
 import { FinalAnswerCard } from "./FinalAnswerCard";
 import type { ChatMessage, AgentProfile, ScenarioItem } from "../../types";
 import { AGENT_REGISTRY } from "../../services/agentRegistry";
+import { AgentAvatar } from "../common/AgentAvatar";
 import { ArrowDown, Bot, ShieldCheck, Sparkles, AlertCircle, Database, Play, ArrowRight, Layers } from "lucide-react";
 
 interface GroupConversationProps {
@@ -20,6 +21,7 @@ interface GroupConversationProps {
 	activeScenario?: ScenarioItem | null;
 	allScenarios?: ScenarioItem[];
 	onSelectScenario?: (file: string) => void;
+	mode?: "live" | "demo" | "sample";
 }
 
 export const GroupConversation: React.FC<GroupConversationProps> = ({
@@ -37,6 +39,7 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 	activeScenario,
 	allScenarios = [],
 	onSelectScenario,
+	mode = "sample",
 }) => {
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -108,8 +111,27 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 					</div>
 				)}
 
-				{/* Empty State: Active Template Showcase & Quick Launch */}
-				{messages.length === 0 && (
+				{/* Empty State: Live Mode (No demo templates or demo wording) */}
+				{messages.length === 0 && mode === "live" && (
+					<div className="my-12 text-center max-w-2xl mx-auto space-y-4 animate-fadeIn">
+						<div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-teal-500/20 via-sky-500/20 to-indigo-500/20 border border-teal-500/30 shadow-xl shadow-black/40">
+							<Sparkles className="w-8 h-8 text-teal-400" />
+						</div>
+
+						<div className="space-y-2">
+							<h2 className="font-display font-bold text-3xl text-slate-100 tracking-tight">
+								What do you want to know?
+							</h2>
+							<p className="text-sm text-slate-400 leading-relaxed max-w-lg mx-auto">
+								Ask any live federated data compliance question, query Zetaris catalog,
+								or engage the multi-agent council in real-time deliberation.
+							</p>
+						</div>
+					</div>
+				)}
+
+				{/* Empty State: Demo Mode Active Template Showcase & Quick Launch */}
+				{messages.length === 0 && mode !== "live" && (
 					<div className="my-8 text-center max-w-2xl mx-auto space-y-6 animate-fadeIn">
 						<div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-400/20 via-teal-500/20 to-sky-500/20 border border-[#2c385c] shadow-xl shadow-black/40">
 							<ShieldCheck className="w-8 h-8 text-[#f4b942]" />
@@ -276,15 +298,22 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 
 				{/* Active Agent Thinking Indicator */}
 				{activeAgentThinking && (
-					<div className="flex items-center gap-3 p-3.5 rounded-2xl bg-[#12182b]/80 border border-[#1e2842] max-w-md animate-pulse shadow-lg">
-						<div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0">
-							<Bot className="w-4 h-4 animate-spin" />
-						</div>
-						<div className="text-xs text-slate-300">
+					<div className="flex items-center gap-3 p-3.5 rounded-2xl bg-[#12182b]/90 border border-amber-500/40 max-w-lg animate-pulse shadow-xl shadow-amber-950/20">
+						<AgentAvatar
+							seatId={activeAgentThinking}
+							avatarId={agentRoster?.find((a) => a.id === activeAgentThinking)?.avatarId}
+							humanName={agentRoster?.find((a) => a.id === activeAgentThinking)?.humanName}
+							size="sm"
+							status="analyzing"
+							showStatusPip={true}
+						/>
+						<div className="text-xs text-slate-200">
 							<span className="font-bold text-amber-300">
-								{AGENT_REGISTRY[activeAgentThinking]?.name || activeAgentThinking}
+								{agentRoster?.find((a) => a.id === activeAgentThinking)?.humanName ||
+									AGENT_REGISTRY[activeAgentThinking]?.name ||
+									activeAgentThinking}
 							</span>{" "}
-							is evaluating evidence and formulating arguments…
+							is evaluating evidence, reviewing catalog constraints, and formulating arguments…
 						</div>
 					</div>
 				)}

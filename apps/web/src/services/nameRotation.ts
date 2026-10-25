@@ -1,11 +1,13 @@
 /**
- * GovernMindz Agent Human Name Rotation & Job Task Service
+ * GovernMindz Agent Human Name Rotation & Cartoon Character Persona Service
  *
- * Randomly rotates and assigns friendly, relatable human names (TOM, LUIS, LUCY,
- * SHANIQUA, JOVITA, ARTURO, RJ, ELVIA, VICKY, RAUL, ALEJANDRO AKA ALEX, MECHE,
- * EMELY, VAL, LEAH, ABBY, etc.) to specialized agent seats at the start of each
- * deliberation, along with specific job tasks and instructions.
+ * Randomly rotates and assigns friendly human names and matching cartoon character
+ * profile avatars (Vicky, Arturo, Luis, Shaniqua, RJ, Lucy, Tom, Jovita, Elvia,
+ * Raul, Alejandro aka Alex, Meche, Emely, Val, Leah, Abby, etc.) to specialized agent
+ * seats at the start of each deliberation, along with specific job tasks and instructions.
  */
+
+import { getCartoonPerson } from "./cartoonPeople";
 
 export const HUMAN_NAMES_POOL: string[] = [
 	"Vicky",
@@ -37,6 +39,7 @@ export const HUMAN_NAMES_POOL: string[] = [
 export interface SeatAssignment {
 	seatId: string;
 	humanName: string;
+	avatarId: string;
 	role: string;
 	jobTask: string;
 }
@@ -84,7 +87,7 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 /**
- * Assigns unique human names and job tasks to all participating seats for a run
+ * Assigns unique human names, matching cartoon character avatars, and job tasks
  */
 export function assignHumanCouncil(
 	seatIds: string[] = [
@@ -102,6 +105,7 @@ export function assignHumanCouncil(
 
 	seatIds.forEach((seatId, idx) => {
 		const humanName = shuffledNames[idx % shuffledNames.length];
+		const cartoon = getCartoonPerson(humanName);
 		const role = SEAT_ROLES[seatId] || seatId;
 		const jobTask =
 			SEAT_JOB_TASKS[seatId] ||
@@ -110,6 +114,7 @@ export function assignHumanCouncil(
 		assignments[seatId] = {
 			seatId,
 			humanName,
+			avatarId: cartoon.id,
 			role,
 			jobTask,
 		};
@@ -122,7 +127,7 @@ export function assignHumanCouncil(
  * Generates the friendly task delegation announcement formatted for the orchestrator
  */
 export function generateTaskDelegationAnnouncement(
-	assignments: Record<string, { humanName: string; jobTask: string; role?: string; seatId?: string }>,
+	assignments: Record<string, { humanName: string; jobTask: string; role?: string; seatId?: string; avatarId?: string }>,
 	mode: string = "sample",
 ): string {
 	const lines: string[] = [];
@@ -130,7 +135,7 @@ export function generateTaskDelegationAnnouncement(
 		`🏛️ Council Convened for Task Delegation: Inquiry initiated in ${mode.toUpperCase()} mode.`,
 	);
 	lines.push("");
-	lines.push("Assignments & Job Tasks for this deliberation:");
+	lines.push("Assignments, Personas & Job Tasks for this deliberation:");
 
 	// Prioritize major active seats in order
 	const orderedSeatIds = [
@@ -151,11 +156,12 @@ export function generateTaskDelegationAnnouncement(
 	for (const seatId of activeSeats) {
 		const a = assignments[seatId];
 		const role = a.role || SEAT_ROLES[seatId] || seatId;
-		lines.push(`• ${a.humanName}, you will be the ${role}: ${a.jobTask}`);
+		const cartoon = getCartoonPerson(a.avatarId || a.humanName);
+		lines.push(`• ${a.humanName} [${cartoon.tagline}], assigned as ${role}: ${a.jobTask}`);
 	}
 
 	lines.push("");
-	lines.push("All team members have received their assignments. Commencing deliberation...");
+	lines.push("All cartoon council members have received their assignments. Commencing deliberation...");
 
 	return lines.join("\n");
 }

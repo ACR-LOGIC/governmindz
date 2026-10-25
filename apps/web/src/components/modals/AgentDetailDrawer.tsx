@@ -51,7 +51,14 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
 				{/* Top bar with avatar, name, and creative title */}
 				<div className="flex items-start justify-between pb-4 border-b border-[#1e2842] mb-6">
 					<div className="flex items-center gap-3">
-						<AgentAvatar seatId={agent.id} size="lg" showStatusPip={true} status={agent.status} />
+						<AgentAvatar
+							seatId={agent.id}
+							avatarId={agent.avatarId}
+							humanName={agent.humanName}
+							size="lg"
+							showStatusPip={true}
+							status={agent.status}
+						/>
 						<div>
 							<h3 className="font-display font-bold text-base text-slate-100 flex items-center gap-1.5">
 								<span>{agent.name}</span>

@@ -27,6 +27,9 @@ export interface RunParams {
 	scenarioPath?: string;
 	topicOverride?: string;
 	eventSink?: (event: Record<string, unknown>) => void;
+	searchModes?: string[];
+	model?: string;
+	attachments?: Array<{ id?: string; name: string; size: number; type: string }>;
 }
 
 export interface RunOutput {
@@ -56,7 +59,7 @@ function buildSeats(
 	];
 	return configs.map((config) => {
 		if (scenario) {
-			const delay = process.env.NODE_ENV === "test" ? 0 : 350;
+			const delay = process.env.NODE_ENV === "test" ? 0 : 2000;
 			return new AgentSeat(config, new SampleSeatClient(config.seatId, scenario.seats[config.seatId] ?? [], delay));
 		}
 		if (!provider) throw new Error("Meterless provider is required outside sample mode.");
@@ -217,7 +220,7 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 	// Rival Challenger LLM client: real in live mode, canned in sample mode.
 	let challengerClient: { complete: (s: string, p: string) => Promise<{ content: string; confidence: number }> };
 	if (isSample) {
-		const delay = process.env.NODE_ENV === "test" ? 0 : 350;
+		const delay = process.env.NODE_ENV === "test" ? 0 : 2000;
 		challengerClient = {
 			complete: async () => {
 				if (delay > 0) await new Promise((r) => setTimeout(r, delay));

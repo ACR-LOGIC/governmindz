@@ -77,6 +77,9 @@ export interface StartRunParams {
 	scenario?: string;
 	topic?: string;
 	conversationId?: string;
+	searchModes?: string[];
+	model?: string;
+	attachments?: Array<{ id?: string; name: string; size: number; type: string }>;
 }
 
 export async function startRun(params: StartRunParams): Promise<{ runId: string }> {
