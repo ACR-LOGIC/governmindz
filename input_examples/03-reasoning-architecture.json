@@ -1,0 +1,94 @@
+{
+	"id": "reasoning-architecture",
+	"topic": "Process high-priority clinic scheduling and resource allocation requests by evaluating operational policies, historical H-MEM precedents, and cryptographic audit constraints.",
+	"zetaris": {
+		"query": "SELECT request_id, patient_tier, acuity_score, requested_specialty, provider_capacity, policy_precedent_id FROM clinic_queue_state",
+		"columns": ["request_id", "patient_acuity", "specialty", "operating_rooms_free", "policy_rule", "hmem_similarity"],
+		"rows": [
+			["REQ-701", "Level 1 (Critical Emergency)", "Cardiac Surgery", "1", "POL-EMERGENCY-OVERRIDE", "0.98 (Case #2024-88)"],
+			["REQ-702", "Level 3 (Urgent Specialist)", "Neurology", "0", "POL-QUEUE-PRIORITY", "0.91 (Case #2025-14)"],
+			["REQ-703", "Level 4 (Elective Routine)", "Orthopedics", "2", "POL-FIRST-COME-FIRST-SERVED", "0.84 (Case #2026-03)"],
+			["REQ-704", "Level 2 (High Acuity Urgent)", "Cardiac Surgery", "0", "POL-TRANSFER-ESCALATE", "0.95 (Case #2025-99)"]
+		],
+		"total": 4
+	},
+	"seats": {
+		"FactChecker": [
+			{
+				"position": "Operational Policy and Precedent Audit: Under Rule POL-EMERGENCY-OVERRIDE and H-MEM Precedent #2024-88, REQ-701 (Level 1 Cardiac) must immediately take the single available Operating Room. REQ-704 is Level 2 Cardiac with 0 remaining rooms; Rule POL-TRANSFER-ESCALATE dictates emergency inter-hospital transfer dispatch within 15 minutes.",
+				"confidence_self": 0.92,
+				"confidence_expert_agreement": 0.89,
+				"evidence": [
+					"REQ-701 acuity Level 1 matches POL-EMERGENCY-OVERRIDE",
+					"Precedent #2024-88 resolved with 100% survival rate using immediate OR assignment",
+					"Operating room capacity constraint: 1 unit available"
+				],
+				"caveats": ["Precedent did not account for concurrent Level 2 transfer delays in inclement weather."],
+				"supports": []
+			},
+			{
+				"position": "Prioritized Booking & Resource Queue: 1) Allocate OR #1 to REQ-701; 2) Dispatch ICU transport for REQ-704 to Regional Heart Center; 3) Place REQ-702 in Neurology priority queue; 4) Schedule REQ-703 for elective slot in OR #2. Policy adherence verified: 100%.",
+				"confidence_self": 0.96,
+				"confidence_expert_agreement": 0.94,
+				"evidence": [
+					"State machine transitioned through INGESTION -> REASONING -> POLICY_EVAL -> DISPATCH",
+					"All four rules verified against clinical guidelines",
+					"H-MEM vector match confirms consistency with past chief medical officer decisions"
+				],
+				"caveats": ["Ambulance availability must be re-checked upon dispatch."],
+				"supports": ["CloudArchitect"]
+			}
+		],
+		"CloudArchitect": [
+			{
+				"position": "Reasoning Architecture Execution: The decision passes through the 12-state workflow machine with strict policy gates. Read-only SQL guards prevent accidental alteration of clinic queue state. The persistent H-MEM memory module retrieves past triage actions with >0.90 similarity, guaranteeing clinical decision consistency over time.",
+				"confidence_self": 0.91,
+				"confidence_expert_agreement": 0.87,
+				"evidence": [
+					"Workflow state machine transitions logged",
+					"H-MEM vector store cosine similarity > 0.90 across all 4 requests",
+					"Tamper-proof SHA-256 audit block generated for queue ordering"
+				],
+				"caveats": ["Federated hospital transfer API requires fallback manual phone line if latency > 500ms."],
+				"supports": []
+			},
+			{
+				"position": "Audit Ledger & Execution Contract: The finalized triage decision is signed and appended to the immutable audit chain. Reviewers can verify the mathematical hash chain from genesis to queue dispatch, ensuring complete medical-legal auditability.",
+				"confidence_self": 0.95,
+				"confidence_expert_agreement": 0.93,
+				"evidence": [
+					"AuditTrailEmitter generated signed event with previous_hash pointer",
+					"Cryptographic signature matches system public key",
+					"Zero hallucinated or skipped policy steps"
+				],
+				"caveats": ["Key rotation policy requires bi-annual renewal."],
+				"supports": ["FactChecker"]
+			}
+		],
+		"Synthesizer": [
+			{
+				"position": "Synthesized Action Order: Synthesizing medical policy rules, H-MEM memory precedent, and real-time room constraints into an actionable, priority-ordered execution queue.",
+				"confidence_self": 0.93,
+				"confidence_expert_agreement": 0.91,
+				"evidence": [
+					"Deterministic policy evaluation",
+					"Unanimous agent alignment on emergency room assignment"
+				],
+				"caveats": ["Surgeon on-call confirmation underway."],
+				"supports": []
+			},
+			{
+				"position": "Final Reasoning Architecture Decree: Generated prioritized, policy-compliant clinical allocation queue (REQ-701 Immediate OR1 -> REQ-704 Transfer -> REQ-702 Neuro Hold -> REQ-703 Elective). Every decision is grounded in operational policy, verified against historical precedent, and anchored in an immutable cryptographic audit ledger.",
+				"confidence_self": 0.97,
+				"confidence_expert_agreement": 0.96,
+				"evidence": [
+					"100% adherence to clinical emergency override policies",
+					"H-MEM precedent verification confirms zero precedent deviation",
+					"Cryptographic audit trail receipt attached to discharge queue"
+				],
+				"caveats": ["Follow-up telemetry review at T+4 hours."],
+				"supports": ["FactChecker", "CloudArchitect"]
+			}
+		]
+	}
+}

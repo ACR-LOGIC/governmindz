@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from "react";
 import { MessageBubble } from "./MessageBubble";
 import { FinalAnswerCard } from "./FinalAnswerCard";
-import type { ChatMessage, AgentProfile, ScenarioItem } from "../../types";
+import type { ChatMessage, AgentProfile, ScenarioItem, Conversation } from "../../types";
 import { AGENT_REGISTRY } from "../../services/agentRegistry";
 import { AgentAvatar } from "../common/AgentAvatar";
 import { ArrowDown, Bot, ShieldCheck, Sparkles, AlertCircle, Database, Play, ArrowRight, Layers } from "lucide-react";
 
 interface GroupConversationProps {
+	conversation?: Conversation | null;
 	messages: ChatMessage[];
 	agentRoster?: AgentProfile[];
 	activeAgentThinking: string | null;
@@ -25,6 +26,7 @@ interface GroupConversationProps {
 }
 
 export const GroupConversation: React.FC<GroupConversationProps> = ({
+	conversation,
 	messages,
 	agentRoster,
 	activeAgentThinking,
@@ -276,6 +278,7 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 								/>
 								<FinalAnswerCard
 									message={m}
+									conversation={conversation}
 									finalConfidence={finalConfidence}
 									consensusMethod={consensusMethod}
 									rounds={rounds}

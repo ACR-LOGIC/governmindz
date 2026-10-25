@@ -1,0 +1,92 @@
+{
+	"id": "explain-why",
+	"topic": "Why did SMB churn rise in Q3 across enterprise accounts, and what evidence-backed recommendations explain the underlying driver?",
+	"zetaris": {
+		"query": "SELECT cohort, q3_churn_rate, price_increase_pct, p99_api_latency_ms, incident_count, ticket_volume FROM smb_retention_telemetry",
+		"columns": ["cohort", "churn_pct", "price_change", "p99_latency_ms", "sev1_incidents", "billing_tickets"],
+		"rows": [
+			["SMB-Developer ($49/mo)", "18.4%", "+0%", "1,840ms", "7", "342"],
+			["SMB-Growth ($199/mo)", "22.1%", "+15%", "1,920ms", "9", "418"],
+			["Enterprise ($1,500/mo)", "2.1%", "+15%", "210ms", "0", "12"],
+			["SMB-SelfServe ($19/mo)", "19.8%", "+0%", "1,790ms", "6", "290"]
+		],
+		"total": 4
+	},
+	"seats": {
+		"FactChecker": [
+			{
+				"position": "Hypothesis evaluation: Hypothesis 1 ('Price increase caused Q3 churn') is REFUTED by the evidence. Cohorts with 0% price change (SMB-Developer at 18.4% and SMB-SelfServe at 19.8%) experienced nearly identical churn spikes as SMB-Growth (+15% price change, 22.1% churn). Hypothesis 2 ('API latency and reliability degradation drove churn') is STRONGLY SUPPORTED: p99 latency spiked 9x (1,840ms vs Enterprise 210ms) and Sev-1 incidents correlated directly with 1,050 total support tickets.",
+				"confidence_self": 0.91,
+				"confidence_expert_agreement": 0.88,
+				"evidence": [
+					"Enterprise churn remained low at 2.1% with sub-250ms latency despite the same 15% price hike",
+					"Zero-price-change SMB cohorts lost 18-20% of subscribers",
+					"Sev-1 incidents concentrated exclusively in shared multi-tenant SMB infrastructure"
+				],
+				"caveats": ["Exit survey text sentiments are not yet joined with this telemetry table."],
+				"supports": []
+			},
+			{
+				"position": "The causal chain is confirmed: shared infrastructure contention in the SMB cluster triggered p99 latency breaches (>1.8s), causing webhook timeouts in customer integrations. Churn was driven by operational instability, NOT pricing friction. Explicit citations: smb_retention_telemetry rows 1, 2, and 4.",
+				"confidence_self": 0.95,
+				"confidence_expert_agreement": 0.93,
+				"evidence": [
+					"Multi-source correlation between incident volume and churn",
+					"Clear falsification of the pricing hypothesis",
+					"Enterprise isolated cluster showed 0 Sev-1s and 2.1% baseline churn"
+				],
+				"caveats": ["Competitor promotional campaigns during August were not factored into this study."],
+				"supports": ["CloudArchitect"]
+			}
+		],
+		"CloudArchitect": [
+			{
+				"position": "Infrastructure root cause analysis: SMB tenants share a congested gateway cluster subject to noisy-neighbor throttling, whereas Enterprise tenants use dedicated Envoy ingress pools. When Q3 traffic surged 40%, SMB gateway p99 latency degraded from 180ms to 1,850ms.",
+				"confidence_self": 0.89,
+				"confidence_expert_agreement": 0.86,
+				"evidence": [
+					"Infrastructure topology logs show SMB gateway saturation",
+					"7 to 9 Sev-1 cluster outages recorded in Q3"
+				],
+				"caveats": ["Gateway node CPU profiling metrics are needed to determine if memory leaks contributed."],
+				"supports": []
+			},
+			{
+				"position": "Actionable architectural remedy: 1) Deploy auto-scaling ingress pools for SMB tiers matching the Enterprise isolation pattern; 2) Implement circuit-breakers on third-party webhook dispatch; 3) Issue proactive SLA service credits to affected accounts before renewals.",
+				"confidence_self": 0.94,
+				"confidence_expert_agreement": 0.92,
+				"evidence": [
+					"Dedicated pool architecture reduced Enterprise churn to 2.1%",
+					"SLA credit precedent retrieved from historical memory"
+				],
+				"caveats": ["Horizontal pod autoscaling requires 2 additional compute nodes per region."],
+				"supports": ["FactChecker"]
+			}
+		],
+		"Synthesizer": [
+			{
+				"position": "Why SMB Churn Rose: The agent council reaches definitive consensus explaining why SMB churn surged to 20.1% average in Q3. We reject the pricing hypothesis with numerical proof and isolate infrastructure reliability as the primary driver.",
+				"confidence_self": 0.92,
+				"confidence_expert_agreement": 0.9,
+				"evidence": [
+					"Telemetry analysis disproves pricing sensitivity",
+					"Sev-1 incident count directly maps to billing refund requests"
+				],
+				"caveats": ["Qualitative support ticket transcripts pending NLP categorization."],
+				"supports": []
+			},
+			{
+				"position": "Executive Explanation & Evidence Decree: SMB churn in Q3 was driven by a 9x latency spike and recurring cluster incidents on shared gateways, disproving the board's hypothesis of price elasticity. Recommended remediation: migrate SMB ingress to isolated auto-scaling pools, credit impacted accounts, and publish uptime transparency dashboards. Confidence: 96% with full evidence matrix attached.",
+				"confidence_self": 0.96,
+				"confidence_expert_agreement": 0.95,
+				"evidence": [
+					"Zero-price change cohorts validated as primary control group",
+					"Direct causal link between 1,840ms latency and account cancellation events",
+					"All conclusions backed by smb_retention_telemetry records"
+				],
+				"caveats": ["Long-term churn baseline may require 60 days to stabilize post-infrastructure upgrade."],
+				"supports": ["FactChecker", "CloudArchitect"]
+			}
+		]
+	}
+}

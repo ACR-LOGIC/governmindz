@@ -39,31 +39,31 @@ export interface DemoScenarioOption {
 
 export const DEMO_SCENARIOS: DemoScenarioOption[] = [
 	{
-		id: "02-federated-evidence",
-		file: "02-federated-evidence.json",
-		title: "Research & Evidence",
-		category: "Investigate & Compare Evidence",
+		id: "01-fragmented-intelligence",
+		file: "01-fragmented-intelligence.json",
+		title: "1. Fragmented Intelligence",
+		category: "Track 1 · Cross-Silo Data Reconciliation",
 		icon: "research",
-		question: "How should an agent combine fragmented Zetaris sources into an evidence-backed answer without inventing missing data?",
-		description: "Investigates disparate tables (CRM, Billing, Support) across freshness windows to ensure cross-source provenance.",
+		question: "Reconcile conflicting supplier delivery dates and inventory records across fragmented ERP export (Postgres), Logistics Ticket API, and Risk Feed without fabricating missing data.",
+		description: "Discovers and reconciles conflicting records across ERP, Logistics API, and Risk feeds with explicit provenance attribution.",
 	},
 	{
-		id: "01-governance-readiness",
-		file: "01-governance-readiness.json",
-		title: "Technical Decision",
-		category: "Evaluate Approaches & Trade-offs",
-		icon: "decision",
-		question: "Which governance controls should a data team verify before exposing Zetaris federated data to an external agent?",
-		description: "Evaluates least privilege, read-only SQL guards, statement byte limits, and role-based policy gates.",
-	},
-	{
-		id: "03-audit-explainability",
-		file: "03-audit-explainability.json",
-		title: "Conflicting Claims",
-		category: "Challenge Assumptions & Disagreements",
+		id: "02-explain-why",
+		file: "02-explain-why.json",
+		title: "2. The Agent That Can Explain Why",
+		category: "Track 2 · Hypothesis Testing & Evidence",
 		icon: "claims",
-		question: "What minimum audit evidence should accompany a multi-agent recommendation so a reviewer can reproduce it?",
-		description: "Examines conflicting retention claims, challenges assumptions, and enforces verifiable tamper-evident signatures.",
+		question: "Why did SMB churn rise in Q3 across enterprise accounts, and what evidence-backed recommendations explain the underlying driver?",
+		description: "Evaluates competing hypotheses, critiques unsupported assertions, cites telemetry evidence, and discloses limitations.",
+	},
+	{
+		id: "03-reasoning-architecture",
+		file: "03-reasoning-architecture.json",
+		title: "3. Reasoning Architecture",
+		category: "Track 3 · Policy Gates & Auditable Memory",
+		icon: "decision",
+		question: "Process high-priority clinic scheduling and resource allocation requests by evaluating operational policies, historical H-MEM precedents, and cryptographic audit constraints.",
+		description: "Demonstrates 12-state reasoning, operational policy gates, persistent memory retrieval, and tamper-proof audit trails.",
 	},
 ];
 
@@ -219,13 +219,14 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 
 	const handleSelectDemoBubble = (scenario: DemoScenarioOption) => {
 		setActiveDemoScenario(scenario.file);
+		setText(scenario.question);
 		if (onSelectScenarioFile) {
 			onSelectScenarioFile(scenario.file);
 		}
 	};
 
 	const handleExecuteDemo = () => {
-		const chosen = DEMO_SCENARIOS.find((s) => s.file === activeDemoScenario) || DEMO_SCENARIOS[1];
+		const chosen = DEMO_SCENARIOS.find((s) => s.file === activeDemoScenario) || DEMO_SCENARIOS[0];
 		if (onStartDemoScenario) {
 			onStartDemoScenario(chosen.file, chosen.question);
 		} else {

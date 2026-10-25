@@ -20,11 +20,18 @@ import {
 	Download,
 	FileJson,
 	FileText,
+	FileSpreadsheet,
+	FileCode,
+	GitFork,
+	Presentation,
 	Layers,
 } from "lucide-react";
 import type { ActiveTab, HealthStatus, Conversation } from "../../types";
 import { ttsService } from "../../services/ttsService";
 import {
+	exportConversationAsPdf,
+	exportConversationAsCsvSpreadsheet,
+	exportConversationAsWordDoc,
 	exportConversationAsJson,
 	exportConversationAsMarkdown,
 	exportAuditLogAsJsonl,
@@ -296,9 +303,70 @@ export const Header: React.FC<HeaderProps> = ({
 					</button>
 
 					{exportMenuOpen && activeConversation && (
-						<div className="absolute right-0 mt-2 w-64 bg-[#141418] border border-[#2a2a36] rounded-xl shadow-2xl p-2 z-50 animate-fadeIn space-y-1">
+						<div className="absolute right-0 mt-2 w-72 bg-[#141418] border border-[#2a2a36] rounded-xl shadow-2xl p-2 z-50 animate-fadeIn space-y-1">
 							<div className="px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-slate-400 border-b border-[#22222c]">
-								Platform Export Options
+								Executive Output Suite
+							</div>
+
+							<button
+								type="button"
+								onClick={() => {
+									exportConversationAsPdf(activeConversation);
+									setExportMenuOpen(false);
+								}}
+								className="w-full flex items-start gap-2.5 p-2 rounded-lg text-left hover:bg-[#1f1f28] text-slate-200 transition-colors group"
+							>
+								<FileText className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+								<div>
+									<div className="text-xs font-semibold group-hover:text-rose-300">
+										Executive Report (.PDF)
+									</div>
+									<div className="text-[10px] text-slate-400 leading-tight">
+										Printable executive briefing with verified consensus
+									</div>
+								</div>
+							</button>
+
+							<button
+								type="button"
+								onClick={() => {
+									exportConversationAsCsvSpreadsheet(activeConversation);
+									setExportMenuOpen(false);
+								}}
+								className="w-full flex items-start gap-2.5 p-2 rounded-lg text-left hover:bg-[#1f1f28] text-slate-200 transition-colors group"
+							>
+								<FileSpreadsheet className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+								<div>
+									<div className="text-xs font-semibold group-hover:text-emerald-300">
+										Spreadsheet Dataset (.CSV)
+									</div>
+									<div className="text-[10px] text-slate-400 leading-tight">
+										Excel/Sheets tabular evidence & audit records
+									</div>
+								</div>
+							</button>
+
+							<button
+								type="button"
+								onClick={() => {
+									exportConversationAsWordDoc(activeConversation);
+									setExportMenuOpen(false);
+								}}
+								className="w-full flex items-start gap-2.5 p-2 rounded-lg text-left hover:bg-[#1f1f28] text-slate-200 transition-colors group"
+							>
+								<FileCode className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+								<div>
+									<div className="text-xs font-semibold group-hover:text-sky-300">
+										Word / Docs Document (.DOC)
+									</div>
+									<div className="text-[10px] text-slate-400 leading-tight">
+										Microsoft Word editable briefing document
+									</div>
+								</div>
+							</button>
+
+							<div className="px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider text-slate-500 border-t border-[#22222c] pt-1">
+								Technical & Audit Formats
 							</div>
 
 							<button
@@ -309,7 +377,7 @@ export const Header: React.FC<HeaderProps> = ({
 								}}
 								className="w-full flex items-start gap-2.5 p-2 rounded-lg text-left hover:bg-[#1f1f28] text-slate-200 transition-colors group"
 							>
-								<FileJson className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+								<FileJson className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
 								<div>
 									<div className="text-xs font-semibold group-hover:text-amber-300">
 										Granular Outputs (.JSON)

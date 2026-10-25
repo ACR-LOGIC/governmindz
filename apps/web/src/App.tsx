@@ -47,7 +47,7 @@ export const App: React.FC = () => {
 
 	const [health, setHealth] = useState<HealthStatus | null>(null);
 	const [scenarios, setScenarios] = useState<ScenarioItem[]>([]);
-	const [selectedScenario, setSelectedScenario] = useState<string>("01-governance-readiness.json");
+	const [selectedScenario, setSelectedScenario] = useState<string>("01-fragmented-intelligence.json");
 	const [mode, setMode] = useState<"live" | "sample">("sample");
 	const [tourOpen, setTourOpen] = useState(false);
 	const [liveConfirmModalOpen, setLiveConfirmModalOpen] = useState(false);
@@ -760,6 +760,7 @@ export const App: React.FC = () => {
 							{activeTab === "chat" && (
 								<>
 									<GroupConversation
+										conversation={activeConv}
 										mode={mode}
 										messages={activeConv.messages}
 										agentRoster={agentRoster}
