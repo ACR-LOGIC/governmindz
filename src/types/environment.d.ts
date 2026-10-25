@@ -12,7 +12,11 @@ declare const process: {
 declare function require(module: string): any;
 
 interface Buffer {
-	from(data: string, encoding: string): any;
+	from(data: any, encoding?: string): any;
+	alloc(size: number): any;
+	concat(list: any[]): any;
+	byteLength(string: string, encoding?: string): number;
+	isBuffer(obj: any): boolean;
 	toString(encoding?: string): string;
 	[key: string]: any;
 }
@@ -37,22 +41,33 @@ declare module "node:fs" {
 	export function existsSync(path: string): boolean;
 	export function readFileSync(path: string, encoding?: string): string;
 	export function readdirSync(path: string): string[];
-	export function statSync(path: string): { isDirectory(): boolean };
+	export function statSync(path: string): { isDirectory(): boolean; size: number; [key: string]: any };
 	export function mkdirSync(
 		path: string,
 		options?: { recursive?: boolean; mode?: number },
 	): void;
 	export function writeFileSync(
 		path: string,
-		data: string,
+		data: any,
 		options?: string | { encoding?: string; mode?: number },
 	): void;
+	export function openSync(path: string, flags: string): number;
+	export function closeSync(fd: number): void;
+	export function createReadStream(path: string): any;
 	export function renameSync(oldPath: string, newPath: string): void;
 	export function unlinkSync(path: string): void;
 	export function rmSync(
 		path: string,
 		options?: { recursive?: boolean; force?: boolean },
 	): void;
+}
+
+declare module "node:zlib" {
+	export function crc32(data: any): number;
+	export function deflateRawSync(data: any): any;
+	export function inflateRawSync(data: any): any;
+	export function deflateSync(data: any): any;
+	export function inflateSync(data: any): any;
 }
 
 declare module "node:os" {
@@ -94,6 +109,10 @@ declare module "node:test" {
 		name: string,
 		fn: (t: any) => Promise<void> | void,
 	): void;
+	export function before(fn: (t?: any) => Promise<void> | void): void;
+	export function after(fn: (t?: any) => Promise<void> | void): void;
+	export function describe(name: string, fn: () => void): void;
+	export function it(name: string, fn: (t?: any) => Promise<void> | void): void;
 }
 
 declare module "node:assert" {
@@ -101,6 +120,7 @@ declare module "node:assert" {
 	const assert: {
 		ok(value: any, message?: string): void;
 		equal(actual: any, expected: any, message?: string): void;
+		notEqual(actual: any, expected: any, message?: string): void;
 		deepEqual(actual: any, expected: any, message?: string): void;
 		match(value: string, pattern: RegExp, message?: string): void;
 		doesNotThrow(fn: () => any, message?: string): void;
@@ -121,6 +141,7 @@ declare module "node:assert/strict" {
 	const assert: {
 		ok(value: any, message?: string): void;
 		equal(actual: any, expected: any, message?: string): void;
+		notEqual(actual: any, expected: any, message?: string): void;
 		deepEqual(actual: any, expected: any, message?: string): void;
 		match(value: string, pattern: RegExp, message?: string): void;
 		doesNotThrow(fn: () => any, message?: string): void;
@@ -142,8 +163,9 @@ declare module "node:child_process" {
 		stdin?: any;
 		stdout?: any;
 		stderr?: any;
+		pid?: number;
 		exitCode: number | null;
-		kill(signal: string): void;
+		kill(signal?: string): void;
 	};
 	export function spawn(
 		command: string,

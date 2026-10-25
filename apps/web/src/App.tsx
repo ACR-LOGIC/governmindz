@@ -22,10 +22,13 @@ import {
 	subscribeRunEvents,
 	fetchPreferences,
 	savePreferences,
+	submitFeedback,
 } from "./services/api";
-import { AGENT_REGISTRY, getAgentProfile } from "./services/agentRegistry";
+import { AGENT_REGISTRY, getAgentProfile, getAllAgentProfiles } from "./services/agentRegistry";
 import { assignHumanCouncil, generateTaskDelegationAnnouncement } from "./services/nameRotation";
 import { ttsService } from "./services/ttsService";
+import { CrewBarrierManager } from "./services/crewBarrier";
+import type { CrewRound } from "./types/crew";
 import type {
 	ActiveTab,
 	ChatMessage,
@@ -57,18 +60,12 @@ export const App: React.FC = () => {
 	const [activeId, setActiveId] = useState<string | null>(null);
 	const [isBusy, setIsBusy] = useState(false);
 	const [activeAgentThinking, setActiveAgentThinking] = useState<string | null>(null);
+	const [activeCrewRound, setActiveCrewRound] = useState<CrewRound | null>(null);
+	const [isCrewClosing, setIsCrewClosing] = useState(false);
 	const [toastMsg, setToastMsg] = useState<string | null>(null);
 
 	// Agent roster state
-	const [agentRoster, setAgentRoster] = useState<AgentProfile[]>([
-		getAgentProfile("FactChecker"),
-		getAgentProfile("CloudArchitect"),
-		getAgentProfile("Synthesizer"),
-		getAgentProfile("RivalChallenger"),
-		getAgentProfile("Thinker"),
-		getAgentProfile("CredibleSourcesResearchAgent"),
-		getAgentProfile("ContextAgent"),
-	]);
+	const [agentRoster, setAgentRoster] = useState<AgentProfile[]>(getAllAgentProfiles());
 
 	// Confidence chart points
 	const [chartData, setChartData] = useState<Record<string, Array<{ round: number; conf: number }>>>({
@@ -81,6 +78,82 @@ export const App: React.FC = () => {
 		setToastMsg(msg);
 		setTimeout(() => setToastMsg(null), 3500);
 	}, []);
+
+	// Soft deadline periodic check for active research crews
+	useEffect(() => {
+		if (!activeCrewRound || activeCrewRound.barrierReleased) return;
+		const timer = setInterval(() => {
+			setActiveCrewRound((prev) => {
+				if (!prev || prev.barrierReleased) return prev;
+				return CrewBarrierManager.checkSoftDeadlines(prev);
+			});
+		}, 1000);
+		return () => clearInterval(timer);
+	}, [activeCrewRound]);
+
+	// Barrier Release & Combined Summary Posting
+	const triggerBarrierRelease = useCallback(
+		(round: CrewRound) => {
+			if (!activeId || round.barrierReleased) return;
+
+			try {
+				const summaryResult = CrewBarrierManager.generateCombinedSummary(round);
+				const summaryMsg: ChatMessage = {
+					id: `msg_crew_summary_${Date.now()}`,
+					fromSeat: "Supervisor",
+					type: "summary",
+					content: summaryResult.summaryText,
+					timestamp: Date.now(),
+				};
+
+				setConversations((prev) => {
+					const curr = prev.find((c) => c.id === activeId);
+					if (!curr) return prev;
+					if (
+						curr.messages.some(
+							(m) =>
+								m.id === summaryMsg.id ||
+								(m.type === "summary" &&
+									m.fromSeat === "Supervisor" &&
+									m.content === summaryResult.summaryText),
+						)
+					) {
+						return prev;
+					}
+					const updated = {
+						...curr,
+						messages: [...curr.messages, summaryMsg],
+						updatedAt: Date.now(),
+					};
+					saveConversation(updated);
+					return prev.map((c) => (c.id === activeId ? updated : c));
+				});
+
+				setActiveCrewRound((curr) => {
+					if (!curr) return null;
+					return CrewBarrierManager.markSummaryPosted(curr, summaryResult.summaryText);
+				});
+
+				// Coordinated exit animation
+				setIsCrewClosing(true);
+				setTimeout(() => {
+					setActiveCrewRound(null);
+					setIsCrewClosing(false);
+				}, 250);
+			} catch (err: any) {
+				console.error("Barrier summary posting error:", err);
+				setActiveCrewRound((curr) => {
+					if (!curr) return null;
+					return CrewBarrierManager.markSummaryFailed(
+						curr,
+						err?.message || "Failed to post crew summary",
+					);
+				});
+				showToast("Failed to post combined crew summary. Crew state preserved for retry.");
+			}
+		},
+		[activeId, showToast],
+	);
 
 	// Active conversation lookup
 	const activeConv = useMemo(() => {
@@ -381,11 +454,26 @@ export const App: React.FC = () => {
 	}, []);
 
 	// Handle thumbs up / down message ratings
-	const handleRateMessage = (messageId: string, rating: "up" | "down" | null) => {
+	const handleRateMessage = (messageId: string, rating: "up" | "down" | null, seatId?: string) => {
 		if (!activeId) return;
 		setConversations((prev) => {
 			const curr = prev.find((c) => c.id === activeId);
 			if (!curr) return prev;
+			const targetMsg = curr.messages.find((m) => m.id === messageId);
+			const resolvedSeat = seatId || targetMsg?.fromSeat || "unknown";
+
+			if (rating) {
+				submitFeedback({
+					conversationId: activeId,
+					messageId,
+					seatId: resolvedSeat,
+					rating,
+					round: targetMsg?.round,
+				}).catch((err) => {
+					console.warn("Failed to submit message feedback to backend:", err);
+				});
+			}
+
 			const updatedMessages = curr.messages.map((m) =>
 				m.id === messageId ? { ...m, userRating: rating } : m,
 			);
@@ -481,6 +569,23 @@ export const App: React.FC = () => {
 			type: "user",
 			content: formattedContent,
 			timestamp: Date.now(),
+			envelope: {
+				schemaVersion: "1.0",
+				message: {
+					type: "user",
+					text: formattedContent,
+				},
+				result: {
+					conclusion: formattedContent,
+					confidence: 1.0,
+					evidenceIds: [],
+					unresolvedQuestions: [],
+				},
+				execution: {
+					taskId: `task_user_${Date.now()}`,
+					status: "completed",
+				},
+			},
 		};
 
 		const updatedMessages = [...targetConv.messages, userMsg];
@@ -498,6 +603,8 @@ export const App: React.FC = () => {
 
 		setConversations((prev) => prev.map((c) => (c.id === targetConv.id ? updatedConv : c)));
 		setIsBusy(true);
+		setActiveCrewRound(null);
+		setIsCrewClosing(false);
 
 		try {
 			const { runId } = await startRun({
@@ -537,6 +644,36 @@ export const App: React.FC = () => {
 	const handleStreamEvent = useCallback(
 		(ev: any) => {
 			if (!activeId) return;
+
+			// Handle Parallel Crew & Barrier State Synchronization
+			if (
+				ev.type === "crew_start" ||
+				ev.type === "agent_task_assigned" ||
+				ev.type === "research_finding" ||
+				ev.type === "crew_complete" ||
+				(typeof ev.type === "string" && ev.type.startsWith("crew:"))
+			) {
+				setActiveCrewRound((prev) => {
+					const round =
+						prev ||
+						CrewBarrierManager.createRound(
+							String(ev.roundId || `round_${Date.now()}`),
+							["data-crew", "web-crew"],
+							activeId,
+							{ softDeadlineMs: 25000 },
+						);
+
+					const updatedRound = CrewBarrierManager.processEvent(round, ev);
+
+					if (CrewBarrierManager.canRelease(updatedRound)) {
+						setTimeout(() => {
+							triggerBarrierRelease(updatedRound);
+						}, 300);
+					}
+
+					return updatedRound;
+				});
+			}
 
 			setConversations((prev) => {
 				const curr = prev.find((c) => c.id === activeId);
@@ -601,6 +738,28 @@ export const App: React.FC = () => {
 						confidence: rawMsg.confidence ?? rawMsg.structured?.confidence_self,
 						timestamp: rawMsg.timestamp || Date.now(),
 						latency_ms: rawMsg.latency_ms,
+						replyToExcerpt: rawMsg.replyToExcerpt,
+						envelope: rawMsg.envelope || (rawMsg.structured ? {
+							schemaVersion: "1.0",
+							message: {
+								type: rawMsg.type || "proposal",
+								text: rawMsg.structured?.position || rawMsg.content || "",
+								replyTo: rawMsg.toSeat && rawMsg.toSeat !== "all" ? rawMsg.toSeat : undefined,
+							},
+							result: {
+								conclusion: rawMsg.structured?.position || rawMsg.content || "",
+								confidence: rawMsg.confidence ?? rawMsg.structured?.confidence_self ?? 1.0,
+								evidenceIds: (rawMsg.structured?.evidence || []).map((_: any, idx: number) => `ev-${idx + 1}`),
+								unresolvedQuestions: rawMsg.structured?.caveats || [],
+							},
+							execution: {
+								taskId: rawMsg.id || `task-${Date.now()}`,
+								status: "completed",
+								round: rawMsg.round,
+								latency_ms: rawMsg.latency_ms,
+								auditRef: rawMsg.id,
+							},
+						} : undefined),
 					};
 
 					updated.messages = [...updated.messages, newMsg];
@@ -647,6 +806,33 @@ export const App: React.FC = () => {
 					if (ev.event) {
 						updated.auditEvents = [...updated.auditEvents, ev.event];
 					}
+				} else if (ev.type === "deliverable_contract") {
+					updated.contract = ev.contract;
+				} else if (ev.type === "crew_start") {
+					appendAgentReasoning("Supervisor", `Launched parallel ${ev.crew} with ${ev.agentCount} independent agents.`);
+				} else if (ev.type === "agent_task_assigned") {
+					updateAgentStatus(ev.agentId, "analyzing");
+					appendAgentReasoning(ev.agentId, `[Task] ${ev.task}`);
+				} else if (ev.type === "research_finding") {
+					updateAgentStatus(ev.agentId, "completed");
+					appendAgentReasoning(ev.agentId, `[Finding: ${ev.finding?.title || "Evidence"}] ${ev.finding?.claim || ""}`);
+				} else if (ev.type === "crew_complete") {
+					appendAgentReasoning("Supervisor", `[${ev.crew} Completed] ${ev.summary || "Findings verified"}`);
+				} else if (ev.type === "hater_crew_challenge") {
+					updateAgentStatus("RivalChallenger", "challenging");
+					appendAgentReasoning("RivalChallenger", `[Independent Challenge to ${ev.targetAgent}] ${ev.challenge}`);
+				} else if (ev.type === "crew_challenge_response") {
+					appendAgentReasoning("Synthesizer", `[${ev.crew} Defense] ${ev.defenseStatement}`);
+				} else if (ev.type === "artifact_created" || ev.type === "artifact_ready") {
+					if (ev.contract) updated.contract = ev.contract;
+					if (ev.primaryArtifact) updated.primaryArtifact = ev.primaryArtifact;
+					if (ev.additionalArtifacts) updated.additionalArtifacts = ev.additionalArtifacts;
+					if (ev.evidenceExport) updated.evidenceExport = ev.evidenceExport;
+				} else if (ev.type === "delivery_approved") {
+					updated.supervisorResponse = ev.supervisorResponse;
+					updated.supervisorDecision = "APPROVED";
+				} else if (ev.type === "delivery_rejected") {
+					updated.supervisorDecision = "REJECTED";
 				} else if (ev.type === "complete" || ev.type === "done") {
 					setActiveAgentThinking(null);
 					setIsBusy(false);
@@ -657,6 +843,14 @@ export const App: React.FC = () => {
 					if (ev.auditEvents) {
 						updated.auditEvents = ev.auditEvents;
 					}
+					if (ev.contract) updated.contract = ev.contract;
+					if (ev.primaryArtifact) updated.primaryArtifact = ev.primaryArtifact;
+					if (ev.additionalArtifacts) updated.additionalArtifacts = ev.additionalArtifacts;
+					if (ev.evidenceExport) updated.evidenceExport = ev.evidenceExport;
+					if (ev.supervisorResponse) updated.supervisorResponse = ev.supervisorResponse;
+					if (ev.supervisorDecision) updated.supervisorDecision = ev.supervisorDecision;
+					if (ev.dataCrewReport) updated.dataCrewReport = ev.dataCrewReport;
+					if (ev.webCrewReport) updated.webCrewReport = ev.webCrewReport;
 					showToast("AI Deliberation complete · Cryptographic audit verified");
 				} else if (ev.type === "error") {
 					setActiveAgentThinking(null);
@@ -669,7 +863,7 @@ export const App: React.FC = () => {
 				return prev.map((c) => (c.id === activeId ? updated : c));
 			});
 		},
-		[activeId, updateAgentStatus, showToast],
+		[activeId, updateAgentStatus, showToast, triggerBarrierRelease],
 	);
 
 	// Select Agent in Roster
@@ -775,6 +969,8 @@ export const App: React.FC = () => {
 										activeScenario={activeScenarioItem}
 										allScenarios={scenarios}
 										onSelectScenario={handleSelectScenario}
+										activeCrewRound={activeCrewRound}
+										isCrewClosing={isCrewClosing}
 									/>
 									<MessageComposer
 										mode={mode}

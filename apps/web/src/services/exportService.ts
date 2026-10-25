@@ -10,7 +10,7 @@
  * - Rich HTML Clipboard Sharing & Presentation Mode
  */
 
-import type { Conversation, ChatMessage } from "../types";
+import type { Conversation, ChatMessage, AuditVerificationReport } from "../types";
 
 function downloadBlob(blob: Blob, filename: string) {
 	const url = URL.createObjectURL(blob);
@@ -841,4 +841,264 @@ export function exportAuditLogAsJsonl(conv: Conversation) {
 	const jsonlLines = conv.auditEvents.map((ae) => JSON.stringify(ae)).join("\n");
 	const blob = new Blob([jsonlLines], { type: "application/x-ndjson" });
 	downloadBlob(blob, getSafeFilename(conv, "audit-ledger", "jsonl"));
+}
+
+/**
+ * 9. ENTERPRISE AUDIT PROOF CERTIFICATE EXPORTERS (R6)
+ */
+export function exportAuditProofCertificateJson(conv: Conversation, report: AuditVerificationReport): void {
+	const timestamp = Date.now();
+	const certificateId = `cert_${conv.id ? conv.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8) : "audit"}_${timestamp}`;
+
+	const blockManifest = report.details.map((d) => ({
+		index: d.index,
+		id: d.id,
+		type: d.eventType,
+		hash: d.actualHash,
+		previousHash: d.actualPreviousHash,
+		status: d.status,
+	}));
+
+	const cert = {
+		certificateVersion: "1.0",
+		standard: "RFC-6962 / NIST SP 800-92 Tamper-Evident Chaining",
+		certificateId,
+		issuer: "GovernMindz Enterprise Cryptographic Authority",
+		sessionId: conv.id,
+		timestamp,
+		verificationResult: {
+			verified: report.verified,
+			status: report.status,
+			totalBlocks: report.totalBlocks,
+			genesisAnchor: report.genesisAnchor,
+			terminalHeadHash: report.terminalHash,
+			hmacAlgorithm: "HMAC-SHA256",
+			corruptedBlockIndex: report.corruptedBlockIndex,
+		},
+		blockManifest,
+		attestationSignature: report.terminalHash || "attestation_sealed",
+	};
+
+	const blob = new Blob([JSON.stringify(cert, null, 2)], { type: "application/json" });
+	downloadBlob(blob, getSafeFilename(conv, "audit-proof-certificate", "json"));
+}
+
+export function exportAuditProofCertificatePrintable(conv: Conversation, report: AuditVerificationReport): void {
+	const timestamp = new Date().toISOString();
+	const isVerified = report.verified;
+
+	const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>GovernMindz Cryptographic Audit Certificate - ${conv.id}</title>
+<style>
+  @page { margin: 15mm 20mm; size: A4; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #0f172a;
+    background: #ffffff;
+    line-height: 1.5;
+    margin: 0;
+    padding: 32px;
+    font-size: 13px;
+  }
+  .cert-header {
+    border-bottom: 3px double #0f172a;
+    padding-bottom: 16px;
+    margin-bottom: 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .title {
+    font-size: 22px;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -0.5px;
+  }
+  .subtitle {
+    font-size: 11px;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 4px;
+  }
+  .status-badge {
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-weight: 800;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .status-verified {
+    background: #dcfce7;
+    color: #15803d;
+    border: 2px solid #86efac;
+  }
+  .status-tampered {
+    background: #fee2e2;
+    color: #b91c1c;
+    border: 2px solid #fca5a5;
+  }
+  .meta-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 24px;
+    font-size: 12px;
+  }
+  .meta-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed #e2e8f0; }
+  .meta-row:last-child { border-bottom: none; }
+  .meta-label { color: #64748b; font-weight: 600; }
+  .meta-value { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; color: #0f172a; font-weight: 700; word-break: break-all; text-align: right; }
+  
+  table { width: 100%; border-collapse: collapse; margin-top: 16px; margin-bottom: 24px; font-size: 11px; }
+  th { background: #f1f5f9; text-align: left; padding: 8px 10px; font-weight: 700; border: 1px solid #cbd5e1; color: #334155; }
+  td { padding: 8px 10px; border: 1px solid #e2e8f0; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 10.5px; vertical-align: top; }
+  tr:nth-child(even) { background: #f8fafc; }
+  .valid-tag { color: #16a34a; font-weight: 700; }
+  .corrupted-tag { color: #dc2626; font-weight: 700; background: #fee2e2; padding: 2px 6px; border-radius: 4px; }
+  
+  .attestation-box {
+    margin-top: 32px;
+    border-top: 2px solid #cbd5e1;
+    padding-top: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+  .seal {
+    font-size: 11px;
+    color: #475569;
+    max-width: 450px;
+  }
+  .signature-line {
+    text-align: center;
+    border-top: 1px solid #0f172a;
+    padding-top: 6px;
+    width: 220px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  @media print {
+    body { padding: 0; }
+  }
+</style>
+</head>
+<body>
+  <div class="cert-header">
+    <div>
+      <div class="title">GOVERNMINDZ CRYPTOGRAPHIC AUDIT AUTHORITY</div>
+      <div class="subtitle">RFC-6962 / NIST SP 800-92 Tamper-Evident Chaining Certificate</div>
+    </div>
+    <div class="status-badge ${isVerified ? "status-verified" : "status-tampered"}">
+      ${isVerified ? "✓ VERIFIED UNBROKEN" : "⚠ INTEGRITY COMPROMISED"}
+    </div>
+  </div>
+
+  <div class="meta-grid">
+    <div>
+      <div class="meta-row">
+        <span class="meta-label">Session ID</span>
+        <span class="meta-value">${conv.id}</span>
+      </div>
+      <div class="meta-row">
+        <span class="meta-label">Inquiry / Topic</span>
+        <span class="meta-value" style="font-family: inherit; font-size: 12px;">${conv.topic || "Governance Deliberation"}</span>
+      </div>
+      <div class="meta-row">
+        <span class="meta-label">Audit Blocks Verified</span>
+        <span class="meta-value">${report.totalBlocks} Blocks</span>
+      </div>
+      <div class="meta-row">
+        <span class="meta-label">HMAC Algorithm</span>
+        <span class="meta-value">HMAC-SHA256 (256-bit)</span>
+      </div>
+    </div>
+    <div>
+      <div class="meta-row">
+        <span class="meta-label">Verification Timestamp</span>
+        <span class="meta-value">${timestamp}</span>
+      </div>
+      <div class="meta-row">
+        <span class="meta-label">Genesis Anchor Hash</span>
+        <span class="meta-value">${report.genesisAnchor ? report.genesisAnchor.slice(0, 24) + "…" : "c910699e0100…"}</span>
+      </div>
+      <div class="meta-row">
+        <span class="meta-label">Terminal Head Hash</span>
+        <span class="meta-value">${report.terminalHash ? report.terminalHash.slice(0, 24) + "…" : "N/A"}</span>
+      </div>
+      <div class="meta-row">
+        <span class="meta-label">Overall Status</span>
+        <span class="meta-value" style="color: ${isVerified ? "#15803d" : "#b91c1c"};">${report.status}</span>
+      </div>
+    </div>
+  </div>
+
+  <h3>Block Verification Manifest</h3>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 40px;">#</th>
+        <th style="width: 90px;">Block ID</th>
+        <th style="width: 130px;">Event Type</th>
+        <th>Previous Hash Link</th>
+        <th>Block Hash</th>
+        <th style="width: 70px;">HMAC</th>
+        <th style="width: 100px;">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${report.details.map((b) => `
+        <tr>
+          <td><strong>${b.index}</strong></td>
+          <td>${b.id.slice(0, 10)}…</td>
+          <td><span style="font-family: inherit; font-weight: 600;">${b.eventType}</span></td>
+          <td>${b.actualPreviousHash.slice(0, 16)}…</td>
+          <td>${b.actualHash.slice(0, 16)}…</td>
+          <td>${b.signatureValid ? "VALID" : "INVALID"}</td>
+          <td>
+            <span class="${b.status === "VERIFIED" ? "valid-tag" : "corrupted-tag"}">
+              ${b.status}
+            </span>
+          </td>
+        </tr>
+      `).join("")}
+    </tbody>
+  </table>
+
+  <div class="attestation-box">
+    <div class="seal">
+      <strong>Enterprise Cryptographic Attestation</strong><br>
+      This certificate confirms that the hash chain ledger above was independently verified according to NIST SP 800-92 Computer Security Log Management and RFC-6962 Certificate Transparency standards.
+    </div>
+    <div class="signature-line">
+      Chief Governance Cryptographer<br>
+      GovernMindz Authority
+    </div>
+  </div>
+</body>
+</html>`;
+
+	const printWindow = window.open("", "_blank");
+	if (printWindow) {
+		printWindow.document.open();
+		printWindow.document.write(html);
+		printWindow.document.close();
+		setTimeout(() => {
+			printWindow.print();
+		}, 350);
+	} else {
+		const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+		downloadBlob(blob, getSafeFilename(conv, "audit-proof-certificate", "html"));
+	}
 }

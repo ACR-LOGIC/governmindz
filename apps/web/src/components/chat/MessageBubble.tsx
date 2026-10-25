@@ -4,22 +4,21 @@ import {
 	CheckCircle2,
 	AlertCircle,
 	CornerDownRight,
-	Clock,
 	Sparkles,
 	ChevronDown,
 	ChevronUp,
 	MessageSquare,
-	ShieldCheck,
 	Flame,
 	Search,
 	Scale,
-	Lightbulb,
 	Copy,
 	Check,
 	Volume2,
 	VolumeX,
 	ThumbsUp,
 	ThumbsDown,
+	Sliders,
+	Activity,
 } from "lucide-react";
 import type { ChatMessage, AgentProfile } from "../../types";
 import { AGENT_REGISTRY, getAgentProfile } from "../../services/agentRegistry";
@@ -30,28 +29,35 @@ interface MessageBubbleProps {
 	message: ChatMessage;
 	agentProfile?: AgentProfile;
 	onSelectAgent?: (seatId: string) => void;
-	onRateMessage?: (messageId: string, rating: "up" | "down" | null) => void;
+	onRate?: (messageId: string, rating: "up" | "down" | null, seatId: string) => void;
+	onRateMessage?: (messageId: string, rating: "up" | "down" | null, seatId?: string) => void;
 }
 
-// Funny character catchphrases matching each seat's persona
-const CATCHPHRASES: Record<string, string> = {
-	FactChecker: "“Wait... let me inspect the primary keys first!” 🔍",
-	CloudArchitect: "“Who left 0.0.0.0/0 open in the firewall?! 🧱”",
-	Synthesizer: "“Order in the court! We have calibrated consensus. ⚖️”",
-	RivalChallenger: "“Disputed! Show me the cryptographic hash or it didn't happen! 🥊”",
-	Thinker: "“Pondering the existential entropy of this retention policy... ☕”",
-	ContextAgent: "“I distinctly recall what you stated in round one. 📜”",
-	Orchestrator: "“GovernMindz flight director on deck. All seats report in! 🛰️”",
-	user: "“Operator review: inspecting multi-agent deliberation. ☕”",
-};
+function renderFormattedContent(text: string) {
+	const parts = text.split(/(@\w+)/g);
+	return parts.map((part, index) => {
+		if (part.startsWith("@")) {
+			return (
+				<span
+					key={index}
+					className="inline-flex items-center font-semibold text-teal-300 bg-teal-950/70 border border-teal-700/50 px-1.5 py-0.5 rounded text-[12.5px] mx-0.5 shadow-sm"
+				>
+					{part}
+				</span>
+			);
+		}
+		return part;
+	});
+}
 
 export const MessageBubble: React.FC<MessageBubbleProps> = ({
 	message,
 	agentProfile,
 	onSelectAgent,
+	onRate,
 	onRateMessage,
 }) => {
-	const [expanded, setExpanded] = useState(false);
+	const [showInspector, setShowInspector] = useState(false);
 	const [copied, setCopied] = useState(false);
 	const [isSpeakingThis, setIsSpeakingThis] = useState(false);
 	const [rating, setRating] = useState<"up" | "down" | null>(message.userRating || null);
@@ -63,11 +69,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 	const handleRate = (newRating: "up" | "down") => {
 		const next = rating === newRating ? null : newRating;
 		setRating(next);
-		onRateMessage?.(message.id, next);
+		onRate?.(message.id, next, message.fromSeat);
+		onRateMessage?.(message.id, next, message.fromSeat);
 	};
 
 	const isUser = message.fromSeat === "user";
-	const isOrchestrator = message.fromSeat === "Orchestrator";
 
 	const profile =
 		agentProfile || AGENT_REGISTRY[message.fromSeat] || getAgentProfile(message.fromSeat);
@@ -75,16 +81,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 	const st = message.structured;
 	const selfConf = st?.confidence_self ?? st?.confidenceSelf ?? message.confidence;
 	const expertConf = st?.confidence_expert_agreement ?? st?.confidenceExpertAgreement;
-	const evidence = st?.evidence || [];
-	const caveats = st?.caveats || [];
-	const supports = st?.supports || [];
-	const dissents = st?.dissents_from || st?.dissentsFrom || [];
-	const catchphrase = CATCHPHRASES[message.fromSeat];
 	const rawContent = st?.position || message.content;
 
 	// Listen to TTS state
 	useEffect(() => {
-		const unsub = ttsService.subscribe((isSpeaking, seatId, msgId) => {
+		const unsub = ttsService.subscribe((isSpeaking, _seatId, msgId) => {
 			setIsSpeakingThis(isSpeaking && msgId === message.id);
 		});
 		return unsub;
@@ -110,7 +111,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 		}
 	};
 
-	// Message type badge styling
+	// Message type metadata helper
 	const getTypeBadge = (type: string) => {
 		switch (type) {
 			case "proposal":
@@ -135,18 +136,24 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 	const badge = getTypeBadge(message.type);
 	const BadgeIcon = badge.icon;
 
+	// Canonical display name & short role title
+	const displayName = isUser ? "Operator" : profile.humanName || profile.name;
+	const shortRoleTitle = isUser
+		? "Human Reviewer"
+		: message.fromSeat === "Orchestrator"
+			? "Orchestrator / Mission Director"
+			: profile.role || message.fromSeat;
+
 	// User Bubble Rendering
 	if (isUser) {
 		return (
 			<div className="flex justify-end gap-3 mb-6 animate-fadeIn group">
 				<div className="max-w-2xl bg-gradient-to-r from-[#1e1e24] via-[#16161a] to-[#121214] border border-[#2e2e38] rounded-2xl rounded-tr-sm p-4 shadow-xl shadow-black/40 relative">
-					{/* Header */}
+					{/* User Message Header: [Agent Name] · [Short Role Title] */}
 					<div className="flex items-center justify-between gap-4 mb-2 text-xs border-b border-[#2e2e38] pb-2">
-						<div className="flex items-center gap-2">
-							<span className="font-bold text-amber-300">You (Operator)</span>
-							<span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20 font-mono">
-								HUMAN REVIEWER
-							</span>
+						<div className="flex items-center gap-1.5">
+							<span className="font-bold text-amber-300 text-sm">{displayName}</span>
+							<span className="text-xs text-slate-400 font-medium">· {shortRoleTitle}</span>
 						</div>
 
 						<div className="flex items-center gap-2">
@@ -162,11 +169,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 						</div>
 					</div>
 
-					{/* Catchphrase */}
-					<div className="text-[11px] italic text-amber-200/60 mb-2 font-mono">
-						{catchphrase}
-					</div>
-
 					{/* Content */}
 					<div className="text-sm text-slate-100 leading-relaxed whitespace-pre-wrap font-sans">
 						{message.content}
@@ -174,7 +176,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 				</div>
 
 				{/* Avatar */}
-				<AgentAvatar seatId="user" size="md" className="ring-2 ring-amber-500/40" />
+				<AgentAvatar seatId="user" avatarId="operator" size="md" className="ring-2 ring-amber-500/40" />
 			</div>
 		);
 	}
@@ -187,7 +189,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 				type="button"
 				onClick={() => onSelectAgent?.(message.fromSeat)}
 				className="shrink-0 transition-transform hover:scale-110 active:scale-95 focus:outline-none"
-				title={`Inspect ${profile.name} — ${profile.role}`}
+				title={`Inspect ${displayName} · ${shortRoleTitle}`}
 			>
 				<AgentAvatar
 					seatId={message.fromSeat}
@@ -202,7 +204,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
 			{/* Bubble container */}
 			<div className="flex-1 max-w-3xl min-w-0">
-				{/* Group Message Header */}
+				{/* Simplified Group Message Header: ONLY [Agent Name] · [Short Role Title] */}
 				<div className="flex items-center flex-wrap gap-2 mb-2">
 					<button
 						type="button"
@@ -210,46 +212,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 						className="font-bold text-sm hover:underline transition-colors flex items-center gap-1.5"
 						style={{ color: profile.accentColor }}
 					>
-						<span>{profile.humanName ? `${profile.humanName} (${profile.role})` : profile.name}</span>
+						<span>{displayName}</span>
 					</button>
 
-					<span className="text-[11px] text-slate-400 font-medium">· {profile.role}</span>
-
-					{/* Assigned Job Task Badge */}
-					{profile.jobTask && (
-						<span
-							className="text-[9.5px] font-mono px-2 py-0.5 rounded-md font-semibold border shadow-sm max-w-xs truncate"
-							style={{
-								backgroundColor: `${profile.accentColor}15`,
-								borderColor: `${profile.accentColor}40`,
-								color: profile.accentColor,
-							}}
-							title={`Job Task: ${profile.jobTask}`}
-						>
-							Task: {profile.jobTask}
-						</span>
-					)}
-
-					{/* Message type badge with icon */}
-					<span
-						className={`inline-flex items-center gap-1 text-[9px] font-mono uppercase px-2.5 py-0.5 rounded-full border font-semibold ${badge.bg}`}
-					>
-						<BadgeIcon className="w-2.5 h-2.5" />
-						<span>{badge.label}</span>
-					</span>
-
-					{message.round != null && (
-						<span className="text-[10px] font-mono text-slate-400 bg-[#16161a] px-2 py-0.5 rounded-md border border-[#26262e]">
-							Round {message.round}
-						</span>
-					)}
-
-					{/* Addressed Agent if present */}
-					{message.toSeat && message.toSeat !== "all" && (
-						<span className="text-[10px] font-mono text-teal-300 bg-teal-950/50 px-2 py-0.5 rounded-md border border-teal-800/40">
-							Replying to @{message.toSeat}
-						</span>
-					)}
+					<span className="text-xs text-slate-400 font-medium">· {shortRoleTitle}</span>
 
 					{/* Equalizer Visual Cue when actively speaking */}
 					{isSpeakingThis && (
@@ -261,8 +227,25 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 						</span>
 					)}
 
-					{/* Header Actions: Copy + Text-to-Speech Toggle + Thumbs Rating */}
+					{/* Header Actions: Inspector Toggle + Thumbs Rating + Audio Playback + Copy + Timestamp */}
 					<div className="ml-auto flex items-center gap-1.5 text-slate-400">
+						{/* Optional Expandable Details / Execution Inspector Button */}
+						<button
+							type="button"
+							onClick={() => setShowInspector(!showInspector)}
+							className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors border ${
+								showInspector
+									? "bg-teal-950/80 text-teal-300 border-teal-700/60"
+									: "text-slate-400 hover:text-slate-200 bg-[#14141a] hover:bg-[#1e1e26] border-[#2a2a36]"
+							}`}
+							title="Toggle Details & Execution Inspector"
+							aria-label="Toggle Details & Execution Inspector"
+						>
+							<Sliders className="w-3 h-3 text-teal-400" />
+							<span className="hidden sm:inline">Details</span>
+							{showInspector ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
+						</button>
+
 						{/* Thumbs Up / Down ratings */}
 						<div className="flex items-center gap-0.5 border-r border-[#26262e] pr-1.5 mr-0.5">
 							<button
@@ -294,11 +277,12 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 							</button>
 						</div>
 
+						{/* Audio playback button */}
 						<button
 							type="button"
 							onClick={handleToggleSpeak}
 							className="p-1 rounded-md hover:text-amber-400 hover:bg-[#1a1a20] transition-colors"
-							title={isSpeakingThis ? "Stop speaking" : `Listen to ${profile.name}'s voice`}
+							title={isSpeakingThis ? "Stop speaking" : `Listen to ${displayName}'s voice`}
 						>
 							{isSpeakingThis ? (
 								<VolumeX className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
@@ -307,6 +291,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 							)}
 						</button>
 
+						{/* Copy Button */}
 						<button
 							type="button"
 							onClick={handleCopy}
@@ -316,8 +301,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 							{copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
 						</button>
 
+						{/* Timestamp */}
 						<span className="text-[10px] font-mono text-slate-400">
-							{message.latency_ms != null && <span>{message.latency_ms}ms · </span>}
 							{formatTime(message.timestamp)}
 						</span>
 					</div>
@@ -339,16 +324,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 						style={{ backgroundColor: profile.accentColor }}
 					/>
 
-					{/* Humorous Persona Catchphrase / Thought Bubble */}
-					{catchphrase && (
-						<div
-							className="text-[11px] italic font-mono mb-2 flex items-center gap-1.5 opacity-85"
-							style={{ color: profile.accentColor }}
-						>
-							<span>{catchphrase}</span>
-						</div>
-					)}
-
 					{/* Quoted reply context if present */}
 					{message.replyToExcerpt && (
 						<div className="mb-3 px-3 py-1.5 rounded-lg bg-[#0e0e12] border-l-2 border-teal-500 text-xs text-slate-400 flex items-start gap-1.5">
@@ -357,19 +332,19 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 						</div>
 					)}
 
-					{/* Main position text */}
+					{/* Main position text with formatted mentions */}
 					<div className="text-sm text-slate-100 leading-relaxed whitespace-pre-wrap font-sans">
-						{rawContent}
+						{renderFormattedContent(rawContent)}
 					</div>
 
-					{/* Confidence bar row */}
+					{/* Clean confidence bar row */}
 					{selfConf != null && (
-						<div className="mt-3 pt-3 border-t border-[#26262e] flex items-center gap-3 text-xs flex-wrap">
+						<div className="mt-3 pt-2.5 border-t border-[#26262e] flex items-center gap-3 text-xs flex-wrap">
 							<span className="text-[11px] font-mono text-slate-400 flex items-center gap-1">
 								<Sparkles className="w-3 h-3 text-amber-400" />
 								<span>Self-Confidence:</span>
 							</span>
-							<div className="flex-1 h-2 bg-[#22222a] rounded-full overflow-hidden max-w-xs min-w-[100px]">
+							<div className="flex-1 h-2 bg-[#22222a] rounded-full overflow-hidden max-w-xs min-w-[90px]">
 								<div
 									className="h-full rounded-full transition-all duration-500"
 									style={{
@@ -383,55 +358,110 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 							</span>
 
 							{expertConf != null && (
-								<span className="text-[11px] font-mono text-slate-400 ml-auto bg-[#1e1e26] px-2 py-0.5 rounded-md border border-[#2e2e3a]">
+								<span className="text-[10.5px] font-mono text-slate-400 bg-[#1e1e26] px-2 py-0.5 rounded-md border border-[#2e2e3a]">
 									Expert Agreement: <b className="text-slate-200">{(expertConf * 100).toFixed(0)}%</b>
 								</span>
 							)}
+
+							<button
+								type="button"
+								onClick={() => onSelectAgent?.(message.fromSeat)}
+								className="text-[10.5px] font-mono text-teal-400/90 hover:text-teal-300 transition-colors flex items-center gap-1 ml-auto hover:underline"
+								title={`View ${displayName}'s verified reasoning records, citations, and caveats in Profile`}
+							>
+								<span>View Reasoning Records</span>
+								<CornerDownRight className="w-3 h-3 text-teal-400" />
+							</button>
 						</div>
 					)}
 
-					{/* Evidence, Caveats, Supports, and Dissents Chips */}
-					{(evidence.length > 0 || caveats.length > 0 || supports.length > 0 || dissents.length > 0) && (
-						<div className="mt-3 pt-2 flex flex-wrap gap-1.5">
-							{evidence.map((ev, i) => (
-								<span
-									key={i}
-									className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] bg-emerald-950/40 border border-emerald-800/40 text-emerald-300 font-mono"
-								>
-									<CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
-									<span>{ev}</span>
+					{/* Expandable Details / Execution Inspector Panel */}
+					{showInspector && (
+						<div className="mt-3 p-3 rounded-xl bg-[#0c0e14] border border-[#242b3d] text-xs font-mono text-slate-300 space-y-2.5 animate-fadeIn">
+							<div className="flex items-center justify-between border-b border-[#1b2234] pb-2">
+								<div className="flex items-center gap-1.5 text-teal-300 font-bold text-[11px] uppercase tracking-wider">
+									<Sliders className="w-3.5 h-3.5 text-teal-400" />
+									<span>Execution & Deliberation Inspector</span>
+								</div>
+								<span className="text-[10px] text-slate-400 bg-[#151926] px-2 py-0.5 rounded border border-[#242b3d]">
+									Envelope v{message.envelope?.schemaVersion || "1.0"}
 								</span>
-							))}
+							</div>
 
-							{caveats.map((cav, i) => (
-								<span
-									key={i}
-									className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] bg-amber-950/40 border border-amber-800/40 text-amber-300 font-mono"
-								>
-									<AlertCircle className="w-3 h-3 text-amber-400 shrink-0" />
-									<span>{cav}</span>
-								</span>
-							))}
+							<div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-[11px]">
+								{/* Message Type */}
+								<div className="flex items-center gap-1.5">
+									<span className="text-slate-400">Message Type:</span>
+									<span className={`inline-flex items-center gap-1 text-[9.5px] font-mono uppercase px-2 py-0.5 rounded border font-semibold ${badge.bg}`}>
+										<BadgeIcon className="w-2.5 h-2.5" />
+										<span>{badge.label}</span>
+									</span>
+								</div>
 
-							{supports.map((sup, i) => (
-								<span
-									key={i}
-									className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] bg-sky-950/40 border border-sky-800/40 text-sky-300 font-mono"
-								>
-									<CheckCircle2 className="w-3 h-3 text-sky-400 shrink-0" />
-									<span>Supports @{sup}</span>
-								</span>
-							))}
+								{/* Round Number */}
+								{message.round != null && (
+									<div className="flex items-center gap-1.5">
+										<span className="text-slate-400">Round:</span>
+										<span className="text-slate-200 bg-[#16161f] px-2 py-0.5 rounded border border-[#252532]">
+											Round {message.round}
+										</span>
+									</div>
+								)}
 
-							{dissents.map((dis, i) => (
-								<span
-									key={i}
-									className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] bg-rose-950/40 border border-rose-800/40 text-rose-300 font-mono"
-								>
-									<ShieldAlert className="w-3 h-3 text-rose-400 shrink-0" />
-									<span>Dissents from @{dis}</span>
-								</span>
-							))}
+								{/* Reply Target */}
+								{(message.toSeat || message.envelope?.message?.replyTo) && (
+									<div className="flex items-center gap-1.5">
+										<span className="text-slate-400">Reply Target:</span>
+										<span className="text-teal-300 bg-teal-950/60 px-2 py-0.5 rounded border border-teal-800/40">
+											@{message.envelope?.message?.replyTo || message.toSeat}
+										</span>
+									</div>
+								)}
+
+								{/* Execution Latency */}
+								{message.latency_ms != null && (
+									<div className="flex items-center gap-1.5">
+										<span className="text-slate-400">Response Latency:</span>
+										<span className="text-amber-300">{message.latency_ms} ms</span>
+									</div>
+								)}
+
+								{/* Task ID / Audit Reference */}
+								<div className="flex items-center gap-1.5 truncate col-span-1 sm:col-span-2">
+									<span className="text-slate-400 shrink-0">Execution Task ID:</span>
+									<span className="text-slate-300 truncate font-mono text-[10px] bg-[#141824] px-1.5 py-0.5 rounded border border-[#22293d]">
+										{message.envelope?.execution?.taskId || message.id}
+									</span>
+								</div>
+
+								{/* Assigned Task / Domain Specialization */}
+								{profile.jobTask && (
+									<div className="col-span-1 sm:col-span-2 pt-1 border-t border-[#1b2234]">
+										<span className="text-slate-400 block mb-0.5 text-[10px] uppercase font-bold text-amber-300/80">
+											Domain Task Assignment:
+										</span>
+										<span className="text-slate-200 text-[11px] leading-normal font-sans">
+											{profile.jobTask}
+										</span>
+									</div>
+								)}
+
+								{/* Evidence IDs in Envelope if present */}
+								{message.envelope?.result?.evidenceIds && message.envelope.result.evidenceIds.length > 0 && (
+									<div className="col-span-1 sm:col-span-2 pt-1">
+										<span className="text-slate-400 block mb-1 text-[10px] uppercase font-bold text-emerald-400/80">
+											Referenced Evidence IDs:
+										</span>
+										<div className="flex flex-wrap gap-1">
+											{message.envelope.result.evidenceIds.map((eid, idx) => (
+												<span key={idx} className="bg-emerald-950/60 text-emerald-300 border border-emerald-800/50 px-2 py-0.5 rounded text-[10px]">
+													{eid}
+												</span>
+											))}
+										</div>
+									</div>
+								)}
+							</div>
 						</div>
 					)}
 				</div>

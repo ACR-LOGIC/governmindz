@@ -106,10 +106,10 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 
 									<div className="truncate flex-1 min-w-0">
 										<div className="text-xs font-semibold text-slate-200 group-hover:text-white truncate flex items-center gap-1">
-											<span>{agent.humanName ? `${agent.humanName} (${agent.name})` : agent.name}</span>
+											<span>{agent.humanName ? `${agent.humanName} · ${agent.role}` : agent.name}</span>
 										</div>
 										<div className="text-[10px] text-amber-300/80 truncate font-mono">
-											{agent.jobTask ? agent.jobTask : agent.role}
+											{agent.jobTask ? agent.jobTask : agent.domainExpertise || agent.role}
 										</div>
 									</div>
 								</div>

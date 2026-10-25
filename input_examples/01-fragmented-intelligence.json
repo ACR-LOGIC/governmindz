@@ -16,7 +16,7 @@
 	"seats": {
 		"FactChecker": [
 			{
-				"position": "Direct conflict detected for supplier SUP-8021 (Acme Global): ERP records promise delivery on 2026-11-01 as 'Shipped', but Logistics Ticket API (2h freshness) and Vendor Risk feed (6h freshness) both report delivery delayed to 2026-11-14 due to a port strike chokepoint. The ERP export (15m freshness) has not yet ingested the logistics carrier exception event.",
+				"position": "Hey team, I ran a cross-silo comparison across our suppliers. We have a direct conflict on SUP-8021 (Acme Global): ERP records promise delivery on 2026-11-01 as 'Shipped', but Logistics Ticket API (2h freshness) and Vendor Risk feed (6h freshness) both report delivery delayed to 2026-11-14 due to a port strike. The ERP snapshot simply hasn't ingested the carrier exception yet. @CloudArchitect, how should our ingestion handle this freshness delta?",
 				"confidence_self": 0.88,
 				"confidence_expert_agreement": 0.82,
 				"evidence": [
@@ -28,7 +28,7 @@
 				"supports": []
 			},
 			{
-				"position": "Reconciled conclusion: SUP-8021 delivery date must be treated as 2026-11-14 (delayed by 13 days). We cite ERP for initial PO creation, Logistics API for operational delay status, and Vendor Risk for root cause verification. SUP-4419 is reconciled as fully delivered with unanimous 2-source agreement.",
+				"position": "Spot-on approach, @CloudArchitect. Citing ERP for the initial PO creation, Logistics API for operational delay status, and Vendor Risk for root cause verification settles it. SUP-8021 delivery date is officially treated as 2026-11-14 (delayed 13 days). Meanwhile, SUP-4419 is reconciled as fully delivered with unanimous 2-source agreement. Zero hallucinated timestamps.",
 				"confidence_self": 0.94,
 				"confidence_expert_agreement": 0.92,
 				"evidence": [
@@ -42,7 +42,7 @@
 		],
 		"CloudArchitect": [
 			{
-				"position": "Implement a federated reconciliation schema: attach source system provenance, record observation timestamps, and compute freshness confidence weights (Logistics API weight: 0.65 for shipment status vs ERP weight: 0.35 for dynamic transit). Avoid naïve overwrite.",
+				"position": "Good catch @FactChecker. Instead of a naive overwrite, let's establish a federated reconciliation schema: attach source system provenance, record observation timestamps, and compute freshness confidence weights (Logistics API weight 0.65 for shipment status vs ERP weight 0.35 for dynamic transit). @Synthesizer, this avoids silent data corruption.",
 				"confidence_self": 0.85,
 				"confidence_expert_agreement": 0.81,
 				"evidence": [
@@ -50,10 +50,10 @@
 					"Conflicting state on SUP-8021"
 				],
 				"caveats": ["API throttling on the ticket system could delay real-time alerts."],
-				"supports": []
+				"supports": ["FactChecker"]
 			},
 			{
-				"position": "Approve the multi-source reconciliation architecture. Establish automated bidirectional synchronization: flag the ERP record as pending revision, publish a webhook to warehouse ops, and log cryptographic audit hashes of all three source payloads.",
+				"position": "Approved from the infrastructure side, @FactChecker. I have added automated bidirectional sync to our signed policy contract: flag the ERP record as pending revision, publish a webhook to warehouse ops, and log cryptographic audit hashes of all three source payloads.",
 				"confidence_self": 0.93,
 				"confidence_expert_agreement": 0.91,
 				"evidence": [
@@ -67,7 +67,7 @@
 		],
 		"Synthesizer": [
 			{
-				"position": "Synthesizing cross-silo records: SUP-8021 exhibits an active data divergence. Recommending a single sourced answer: mark delivery as delayed to 2026-11-14 with high operational risk, clearly citing the Logistics and Risk sources while noting the ERP latency gap.",
+				"position": "Great collaboration @FactChecker and @CloudArchitect. Synthesizing the cross-silo records: SUP-8021 clearly exhibits an active data divergence. Recommending a single sourced answer: mark delivery as delayed to 2026-11-14 with high operational risk, clearly citing Logistics and Risk feeds while documenting the ERP snapshot lag.",
 				"confidence_self": 0.87,
 				"confidence_expert_agreement": 0.85,
 				"evidence": [
@@ -75,10 +75,10 @@
 					"SUP-4419 validated across 2 independent silos"
 				],
 				"caveats": ["Missing ERP warehouse acknowledgement."],
-				"supports": []
+				"supports": ["FactChecker", "CloudArchitect"]
 			},
 			{
-				"position": "Final Sourced Consensus: Successfully reconciled fragmented intelligence across ERP, Ticket API, and Risk feeds. Established canonical status for SUP-8021 (Delayed to 2026-11-14, High Risk) and SUP-4419 (Delivered, Zero Risk). Every fact is explicitly attributed to its origin silo with zero hallucination of missing intermediate dates.",
+				"position": "We have reached calibrated consensus! Final Sourced Agreement: Successfully reconciled fragmented intelligence across ERP, Ticket API, and Risk feeds. Established canonical status for SUP-8021 (Delayed to 2026-11-14, High Risk) and SUP-4419 (Delivered, Zero Risk). Every fact is explicitly attributed to its origin silo with zero hallucination. Handing off to the Orchestrator.",
 				"confidence_self": 0.95,
 				"confidence_expert_agreement": 0.94,
 				"evidence": [

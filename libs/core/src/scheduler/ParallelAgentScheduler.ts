@@ -6,6 +6,41 @@ import type { HandoffMessage, WorkflowRun, WorkflowState, ExecutionPlan, Interve
 import type { AgentMessage } from "../debate/AgentMessage";
 
 // ============================================================
+// Parallel proposal scheduling contracts
+// ============================================================
+
+export interface ParallelProposalTask<T = AgentMessage> {
+	seatId: string;
+	task?: string;
+	round?: number;
+	execute: () => Promise<T>;
+	timeoutMs?: number;
+	priority?: number;
+}
+
+export interface ParallelProposalResult<T = AgentMessage> {
+	seatId: string;
+	message?: T;
+	value?: T;
+	timedOut: boolean;
+	status: "COMPLETED" | "FAILED" | "TIMED_OUT";
+	error?: Error;
+	durationMs: number;
+}
+
+export interface ParallelSchedulerOptions {
+	maxConcurrency?: number;
+	defaultTimeoutMs?: number;
+}
+
+export interface IParallelAgentScheduler {
+	executeParallelProposals<T = AgentMessage>(
+		tasks: ParallelProposalTask<T>[],
+		options?: ParallelSchedulerOptions,
+	): Promise<Map<string, ParallelProposalResult<T>>>;
+}
+
+// ============================================================
 // Agent task descriptor
 // ============================================================
 
@@ -57,7 +92,7 @@ interface SchedulerMetrics {
 export class ParallelAgentScheduler {
 	private state: SchedulerState = "IDLE";
 	private tasks: Map<string, ScheduledAgent> = new Map();
-	private eventEmitter: AuditTrailEmitter;
+	private eventEmitter?: AuditTrailEmitter;
 	private metrics: SchedulerMetrics = {
 		totalAgents: 0,
 		completedAgents: 0,
@@ -68,8 +103,31 @@ export class ParallelAgentScheduler {
 	private runningAgents: Set<string> = new Set();
 	private timeoutHandlers: Map<string, any> = new Map();
 
-	constructor(eventEmitter: AuditTrailEmitter) {
+	constructor(eventEmitter?: AuditTrailEmitter) {
 		this.eventEmitter = eventEmitter;
+	}
+
+	private emitAudit(
+		eventType: string,
+		payload: Record<string, unknown>,
+		sessionId = "scheduler",
+	): void {
+		if (!this.eventEmitter) return;
+		try {
+			const event = {
+				event_type: eventType as any,
+				session_id: sessionId,
+				timestamp: Date.now(),
+				payload,
+			};
+			if (typeof (this.eventEmitter as any).emitEvent === "function") {
+				(this.eventEmitter as any).emitEvent(event);
+			} else if (typeof (this.eventEmitter as any).emit === "function") {
+				(this.eventEmitter as any).emit(event);
+			}
+		} catch {
+			// never let audit emission break scheduler execution
+		}
 	}
 
 	// Map the agent dependency graph from workflow state
@@ -286,12 +344,7 @@ export class ParallelAgentScheduler {
 		}
 
 		const eventType = `agent_${event}`;
-		(this.eventEmitter as any).emit({
-			event_type: eventType,
-			session_id: "scheduler",
-			timestamp: Date.now(),
-			payload,
-		});
+		this.emitAudit(eventType, payload);
 	}
 
 	private checkProgression(): void {
@@ -378,24 +431,147 @@ export class ParallelAgentScheduler {
 
 	// Emit completion event
 	private emitCompletion(): void {
-		(this.eventEmitter as any).emit({
-			event_type: "scheduler_complete",
-			session_id: "scheduler",
-			timestamp: Date.now(),
-			payload: {
-				total_agents: this.metrics.totalAgents,
-				completed: this.metrics.completedAgents,
-				failed: this.metrics.failedAgents,
-				cancelled: this.metrics.cancelledAgents,
-			},
+		this.emitAudit("scheduler_complete", {
+			total_agents: this.metrics.totalAgents,
+			completed: this.metrics.completedAgents,
+			failed: this.metrics.failedAgents,
+			cancelled: this.metrics.cancelledAgents,
 		});
+	}
+
+	/**
+	 * Concurrently execute proposal tasks across agent seats with bounded concurrency,
+	 * per-agent timeout races, and lifecycle audit event emissions.
+	 */
+	async executeParallelProposals<T = AgentMessage>(
+		tasks: ParallelProposalTask<T>[],
+		options: ParallelSchedulerOptions = {},
+	): Promise<Map<string, ParallelProposalResult<T>>> {
+		const maxConcurrency = Math.max(1, options.maxConcurrency ?? 4);
+		const defaultTimeoutMs = options.defaultTimeoutMs ?? 10000;
+		const results = new Map<string, ParallelProposalResult<T>>();
+
+		this.emitAudit("scheduler_start", {
+			total_tasks: tasks.length,
+			max_concurrency: maxConcurrency,
+		});
+
+		if (tasks.length === 0) {
+			this.emitAudit("scheduler_complete", {
+				total_tasks: 0,
+				completed: 0,
+				timed_out: 0,
+				failed: 0,
+			});
+			return results;
+		}
+
+		const executing = new Set<Promise<void>>();
+
+		for (const task of tasks) {
+			const runner = async () => {
+				const startTime = Date.now();
+				this.emitAudit("agent_start", {
+					seat_id: task.seatId,
+					round: task.round ?? 0,
+				});
+
+				const timeoutMs = task.timeoutMs ?? defaultTimeoutMs;
+				let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+
+				const timeoutPromise = new Promise<never>((_, reject) => {
+					timeoutHandle = setTimeout(() => {
+						reject(new Error(`PROPOSAL_TIMEOUT:${task.seatId}:${timeoutMs}ms`));
+					}, timeoutMs);
+				});
+				timeoutPromise.catch(() => {});
+
+				try {
+					const taskPromise = Promise.resolve().then(() => task.execute());
+					const message = await Promise.race([
+						taskPromise,
+						timeoutPromise,
+					]);
+
+					const durationMs = Date.now() - startTime;
+					results.set(task.seatId, {
+						seatId: task.seatId,
+						message,
+						value: message,
+						timedOut: false,
+						status: "COMPLETED",
+						durationMs,
+					});
+					this.emitAudit("agent_complete", {
+						seat_id: task.seatId,
+						duration_ms: durationMs,
+					});
+				} catch (err: any) {
+					const durationMs = Date.now() - startTime;
+					const isTimeout =
+						err?.message?.includes("PROPOSAL_TIMEOUT") ||
+						err?.code === "ETIMEDOUT" ||
+						err?.name === "TimeoutError";
+
+					const errorObj = err instanceof Error ? err : new Error(String(err));
+
+					results.set(task.seatId, {
+						seatId: task.seatId,
+						timedOut: Boolean(isTimeout),
+						status: isTimeout ? "TIMED_OUT" : "FAILED",
+						error: errorObj,
+						durationMs,
+					});
+
+					this.emitAudit(isTimeout ? "agent_timeout" : "agent_fail", {
+						seat_id: task.seatId,
+						error: errorObj.message,
+						duration_ms: durationMs,
+					});
+				} finally {
+					if (timeoutHandle) {
+						clearTimeout(timeoutHandle);
+					}
+				}
+			};
+
+			const p: Promise<void> = runner().finally(() => {
+				executing.delete(p);
+			});
+			executing.add(p);
+
+			if (executing.size >= maxConcurrency) {
+				await Promise.race(executing);
+			}
+		}
+
+		await Promise.all(executing);
+
+		const completedCount = Array.from(results.values()).filter(
+			(r) => r.status === "COMPLETED",
+		).length;
+		const timedOutCount = Array.from(results.values()).filter(
+			(r) => r.status === "TIMED_OUT",
+		).length;
+		const failedCount = Array.from(results.values()).filter(
+			(r) => r.status === "FAILED",
+		).length;
+
+		this.emitAudit("scheduler_complete", {
+			total_tasks: tasks.length,
+			completed: completedCount,
+			timed_out: timedOutCount,
+			failed: failedCount,
+		});
+
+		return results;
 	}
 }
 
 // Export a convenience factory so the orchestrator can wire it up without
 // needing to construct the emitter itself.
 export function createScheduler(
-	auditEmitter: AuditTrailEmitter,
+	auditEmitter?: AuditTrailEmitter,
 ): ParallelAgentScheduler {
 	return new ParallelAgentScheduler(auditEmitter);
 }

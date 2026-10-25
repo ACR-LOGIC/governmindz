@@ -12,6 +12,7 @@ export interface HMemEntry {
 	confidence: number;
 	createdAt: number;
 	updatedAt: number;
+	tags?: string[];
 	derivedFrom?: string[];
 	relatedTo?: string[];
 }
@@ -152,5 +153,78 @@ export class HMemService {
 
 	count(): number {
 		return this.entries.length;
+	}
+
+	recordFeedback(
+		sessionId: string,
+		messageId: string,
+		seatId: string,
+		rating: "up" | "down",
+	): HMemEntry | null {
+		// Look up matching entries
+		let matches = this.entries.filter(
+			(e) =>
+				(messageId && e.id === messageId) ||
+				(sessionId &&
+					e.source === sessionId &&
+					(e.category === seatId || e.category === "summary" || !seatId)),
+		);
+
+		if (matches.length === 0 && (sessionId || messageId)) {
+			matches = this.entries.filter(
+				(e) =>
+					(sessionId && e.source === sessionId) ||
+					(messageId && e.id === messageId),
+			);
+		}
+
+		if (matches.length === 0) {
+			const now = Date.now();
+			const entry: HMemEntry = {
+				id: messageId || randomUUID(),
+				domain: deriveDomain(seatId || "governance"),
+				category: seatId || "feedback",
+				trace: `Feedback ${rating} for ${seatId}`,
+				episode: `Feedback ${rating} recorded for seat ${seatId} in session ${sessionId}`,
+				source: sessionId || "unknown",
+				confidence: rating === "up" ? 0.9 : 0.6,
+				createdAt: now,
+				updatedAt: now,
+				tags: [rating === "up" ? "approved_precedent" : "disputed_precedent"],
+			};
+			this.entries.push(entry);
+			if (this.entries.length > 500) {
+				this.entries = this.entries.slice(this.entries.length - 500);
+			}
+			this.save();
+			return entry;
+		}
+
+		for (const e of matches) {
+			e.tags = e.tags || [];
+			if (rating === "up") {
+				e.tags = e.tags.filter((t) => t !== "disputed_precedent");
+				if (!e.tags.includes("approved_precedent")) {
+					e.tags.push("approved_precedent");
+				}
+				e.confidence = Math.min(
+					1.0,
+					Math.max(0.1, Math.round((e.confidence + 0.1) * 100) / 100),
+				);
+			} else {
+				e.tags = e.tags.filter((t) => t !== "approved_precedent");
+				if (!e.tags.includes("disputed_precedent")) {
+					e.tags.push("disputed_precedent");
+				}
+				e.confidence = Math.min(
+					1.0,
+					Math.max(0.1, Math.round((e.confidence - 0.2) * 100) / 100),
+				);
+			}
+			e.updatedAt = Date.now();
+		}
+
+		this.save();
+		return matches.find((m) => m.category === seatId) || matches[0] || null;
 	}
 }

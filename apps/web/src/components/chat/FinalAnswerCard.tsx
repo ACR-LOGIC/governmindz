@@ -207,6 +207,109 @@ export const FinalAnswerCard: React.FC<FinalAnswerCardProps> = ({
 					</div>
 				)}
 
+				{/* ============================================================ */}
+				{/* PRIMARY AUTHORITATIVE DELIVERABLE & ARTIFACT RELEASE CARD */}
+				{/* ============================================================ */}
+				{convData.primaryArtifact && (
+					<div className="my-5 p-4 rounded-xl bg-gradient-to-br from-[#1c2237] via-[#151a2d] to-[#0f1322] border-2 border-emerald-500/70 shadow-xl relative overflow-hidden">
+						<div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
+
+						<div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+							<div className="flex items-center gap-2.5">
+								<div className="w-9 h-9 rounded-lg bg-emerald-500/20 border border-emerald-500/50 flex items-center justify-center text-emerald-400">
+									{convData.primaryArtifact.format === "pptx" ? (
+										<Presentation className="w-5 h-5 text-amber-400" />
+									) : convData.primaryArtifact.format === "csv" ? (
+										<FileSpreadsheet className="w-5 h-5 text-emerald-400" />
+									) : convData.primaryArtifact.format === "svg" ? (
+										<GitFork className="w-5 h-5 text-teal-400" />
+									) : (
+										<FileText className="w-5 h-5 text-rose-400" />
+									)}
+								</div>
+								<div>
+									<div className="flex items-center gap-2">
+										<h4 className="font-display font-bold text-sm text-white">
+											{convData.primaryArtifact.title}
+										</h4>
+										<span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 uppercase">
+											{convData.primaryArtifact.format.toUpperCase()} Deliverable
+										</span>
+										<span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+											Supervisor Approved
+										</span>
+									</div>
+									<div className="text-xs text-slate-300 mt-0.5">
+										{convData.primaryArtifact.summary}
+									</div>
+								</div>
+							</div>
+
+							<div className="flex items-center gap-2">
+								<a
+									href={convData.primaryArtifact.viewUrl}
+									target="_blank"
+									rel="noreferrer"
+									className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs shadow-md transition-all active:scale-95"
+								>
+									<CheckCircle2 className="w-4 h-4 text-slate-950" />
+									<span>View / Open File</span>
+								</a>
+
+								<a
+									href={convData.primaryArtifact.downloadUrl}
+									download
+									className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#253252] hover:bg-[#304068] border border-[#3c4e7d] text-white font-semibold text-xs transition-all shadow-sm"
+								>
+									<Download className="w-3.5 h-3.5 text-emerald-400" />
+									<span>Download ({Math.round(convData.primaryArtifact.sizeBytes / 1024) || 1} KB)</span>
+								</a>
+							</div>
+						</div>
+
+						{/* Delivery Workflow Stage Progression */}
+						<div className="mt-3 pt-3 border-t border-[#2d3a5a] grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono text-slate-400">
+							<div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+								<Check className="w-3.5 h-3.5" />
+								<span>1. Research Complete</span>
+							</div>
+							<div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+								<Check className="w-3.5 h-3.5" />
+								<span>2. Reasoning Verified</span>
+							</div>
+							<div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+								<Check className="w-3.5 h-3.5" />
+								<span>3. Artifact Created</span>
+							</div>
+							<div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+								<Check className="w-3.5 h-3.5" />
+								<span>4. Delivery Released</span>
+							</div>
+						</div>
+
+						{/* Supplementary Evidence Export link */}
+						{convData.evidenceExport && (
+							<div className="mt-2.5 pt-2 border-t border-[#242e47] flex items-center justify-between text-xs text-slate-400">
+								<span>
+									Supporting Evidence Export:{" "}
+									<span className="text-slate-300 font-mono text-[11px]">
+										{convData.evidenceExport.filename}
+									</span>{" "}
+									(strictly supplementary)
+								</span>
+								<a
+									href={convData.evidenceExport.downloadUrl}
+									download
+									className="text-amber-400 hover:text-amber-300 underline font-semibold flex items-center gap-1 text-[11.5px]"
+								>
+									<Download className="w-3 h-3" />
+									<span>Download Evidence Export (JSON)</span>
+								</a>
+							</div>
+						)}
+					</div>
+				)}
+
 				{message.structured?.caveats && message.structured.caveats.length > 0 && (
 					<div className="mb-4">
 						<div className="text-[11px] font-mono uppercase tracking-wider text-amber-400 mb-1.5 flex items-center gap-1.5">

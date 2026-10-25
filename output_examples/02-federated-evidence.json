@@ -1,6 +1,6 @@
 {
   "mode": "sample",
-  "generated_at": "2026-10-22T13:00:15.407Z",
+  "generated_at": "2026-10-25T23:52:31.697Z",
   "scenario_id": "federated-evidence",
   "scenario_file": "02-federated-evidence.json",
   "topic": "How should an agent combine fragmented Zetaris sources into an evidence-backed answer without inventing missing data?",
@@ -31,18 +31,18 @@
     "total": 3
   },
   "result": {
-    "session_id": "d4004561-9e8c-4075-b03c-be3542fdb461",
-    "query_hash": "qh_mvjjtmzv",
+    "session_id": "cfc4ad5b-048f-4e7c-9c11-d0af51f2650a",
+    "query_hash": "qh_mvohg0py",
     "transcript": [
       {
-        "id": "3bb2c10b-a99a-49c4-b115-80724a20832a",
+        "id": "af34ac36-c17a-4701-b771-906ad4ce926a",
         "fromSeat": "FactChecker",
         "toSeat": "all",
         "type": "proposal",
-        "content": "Name the source and freshness beside every claim. The cached evidence lists three sources with different freshness windows, so a combined answer must not imply they were observed at the same time.",
+        "content": "Hey team, looking across our Zetaris sources: we need to state the origin and freshness beside every single claim. We have crm_lightning (15m), billing_lightning (1h), and support_lightning (24h). We cannot imply they were observed at the same moment. @CloudArchitect, how should our context builder structure this?",
         "confidence": 0.8,
         "structured": {
-          "position": "Name the source and freshness beside every claim. The cached evidence lists three sources with different freshness windows, so a combined answer must not imply they were observed at the same time.",
+          "position": "Hey team, looking across our Zetaris sources: we need to state the origin and freshness beside every single claim. We have crm_lightning (15m), billing_lightning (1h), and support_lightning (24h). We cannot imply they were observed at the same moment. @CloudArchitect, how should our context builder structure this?",
           "confidenceSelf": 0.8,
           "confidence_self": 0.8,
           "confidenceExpertAgreement": 0.77,
@@ -61,19 +61,45 @@
           "supports": []
         },
         "round": 0,
-        "timestamp": 1792674015399,
-        "latency_ms": 2,
-        "token_count": 71
+        "timestamp": 1792972344616,
+        "latency_ms": 2002,
+        "token_count": 101,
+        "envelope": {
+          "schemaVersion": "1.0",
+          "message": {
+            "type": "proposal",
+            "text": "Hey team, looking across our Zetaris sources: we need to state the origin and freshness beside every single claim. We have crm_lightning (15m), billing_lightning (1h), and support_lightning (24h). We cannot imply they were observed at the same moment. @CloudArchitect, how should our context builder structure this?"
+          },
+          "result": {
+            "conclusion": "Hey team, looking across our Zetaris sources: we need to state the origin and freshness beside every single claim. We have crm_lightning (15m), billing_lightning (1h), and support_lightning (24h). We cannot imply they were observed at the same moment. @CloudArchitect, how should our context builder structure this?",
+            "confidence": 0.8,
+            "evidenceIds": [
+              "ev-1",
+              "ev-2",
+              "ev-3"
+            ],
+            "unresolvedQuestions": [
+              "Freshness labels do not prove row-level completeness."
+            ]
+          },
+          "execution": {
+            "taskId": "af34ac36-c17a-4701-b771-906ad4ce926a",
+            "status": "completed",
+            "round": 0,
+            "latency_ms": 2002,
+            "auditRef": "af34ac36-c17a-4701-b771-906ad4ce926a"
+          }
+        }
       },
       {
-        "id": "eb9f5644-05dd-4a50-9237-ac7eba2b5be4",
+        "id": "da819a0c-4f61-4d3c-ac68-9ae0eb4df43e",
         "fromSeat": "CloudArchitect",
         "toSeat": "all",
         "type": "proposal",
-        "content": "Build an evidence envelope: source id, query, timestamp, freshness, columns, and row counts. The debate should consume that envelope instead of raw disconnected rows.",
+        "content": "I agree, @FactChecker. Let's construct a normalized evidence envelope with source id, query, observation timestamp, freshness, columns, and row counts. The team should consume that bounded envelope rather than raw disconnected rows. @Synthesizer, this keeps our trust boundaries intact.",
         "confidence": 0.81,
         "structured": {
-          "position": "Build an evidence envelope: source id, query, timestamp, freshness, columns, and row counts. The debate should consume that envelope instead of raw disconnected rows.",
+          "position": "I agree, @FactChecker. Let's construct a normalized evidence envelope with source id, query, observation timestamp, freshness, columns, and row counts. The team should consume that bounded envelope rather than raw disconnected rows. @Synthesizer, this keeps our trust boundaries intact.",
           "confidenceSelf": 0.81,
           "confidence_self": 0.81,
           "confidenceExpertAgreement": 0.78,
@@ -88,22 +114,49 @@
           "outputs": [],
           "dissentsFrom": [],
           "dissents_from": [],
-          "supports": []
+          "supports": [
+            "FactChecker"
+          ]
         },
         "round": 0,
-        "timestamp": 1792674015400,
-        "latency_ms": 1,
-        "token_count": 66
+        "timestamp": 1792972344616,
+        "latency_ms": 2002,
+        "token_count": 96,
+        "envelope": {
+          "schemaVersion": "1.0",
+          "message": {
+            "type": "proposal",
+            "text": "I agree, @FactChecker. Let's construct a normalized evidence envelope with source id, query, observation timestamp, freshness, columns, and row counts. The team should consume that bounded envelope rather than raw disconnected rows. @Synthesizer, this keeps our trust boundaries intact."
+          },
+          "result": {
+            "conclusion": "I agree, @FactChecker. Let's construct a normalized evidence envelope with source id, query, observation timestamp, freshness, columns, and row counts. The team should consume that bounded envelope rather than raw disconnected rows. @Synthesizer, this keeps our trust boundaries intact.",
+            "confidence": 0.81,
+            "evidenceIds": [
+              "ev-1",
+              "ev-2"
+            ],
+            "unresolvedQuestions": [
+              "The current context formatter does not include freshness metadata automatically."
+            ]
+          },
+          "execution": {
+            "taskId": "da819a0c-4f61-4d3c-ac68-9ae0eb4df43e",
+            "status": "completed",
+            "round": 0,
+            "latency_ms": 2002,
+            "auditRef": "da819a0c-4f61-4d3c-ac68-9ae0eb4df43e"
+          }
+        }
       },
       {
-        "id": "dff2b7aa-1e5c-4583-9c52-0a64be5073f4",
+        "id": "08754502-5a4a-45e0-8258-b9614b45b3e8",
         "fromSeat": "Synthesizer",
         "toSeat": "all",
         "type": "proposal",
-        "content": "The safe answer is to present source-level findings, label freshness, and separate observed facts from cross-source inferences.",
+        "content": "Solid alignment @FactChecker and @CloudArchitect. The safe approach is presenting source-level findings, clearly labeling freshness, and separating directly observed facts from cross-source inferences.",
         "confidence": 0.84,
         "structured": {
-          "position": "The safe answer is to present source-level findings, label freshness, and separate observed facts from cross-source inferences.",
+          "position": "Solid alignment @FactChecker and @CloudArchitect. The safe approach is presenting source-level findings, clearly labeling freshness, and separating directly observed facts from cross-source inferences.",
           "confidenceSelf": 0.84,
           "confidence_self": 0.84,
           "confidenceExpertAgreement": 0.82,
@@ -118,22 +171,95 @@
           "outputs": [],
           "dissentsFrom": [],
           "dissents_from": [],
-          "supports": []
+          "supports": [
+            "FactChecker",
+            "CloudArchitect"
+          ]
         },
         "round": 0,
-        "timestamp": 1792674015400,
-        "latency_ms": 0,
-        "token_count": 49
+        "timestamp": 1792972344617,
+        "latency_ms": 2003,
+        "token_count": 68,
+        "envelope": {
+          "schemaVersion": "1.0",
+          "message": {
+            "type": "proposal",
+            "text": "Solid alignment @FactChecker and @CloudArchitect. The safe approach is presenting source-level findings, clearly labeling freshness, and separating directly observed facts from cross-source inferences."
+          },
+          "result": {
+            "conclusion": "Solid alignment @FactChecker and @CloudArchitect. The safe approach is presenting source-level findings, clearly labeling freshness, and separating directly observed facts from cross-source inferences.",
+            "confidence": 0.84,
+            "evidenceIds": [
+              "ev-1",
+              "ev-2"
+            ],
+            "unresolvedQuestions": [
+              "The sample is synthetic and does not include source schemas."
+            ]
+          },
+          "execution": {
+            "taskId": "08754502-5a4a-45e0-8258-b9614b45b3e8",
+            "status": "completed",
+            "round": 0,
+            "latency_ms": 2003,
+            "auditRef": "08754502-5a4a-45e0-8258-b9614b45b3e8"
+          }
+        }
       },
       {
-        "id": "41814b76-eda3-469f-85ec-8e96a00480c6",
+        "id": "thinker-q-0-1792972345129",
+        "fromSeat": "Thinker",
+        "toSeat": "all",
+        "type": "action_items",
+        "content": "@FactChecker @CloudArchitect — Before we lock in consensus, what are our secondary access review procedures and retention schedules for the confidential finance_demo source? Are there policy override exceptions we need to document?",
+        "structured": {
+          "position": "@FactChecker @CloudArchitect — Before we lock in consensus, what are our secondary access review procedures and retention schedules for the confidential finance_demo source? Are there policy override exceptions we need to document?",
+          "confidenceSelf": 0.7,
+          "confidence_self": 0.7,
+          "confidenceExpertAgreement": 0.7,
+          "confidence_expert_agreement": 0.7,
+          "evidence": [],
+          "caveats": [
+            "Unexplored governance angle: retention schedules and access review audit frequencies."
+          ],
+          "dissents_from": [],
+          "supports": [
+            "FactChecker",
+            "CloudArchitect"
+          ]
+        },
+        "confidence": 0.7,
+        "round": 0,
+        "timestamp": 1792972345129,
+        "envelope": {
+          "schemaVersion": "1.0",
+          "message": {
+            "type": "action_items",
+            "text": "@FactChecker @CloudArchitect — Before we lock in consensus, what are our secondary access review procedures and retention schedules for the confidential finance_demo source? Are there policy override exceptions we need to document?"
+          },
+          "result": {
+            "conclusion": "@FactChecker @CloudArchitect — Before we lock in consensus, what are our secondary access review procedures and retention schedules for the confidential finance_demo source? Are there policy override exceptions we need to document?",
+            "confidence": 0.7,
+            "evidenceIds": [],
+            "unresolvedQuestions": []
+          },
+          "execution": {
+            "taskId": "thinker-q-0-1792972345129",
+            "status": "completed",
+            "round": 0,
+            "auditRef": "thinker-q-0-1792972345129"
+          }
+        }
+      },
+      {
+        "id": "669315f9-b417-4dcd-ac30-6cb3d14861be",
         "fromSeat": "FactChecker",
         "toSeat": "all",
         "type": "consensus",
-        "content": "The evidence supports a provenance-first answer: cite each source separately, state its freshness, and mark any cross-source conclusion as an inference rather than a directly observed fact.",
+        "content": "Exactly right, @CloudArchitect. The evidence firmly supports a provenance-first answer: cite each source separately, explicitly state its freshness window, and mark any cross-source conclusion as an inference rather than a directly observed fact.",
         "confidence": 0.89,
         "structured": {
-          "position": "The evidence supports a provenance-first answer: cite each source separately, state its freshness, and mark any cross-source conclusion as an inference rather than a directly observed fact.",
+          "position": "Exactly right, @CloudArchitect. The evidence firmly supports a provenance-first answer: cite each source separately, explicitly state its freshness window, and mark any cross-source conclusion as an inference rather than a directly observed fact.",
           "confidenceSelf": 0.89,
           "confidence_self": 0.89,
           "confidenceExpertAgreement": 0.87,
@@ -153,19 +279,44 @@
           ]
         },
         "round": 1,
-        "timestamp": 1792674015402,
-        "latency_ms": 1,
-        "token_count": 70
+        "timestamp": 1792972347132,
+        "latency_ms": 2002,
+        "token_count": 84,
+        "envelope": {
+          "schemaVersion": "1.0",
+          "message": {
+            "type": "consensus",
+            "text": "Exactly right, @CloudArchitect. The evidence firmly supports a provenance-first answer: cite each source separately, explicitly state its freshness window, and mark any cross-source conclusion as an inference rather than a directly observed fact."
+          },
+          "result": {
+            "conclusion": "Exactly right, @CloudArchitect. The evidence firmly supports a provenance-first answer: cite each source separately, explicitly state its freshness window, and mark any cross-source conclusion as an inference rather than a directly observed fact.",
+            "confidence": 0.89,
+            "evidenceIds": [
+              "ev-1",
+              "ev-2"
+            ],
+            "unresolvedQuestions": [
+              "A real join may require keys that are not in this evidence."
+            ]
+          },
+          "execution": {
+            "taskId": "669315f9-b417-4dcd-ac30-6cb3d14861be",
+            "status": "completed",
+            "round": 1,
+            "latency_ms": 2002,
+            "auditRef": "669315f9-b417-4dcd-ac30-6cb3d14861be"
+          }
+        }
       },
       {
-        "id": "3124df76-3872-4be4-803c-5e5595aeba9e",
+        "id": "8d650e24-ab14-42d1-b4e6-36b7f0005700",
         "fromSeat": "CloudArchitect",
         "toSeat": "all",
         "type": "consensus",
-        "content": "Use a source-aware context builder, preserve per-source attribution in the transcript, and make the synthesizer return explicit gaps. Do not merge sources unless a documented key and freshness window support the join.",
+        "content": "I have codified that into our architectural design: use a source-aware context builder, preserve per-source attribution in the transcript, and return explicit gaps. Never merge sources unless a documented join key and freshness window support it.",
         "confidence": 0.9,
         "structured": {
-          "position": "Use a source-aware context builder, preserve per-source attribution in the transcript, and make the synthesizer return explicit gaps. Do not merge sources unless a documented key and freshness window support the join.",
+          "position": "I have codified that into our architectural design: use a source-aware context builder, preserve per-source attribution in the transcript, and return explicit gaps. Never merge sources unless a documented join key and freshness window support it.",
           "confidenceSelf": 0.9,
           "confidence_self": 0.9,
           "confidenceExpertAgreement": 0.88,
@@ -185,19 +336,44 @@
           ]
         },
         "round": 1,
-        "timestamp": 1792674015402,
-        "latency_ms": 0,
-        "token_count": 76
+        "timestamp": 1792972349136,
+        "latency_ms": 2004,
+        "token_count": 83,
+        "envelope": {
+          "schemaVersion": "1.0",
+          "message": {
+            "type": "consensus",
+            "text": "I have codified that into our architectural design: use a source-aware context builder, preserve per-source attribution in the transcript, and return explicit gaps. Never merge sources unless a documented join key and freshness window support it."
+          },
+          "result": {
+            "conclusion": "I have codified that into our architectural design: use a source-aware context builder, preserve per-source attribution in the transcript, and return explicit gaps. Never merge sources unless a documented join key and freshness window support it.",
+            "confidence": 0.9,
+            "evidenceIds": [
+              "ev-1",
+              "ev-2"
+            ],
+            "unresolvedQuestions": [
+              "Schema-level key discovery is a next step, not part of this demo."
+            ]
+          },
+          "execution": {
+            "taskId": "8d650e24-ab14-42d1-b4e6-36b7f0005700",
+            "status": "completed",
+            "round": 1,
+            "latency_ms": 2004,
+            "auditRef": "8d650e24-ab14-42d1-b4e6-36b7f0005700"
+          }
+        }
       },
       {
-        "id": "c428b899-db1c-46f8-a72f-a1b82d24d6f0",
+        "id": "d6cc5106-844b-46d6-bc7d-031a79e53c63",
         "fromSeat": "Synthesizer",
         "toSeat": "all",
         "type": "consensus",
-        "content": "Recommended pattern: attribute every claim to a source, include freshness and query metadata, and return a gaps section when a join key or source is missing. The debate can still recommend a direction, but it must not fabricate a unified record.",
+        "content": "We have reached calibrated consensus! Recommended council pattern: attribute every claim to its source, include freshness and query metadata, and return a gaps section when a join key is missing. Zero data fabrication. Handing off to the Orchestrator.",
         "confidence": 0.91,
         "structured": {
-          "position": "Recommended pattern: attribute every claim to a source, include freshness and query metadata, and return a gaps section when a join key or source is missing. The debate can still recommend a direction, but it must not fabricate a unified record.",
+          "position": "We have reached calibrated consensus! Recommended council pattern: attribute every claim to its source, include freshness and query metadata, and return a gaps section when a join key is missing. Zero data fabrication. Handing off to the Orchestrator.",
           "confidenceSelf": 0.91,
           "confidence_self": 0.91,
           "confidenceExpertAgreement": 0.89,
@@ -219,39 +395,156 @@
           ]
         },
         "round": 1,
-        "timestamp": 1792674015402,
-        "latency_ms": 0,
-        "token_count": 92
+        "timestamp": 1792972351139,
+        "latency_ms": 2003,
+        "token_count": 94,
+        "envelope": {
+          "schemaVersion": "1.0",
+          "message": {
+            "type": "consensus",
+            "text": "We have reached calibrated consensus! Recommended council pattern: attribute every claim to its source, include freshness and query metadata, and return a gaps section when a join key is missing. Zero data fabrication. Handing off to the Orchestrator."
+          },
+          "result": {
+            "conclusion": "We have reached calibrated consensus! Recommended council pattern: attribute every claim to its source, include freshness and query metadata, and return a gaps section when a join key is missing. Zero data fabrication. Handing off to the Orchestrator.",
+            "confidence": 0.91,
+            "evidenceIds": [
+              "ev-1",
+              "ev-2",
+              "ev-3"
+            ],
+            "unresolvedQuestions": [
+              "Production joins need schema discovery and data-quality checks."
+            ]
+          },
+          "execution": {
+            "taskId": "d6cc5106-844b-46d6-bc7d-031a79e53c63",
+            "status": "completed",
+            "round": 1,
+            "latency_ms": 2003,
+            "auditRef": "d6cc5106-844b-46d6-bc7d-031a79e53c63"
+          }
+        }
+      },
+      {
+        "id": "uncertainty-report-1792972351654",
+        "fromSeat": "RivalChallenger",
+        "toSeat": "all",
+        "type": "escalation",
+        "content": "Unresolved interventions escalated: Thinker(Probed critical contingency protocol and retention boundaries.). Final answer carries residual uncertainty.",
+        "structured": {
+          "position": "Unresolved interventions escalated: Thinker(Probed critical contingency protocol and retention boundaries.). Final answer carries residual uncertainty.",
+          "confidenceSelf": 0.5,
+          "confidence_self": 0.5,
+          "confidenceExpertAgreement": 0.5,
+          "confidence_expert_agreement": 0.5,
+          "evidence": [],
+          "caveats": [
+            "Thinker(Probed critical contingency protocol and retention boundaries.)"
+          ],
+          "dissents_from": [],
+          "supports": []
+        },
+        "confidence": 0.5,
+        "round": 1,
+        "timestamp": 1792972351654,
+        "envelope": {
+          "schemaVersion": "1.0",
+          "message": {
+            "type": "escalation",
+            "text": "Unresolved interventions escalated: Thinker(Probed critical contingency protocol and retention boundaries.). Final answer carries residual uncertainty."
+          },
+          "result": {
+            "conclusion": "Unresolved interventions escalated: Thinker(Probed critical contingency protocol and retention boundaries.). Final answer carries residual uncertainty.",
+            "confidence": 0.5,
+            "evidenceIds": [],
+            "unresolvedQuestions": []
+          },
+          "execution": {
+            "taskId": "uncertainty-report-1792972351654",
+            "status": "completed",
+            "round": 1,
+            "auditRef": "uncertainty-report-1792972351654"
+          }
+        }
+      },
+      {
+        "id": "supervisor-final-1792972351691",
+        "fromSeat": "Supervisor",
+        "toSeat": "all",
+        "type": "summary",
+        "content": "**Report completed: GovernMindz Decision: How should an agent combine fragmented Zetaris sou**\nThe report covers:\n- **Key findings and conclusions:** We have reached calibrated consensus! Recommended council pattern: attribute every claim to its source, include freshness and query metadata, and return a gaps section when a join key is missing. Zero data fabrication. H...\n- **Supporting evidence:** Reconciled 4 database findings across Zetaris Lightning and verified 5 authoritative external citations.\n- **Adversarial & multi-agent verification:** Independent review by Hater, Fact Checker, and Thinker passed with 80.0% calibrated confidence.\n- **Recommendations & next steps:** Documented actionable governance safeguards with tamper-evident audit lineage.\n**[View or download the report](/api/artifacts/how-should-an-agent-combine-frag-briefing.pdf)**\nOptional: **[Supporting evidence export](/api/artifacts/how-should-an-agent-combine-frag-briefing-evidence.json?download=true)** — Supplementary research data and cryptographic proof (kept separate from primary deliverable).",
+        "structured": {
+          "position": "**Report completed: GovernMindz Decision: How should an agent combine fragmented Zetaris sou**\nThe report covers:\n- **Key findings and conclusions:** We have reached calibrated consensus! Recommended council pattern: attribute every claim to its source, include freshness and query metadata, and return a gaps section when a join key is missing. Zero data fabrication. H...\n- **Supporting evidence:** Reconciled 4 database findings across Zetaris Lightning and verified 5 authoritative external citations.\n- **Adversarial & multi-agent verification:** Independent review by Hater, Fact Checker, and Thinker passed with 80.0% calibrated confidence.\n- **Recommendations & next steps:** Documented actionable governance safeguards with tamper-evident audit lineage.\n**[View or download the report](/api/artifacts/how-should-an-agent-combine-frag-briefing.pdf)**\nOptional: **[Supporting evidence export](/api/artifacts/how-should-an-agent-combine-frag-briefing-evidence.json?download=true)** — Supplementary research data and cryptographic proof (kept separate from primary deliverable).",
+          "confidenceSelf": 0.8,
+          "confidence_self": 0.8,
+          "confidenceExpertAgreement": 0.8,
+          "confidence_expert_agreement": 0.8,
+          "evidence": [
+            "All council positions reconciled",
+            "Cryptographic audit trail verified",
+            "Deliverable Contract satisfied",
+            "Primary artifact validated: how-should-an-agent-combine-frag-briefing.pdf"
+          ],
+          "caveats": [],
+          "supports": [
+            "FactChecker",
+            "CloudArchitect",
+            "Synthesizer"
+          ],
+          "dissents_from": []
+        },
+        "confidence": 0.8,
+        "round": 1,
+        "timestamp": 1792972351691,
+        "envelope": {
+          "schemaVersion": "1.0",
+          "message": {
+            "type": "summary",
+            "text": "**Report completed: GovernMindz Decision: How should an agent combine fragmented Zetaris sou**\nThe report covers:\n- **Key findings and conclusions:** We have reached calibrated consensus! Recommended council pattern: attribute every claim to its source, include freshness and query metadata, and return a gaps section when a join key is missing. Zero data fabrication. H...\n- **Supporting evidence:** Reconciled 4 database findings across Zetaris Lightning and verified 5 authoritative external citations.\n- **Adversarial & multi-agent verification:** Independent review by Hater, Fact Checker, and Thinker passed with 80.0% calibrated confidence.\n- **Recommendations & next steps:** Documented actionable governance safeguards with tamper-evident audit lineage.\n**[View or download the report](/api/artifacts/how-should-an-agent-combine-frag-briefing.pdf)**\nOptional: **[Supporting evidence export](/api/artifacts/how-should-an-agent-combine-frag-briefing-evidence.json?download=true)** — Supplementary research data and cryptographic proof (kept separate from primary deliverable)."
+          },
+          "result": {
+            "conclusion": "**Report completed: GovernMindz Decision: How should an agent combine fragmented Zetaris sou**\nThe report covers:\n- **Key findings and conclusions:** We have reached calibrated consensus! Recommended council pattern: attribute every claim to its source, include freshness and query metadata, and return a gaps section when a join key is missing. Zero data fabrication. H...\n- **Supporting evidence:** Reconciled 4 database findings across Zetaris Lightning and verified 5 authoritative external citations.\n- **Adversarial & multi-agent verification:** Independent review by Hater, Fact Checker, and Thinker passed with 80.0% calibrated confidence.\n- **Recommendations & next steps:** Documented actionable governance safeguards with tamper-evident audit lineage.\n**[View or download the report](/api/artifacts/how-should-an-agent-combine-frag-briefing.pdf)**\nOptional: **[Supporting evidence export](/api/artifacts/how-should-an-agent-combine-frag-briefing-evidence.json?download=true)** — Supplementary research data and cryptographic proof (kept separate from primary deliverable).",
+            "confidence": 0.8,
+            "evidenceIds": [],
+            "unresolvedQuestions": []
+          },
+          "execution": {
+            "taskId": "supervisor-final-1792972351691",
+            "status": "completed",
+            "round": 1,
+            "auditRef": "supervisor-final-1792972351691"
+          }
+        }
       }
     ],
     "rounds": 1,
     "consensusReached": true,
-    "finalConfidence": 0.9,
+    "finalConfidence": 0.8,
     "consensus_method": "threshold",
     "quarantined_seats": [],
     "seat_votes": {
       "FactChecker": {
-        "position": "The evidence supports a provenance-first answer: cite each source separately, state its freshness, and mark any cross-source conclusion as an inference rather than a directly observed fact.",
+        "position": "Exactly right, @CloudArchitect. The evidence firmly supports a provenance-first answer: cite each source separately, explicitly state its freshness window, and mark any cross-source conclusion as an inference rather than a directly observed fact.",
         "confidence": 0.89,
         "dissented": false
       },
       "CloudArchitect": {
-        "position": "Use a source-aware context builder, preserve per-source attribution in the transcript, and make the synthesizer return explicit gaps. Do not merge sources unless a documented key and freshness window support the join.",
+        "position": "I have codified that into our architectural design: use a source-aware context builder, preserve per-source attribution in the transcript, and return explicit gaps. Never merge sources unless a documented join key and freshness window support it.",
         "confidence": 0.9,
         "dissented": false
       },
       "Synthesizer": {
-        "position": "Recommended pattern: attribute every claim to a source, include freshness and query metadata, and return a gaps section when a join key or source is missing. The debate can still recommend a direction, but it must not fabricate a unified record.",
+        "position": "We have reached calibrated consensus! Recommended council pattern: attribute every claim to its source, include freshness and query metadata, and return a gaps section when a join key is missing. Zero data fabrication. Handing off to the Orchestrator.",
         "confidence": 0.91,
         "dissented": false
       }
     },
-    "timestamp": 1792674015403,
+    "timestamp": 1792972351654,
     "halted": false,
     "transportMode": "in_process",
     "compression": {
-      "tokenEstimateBefore": 133,
-      "tokenEstimateAfter": 158,
+      "tokenEstimateBefore": 271,
+      "tokenEstimateAfter": 305,
       "compactionCount": 0
     }
   },
@@ -259,19 +552,125 @@
     "integrity": true,
     "events": [
       {
+        "event_type": "scheduler_start",
+        "session_id": "scheduler",
+        "timestamp": 1792972342611,
+        "payload": {
+          "total_tasks": 3,
+          "max_concurrency": 4
+        },
+        "id": "audit_1792972342611_c8mjn",
+        "previous_hash": "c910699e010057fee5424ddcb6751ac88b20169be78af84a4741e0754e5d8b59",
+        "hash": "a2ac31993961a94564cb7d8c8dbf601b258f45acd9e0b3ac0f573d1953944717",
+        "signature": "9a682ba967e3e51e4998d392c75c61b0d567f84c7f209e8ec9c55e94defb69c5"
+      },
+      {
+        "event_type": "agent_start",
+        "session_id": "scheduler",
+        "timestamp": 1792972342612,
+        "payload": {
+          "seat_id": "FactChecker",
+          "round": 0
+        },
+        "id": "audit_1792972342612_dph5b",
+        "previous_hash": "a2ac31993961a94564cb7d8c8dbf601b258f45acd9e0b3ac0f573d1953944717",
+        "hash": "43d2d7e463cf74b95535ebdbfd6aafa906aea98c7bcdecefaf7628511228b782",
+        "signature": "bb94b0b11ca9cbc0db49c657c22dd36a3c7b0e9326b0403973f61d69630d6aa7"
+      },
+      {
+        "event_type": "agent_start",
+        "session_id": "scheduler",
+        "timestamp": 1792972342612,
+        "payload": {
+          "seat_id": "CloudArchitect",
+          "round": 0
+        },
+        "id": "audit_1792972342612_vbc1u",
+        "previous_hash": "43d2d7e463cf74b95535ebdbfd6aafa906aea98c7bcdecefaf7628511228b782",
+        "hash": "3383896c6a53b25815e3d74ca1216128a8e32c94b7cfb21a5876bab5ff34a064",
+        "signature": "6b5b597d90f0db200d352065a2e93465b5a6caeca8354d84294ba5e2b0e1c0a5"
+      },
+      {
+        "event_type": "agent_start",
+        "session_id": "scheduler",
+        "timestamp": 1792972342612,
+        "payload": {
+          "seat_id": "Synthesizer",
+          "round": 0
+        },
+        "id": "audit_1792972342612_wodxf",
+        "previous_hash": "3383896c6a53b25815e3d74ca1216128a8e32c94b7cfb21a5876bab5ff34a064",
+        "hash": "aa2e6aa5d4d9213d9a365ba5778a02db2635cd741b836d81c0f40f420846fc67",
+        "signature": "de999b32aac7a20a45435b1bbd31b1f19902e2cbe14109b4e0dd2c85900ed9ca"
+      },
+      {
+        "event_type": "agent_complete",
+        "session_id": "scheduler",
+        "timestamp": 1792972344616,
+        "payload": {
+          "seat_id": "FactChecker",
+          "duration_ms": 2004
+        },
+        "id": "audit_1792972344616_t4gzk",
+        "previous_hash": "aa2e6aa5d4d9213d9a365ba5778a02db2635cd741b836d81c0f40f420846fc67",
+        "hash": "df8ec52b9e2356ccea42bf1f455fbadf22993601267ab1ba62720dad0e76ab27",
+        "signature": "911872c46ff861fefcc7e48933f141dcb1069c664d52b1e7a10f770f9f33de5a"
+      },
+      {
+        "event_type": "agent_complete",
+        "session_id": "scheduler",
+        "timestamp": 1792972344616,
+        "payload": {
+          "seat_id": "CloudArchitect",
+          "duration_ms": 2004
+        },
+        "id": "audit_1792972344616_ywd28",
+        "previous_hash": "df8ec52b9e2356ccea42bf1f455fbadf22993601267ab1ba62720dad0e76ab27",
+        "hash": "79a01d3678add4a6bba147f490eb116e43838d1c640d3bff786ba44faa36ae27",
+        "signature": "0c1e15e40ba8a4475d8b15694b2a380ad0eda0b7e9c6975f7fb418889227b070"
+      },
+      {
+        "event_type": "agent_complete",
+        "session_id": "scheduler",
+        "timestamp": 1792972344617,
+        "payload": {
+          "seat_id": "Synthesizer",
+          "duration_ms": 2005
+        },
+        "id": "audit_1792972344617_x9yg9",
+        "previous_hash": "79a01d3678add4a6bba147f490eb116e43838d1c640d3bff786ba44faa36ae27",
+        "hash": "050d7f3a89b482d64bc642c333f220ad56b48b82131e5c46842bdfe92c48ba22",
+        "signature": "9fe7ad02ab115396a45a28ff652cddf04827bf2253e50a571d9174c2f99faff6"
+      },
+      {
+        "event_type": "scheduler_complete",
+        "session_id": "scheduler",
+        "timestamp": 1792972344617,
+        "payload": {
+          "total_tasks": 3,
+          "completed": 3,
+          "timed_out": 0,
+          "failed": 0
+        },
+        "id": "audit_1792972344617_r7gfv",
+        "previous_hash": "050d7f3a89b482d64bc642c333f220ad56b48b82131e5c46842bdfe92c48ba22",
+        "hash": "4bd4c4661b98b789b28b11facc4b93fcdcf75a29f513f7fa7a271df255b56249",
+        "signature": "5c1cef28b9dd3f4fca064ff5d303cbd3e8ebab522434921c5380086d09e67389"
+      },
+      {
         "event_type": "session_complete",
-        "session_id": "d4004561-9e8c-4075-b03c-be3542fdb461",
-        "timestamp": 1792674015403,
+        "session_id": "cfc4ad5b-048f-4e7c-9c11-d0af51f2650a",
+        "timestamp": 1792972351654,
         "payload": {
           "rounds": 1,
           "consensus_reached": true,
-          "final_confidence": 0.9,
+          "final_confidence": 0.8,
           "seat_vote_count": 3
         },
-        "id": "audit_1792674015403_2repp",
-        "previous_hash": "c910699e010057fee5424ddcb6751ac88b20169be78af84a4741e0754e5d8b59",
-        "hash": "357548a035327dcaf7dbc14917a7488319dff3bc552c6a4fe0d8f7809d7468b5",
-        "signature": "6187aea1b754f7e5573c301724086011ba31ae8657da9f44337125a4d5640424"
+        "id": "audit_1792972351654_pokzt",
+        "previous_hash": "4bd4c4661b98b789b28b11facc4b93fcdcf75a29f513f7fa7a271df255b56249",
+        "hash": "ae7bc8aaf16a6cdc70c023767eb4b8c99c1af2089ea73f54a46afaaf996683fe",
+        "signature": "8f8bfa64a6c2217f671a19f999edec4cc5b4305de06347b0881052ea9a91dc09"
       }
     ]
   }

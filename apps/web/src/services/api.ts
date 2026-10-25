@@ -1,4 +1,12 @@
-import type { HealthStatus, ScenarioItem, Conversation } from "../types";
+import type {
+	HealthStatus,
+	ScenarioItem,
+	Conversation,
+	MessageFeedbackPayload,
+	AgentCredibilityRecord,
+	AuditVerificationReport,
+	AuditProofCertificate,
+} from "../types";
 
 const BASE_URL = "";
 
@@ -185,6 +193,51 @@ export async function saveConfig(payload: Record<string, string>): Promise<{ suc
 	});
 	if (!res.ok) {
 		const err = await res.json().catch(() => ({ error: "Failed to save configuration" }));
+		throw new Error(err.error || `HTTP ${res.status}`);
+	}
+	return res.json();
+}
+
+export async function submitFeedback(payload: MessageFeedbackPayload): Promise<{ success: boolean; updatedCredibility: AgentCredibilityRecord }> {
+	const res = await fetch(`${BASE_URL}/api/feedback`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(payload),
+	});
+	if (!res.ok) {
+		const err = await res.json().catch(() => ({ error: "Failed to submit feedback" }));
+		throw new Error(err.error || `HTTP ${res.status}`);
+	}
+	return res.json();
+}
+
+export async function fetchAgentCredibilities(): Promise<{ success: boolean; credibilities: AgentCredibilityRecord[] }> {
+	const res = await fetch(`${BASE_URL}/api/agents/credibility`);
+	if (!res.ok) throw new Error("Failed to load agent credibilities");
+	return res.json();
+}
+
+export async function verifyAuditChain(params: {
+	auditEvents?: any[];
+	conversationId?: string;
+	secret?: string;
+}): Promise<AuditVerificationReport> {
+	const res = await fetch(`${BASE_URL}/api/audit/verify`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(params),
+	});
+	if (!res.ok) {
+		const err = await res.json().catch(() => ({ error: "Audit verification failed" }));
+		throw new Error(err.error || `HTTP ${res.status}`);
+	}
+	return res.json();
+}
+
+export async function fetchAuditCertificate(conversationId: string): Promise<AuditProofCertificate> {
+	const res = await fetch(`${BASE_URL}/api/conversations/${encodeURIComponent(conversationId)}/audit-certificate`);
+	if (!res.ok) {
+		const err = await res.json().catch(() => ({ error: "Failed to fetch audit certificate" }));
 		throw new Error(err.error || `HTTP ${res.status}`);
 	}
 	return res.json();

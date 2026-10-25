@@ -14,14 +14,15 @@
 	"seats": {
 		"FactChecker": [
 			{
-				"position": "Name the source and freshness beside every claim. The cached evidence lists three sources with different freshness windows, so a combined answer must not imply they were observed at the same time.",
+				"position": "Hey team, looking across our Zetaris sources: we need to state the origin and freshness beside every single claim. We have crm_lightning (15m), billing_lightning (1h), and support_lightning (24h). We cannot imply they were observed at the same moment. @CloudArchitect, how should our context builder structure this?",
 				"confidence_self": 0.8,
 				"confidence_expert_agreement": 0.77,
 				"evidence": ["crm_lightning freshness 15m", "billing_lightning freshness 1h", "support_lightning freshness 24h"],
-				"caveats": ["Freshness labels do not prove row-level completeness."]
+				"caveats": ["Freshness labels do not prove row-level completeness."],
+				"supports": []
 			},
 			{
-				"position": "The evidence supports a provenance-first answer: cite each source separately, state its freshness, and mark any cross-source conclusion as an inference rather than a directly observed fact.",
+				"position": "Exactly right, @CloudArchitect. The evidence firmly supports a provenance-first answer: cite each source separately, explicitly state its freshness window, and mark any cross-source conclusion as an inference rather than a directly observed fact.",
 				"confidence_self": 0.89,
 				"confidence_expert_agreement": 0.87,
 				"evidence": ["Three sources have different freshness values", "No shared join key is present in the sample"],
@@ -31,14 +32,15 @@
 		],
 		"CloudArchitect": [
 			{
-				"position": "Build an evidence envelope: source id, query, timestamp, freshness, columns, and row counts. The debate should consume that envelope instead of raw disconnected rows.",
+				"position": "I agree, @FactChecker. Let's construct a normalized evidence envelope with source id, query, observation timestamp, freshness, columns, and row counts. The team should consume that bounded envelope rather than raw disconnected rows. @Synthesizer, this keeps our trust boundaries intact.",
 				"confidence_self": 0.81,
 				"confidence_expert_agreement": 0.78,
 				"evidence": ["The demo formats Zetaris results into a bounded context", "The audit trail records the session result"],
-				"caveats": ["The current context formatter does not include freshness metadata automatically."]
+				"caveats": ["The current context formatter does not include freshness metadata automatically."],
+				"supports": ["FactChecker"]
 			},
 			{
-				"position": "Use a source-aware context builder, preserve per-source attribution in the transcript, and make the synthesizer return explicit gaps. Do not merge sources unless a documented key and freshness window support the join.",
+				"position": "I have codified that into our architectural design: use a source-aware context builder, preserve per-source attribution in the transcript, and return explicit gaps. Never merge sources unless a documented join key and freshness window support it.",
 				"confidence_self": 0.9,
 				"confidence_expert_agreement": 0.88,
 				"evidence": ["Three heterogeneous sources are listed", "No join key is included in the sample evidence"],
@@ -48,14 +50,15 @@
 		],
 		"Synthesizer": [
 			{
-				"position": "The safe answer is to present source-level findings, label freshness, and separate observed facts from cross-source inferences.",
+				"position": "Solid alignment @FactChecker and @CloudArchitect. The safe approach is presenting source-level findings, clearly labeling freshness, and separating directly observed facts from cross-source inferences.",
 				"confidence_self": 0.84,
 				"confidence_expert_agreement": 0.82,
 				"evidence": ["Three sources with distinct freshness windows", "No common key is visible"],
-				"caveats": ["The sample is synthetic and does not include source schemas."]
+				"caveats": ["The sample is synthetic and does not include source schemas."],
+				"supports": ["FactChecker", "CloudArchitect"]
 			},
 			{
-				"position": "Recommended pattern: attribute every claim to a source, include freshness and query metadata, and return a gaps section when a join key or source is missing. The debate can still recommend a direction, but it must not fabricate a unified record.",
+				"position": "We have reached calibrated consensus! Recommended council pattern: attribute every claim to its source, include freshness and query metadata, and return a gaps section when a join key is missing. Zero data fabrication. Handing off to the Orchestrator.",
 				"confidence_self": 0.91,
 				"confidence_expert_agreement": 0.89,
 				"evidence": ["Source-aware evidence is available", "The transcript preserves per-seat positions", "The audit record captures the final confidence"],

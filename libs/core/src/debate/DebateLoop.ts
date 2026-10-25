@@ -5,11 +5,43 @@
 import type { TranscriptRepository } from "../database/DatabaseService";
 import { auditTrail } from "../engine/AuditTrailEmitter";
 import { syncEngine } from "../integrations/syncEngine";
-import type { AgentMessage } from "./AgentMessage";
+import { type AgentMessage, buildMessageContractEnvelope } from "./AgentMessage";
 import type { ISeatTransport } from "./SeatTransport";
 import type { RivalChallenger } from "../memory/RivalChallenger.js";
 import type { ThinkerAgent } from "../memory/ThinkerAgent.js";
 import { SemanticTranscriptCompressor } from "./SemanticTranscriptCompressor";
+import {
+	ParallelAgentScheduler,
+	type ParallelProposalTask,
+	type ParallelProposalResult,
+} from "../scheduler/ParallelAgentScheduler";
+import {
+	credibilityManager,
+	type CredibilityManager,
+} from "../kernel/CredibilityManager";
+
+export interface StanceDivergenceResult {
+	divergenceScore: number; // [0.0, 1.0]
+	divergence: number; // alias
+	dissentsCount: number;
+	dissentScore: number;
+	supportsCount: number;
+	supportScore: number;
+	confidenceVariance: number;
+	confVariance: number; // alias
+	avgConfidence: number;
+	isUnanimous: boolean;
+}
+
+export interface EpistemicConvergenceResult {
+	converged: boolean;
+	isUnanimous: boolean;
+	divergence: number;
+	divergenceScore: number; // alias
+	confidence: number;
+	avgConfidence: number; // alias
+	round: number;
+}
 
 export interface DebateConfig {
 	maxRounds: number;
@@ -32,6 +64,10 @@ export interface DebateConfig {
 	rivalChallenger?: RivalChallenger;
 	thinkerAgent?: ThinkerAgent;
 	inquiryScore?: number;
+	scheduler?: ParallelAgentScheduler;
+	concurrency?: number;
+	proposalTimeoutMs?: number;
+	credibilityManager?: CredibilityManager;
 }
 
 export type AndresNotifier = (payload: {
@@ -50,7 +86,7 @@ export interface DebateResult {
 	rounds: number;
 	consensusReached: boolean;
 	finalConfidence: number;
-	consensus_method: "threshold" | "synthesizer" | "tiebreaker" | "max_rounds";
+	consensus_method: "threshold" | "synthesizer" | "tiebreaker" | "max_rounds" | "unanimous_initial";
 	quarantined_seats: string[];
 	seat_votes: Record<
 		string,
@@ -136,6 +172,9 @@ export class DebateLoop {
 		rebuttalConfidence: number;
 	}> = [];
 
+	private readonly scheduler: ParallelAgentScheduler;
+	private readonly credibilityManager: CredibilityManager;
+
 	constructor(
 		private readonly seatIds: string[],
 		private readonly transport: ISeatTransport,
@@ -147,7 +186,10 @@ export class DebateLoop {
 		private readonly transcriptRepository?: TranscriptRepository,
 		private readonly topic?: string,
 		private readonly andresNotifier?: AndresNotifier,
-	) {}
+	) {
+		this.scheduler = this.config.scheduler ?? new ParallelAgentScheduler(auditTrail);
+		this.credibilityManager = this.config.credibilityManager ?? credibilityManager;
+	}
 
 	private emit(event: Record<string, unknown>): void {
 		try {
@@ -171,6 +213,34 @@ export class DebateLoop {
 			await this.blindRound(task);
 		} else {
 			await this.initialProposals(task);
+		}
+
+		if (this.haltReason) {
+			return this.buildResult();
+		}
+
+		// Epistemic convergence check & unanimous early stopping (R5)
+		const initialConvergence = this.evaluateEpistemicConvergence(0);
+		if (initialConvergence.isUnanimous) {
+			this.consensusMethod = "unanimous_initial";
+			this.emit({
+				type: "epistemic_convergence",
+				round: 0,
+				divergence: initialConvergence.divergence,
+				confidence: initialConvergence.confidence,
+				unanimous: true,
+			});
+			this.emit({
+				type: "consensus",
+				method: "unanimous_initial",
+				finalConfidence: this.computeFinalConfidence(),
+			});
+			await this.triggerJudgeResolution(
+				"Unanimous initial consensus reached. Synthesize final executive decree.",
+			);
+			const result = this.buildResult();
+			this.emit({ type: "complete", result });
+			return result;
 		}
 
 		while (this.round < this.config.maxRounds) {
@@ -272,18 +342,52 @@ export class DebateLoop {
 		return result;
 	}
 
-	private async blindRound(task: string): Promise<void> {
+	private async executeRoundZeroProposals(task: string, isBlind: boolean): Promise<void> {
 		this.emit({ type: "round_start", round: 0 });
-		for (const seatId of this.seatIds) {
-			if (!this.transport.hasSeat(seatId)) continue;
-			if (this.haltReason) return;
+
+		const eligibleSeats = this.seatIds.filter(
+			(seatId) => this.transport.hasSeat(seatId) && !this.quarantinedSeats.has(seatId),
+		);
+
+		for (const seatId of eligibleSeats) {
 			this.emit({ type: "seat_thinking", seatId, round: 0 });
-			try {
-				const proposal = await this.transport.propose(seatId, task, 0);
+		}
+
+		const tasks: ParallelProposalTask<AgentMessage>[] = eligibleSeats.map((seatId) => ({
+			seatId,
+			task,
+			round: 0,
+			execute: () => this.transport.propose(seatId, task, 0),
+			timeoutMs: this.config.proposalTimeoutMs ?? 10000,
+		}));
+
+		const results = await this.scheduler.executeParallelProposals(tasks, {
+			maxConcurrency: this.config.concurrency ?? 4,
+			defaultTimeoutMs: this.config.proposalTimeoutMs ?? 10000,
+		});
+
+		// PRESERVE DETERMINISTIC TURN SEQUENCING:
+		// Proposals are fetched concurrently in the background, but committed to this.transcript
+		// and emitted to this.emit({ type: "message", message }) and the HMAC-SHA256 audit chain
+		// in canonical this.seatIds sequence.
+		for (const seatId of this.seatIds) {
+			if (!eligibleSeats.includes(seatId)) continue;
+			if (this.haltReason) return;
+
+			const res = results.get(seatId);
+			if (!res) continue;
+
+			if (res.status === "COMPLETED" && (res.message || res.value)) {
+				const proposal = (res.message || res.value)!;
 				this.transcript.push(proposal);
 				this.emit({ type: "message", message: proposal });
-				await this.maybeChallenge(proposal, 0);
-			} catch (err) {
+				if (isBlind) {
+					await this.maybeChallenge(proposal, 0);
+				}
+			} else {
+				const err =
+					res.error ??
+					new Error(`Proposal failed for seat ${seatId} with status ${res.status}`);
 				this.handleSeatFailure(seatId, err);
 				if (this.haltReason) {
 					this.emit({ type: "halt", reason: this.haltReason });
@@ -291,9 +395,18 @@ export class DebateLoop {
 				}
 			}
 		}
-		this.emit({ type: "round_end", round: 0, consensus: false });
-		await this.runRivalChallenges(0);
-		await this.maybeThink(0, this.transcript.map((m) => m.content).join("\n"));
+
+		if (isBlind && !this.haltReason) {
+			await this.runRivalChallenges(0);
+			await this.maybeThink(0, this.transcript.map((m) => m.content).join("\n"));
+		}
+
+		const convergence = this.evaluateEpistemicConvergence(0);
+		this.emit({ type: "round_end", round: 0, consensus: convergence.converged });
+	}
+
+	private async blindRound(task: string): Promise<void> {
+		await this.executeRoundZeroProposals(task, true);
 	}
 
 	private challengeCount = 0;
@@ -314,6 +427,15 @@ export class DebateLoop {
 				message,
 				evidenceContext,
 			);
+			const isCannedNoCorrection =
+				result.correctedPosition?.toLowerCase().includes("no correction needed") ||
+				result.correctedPosition === "";
+			const hasUnsupported = result.unsupportedClaims && result.unsupportedClaims.length > 0;
+
+			if (isCannedNoCorrection && !hasUnsupported) {
+				return;
+			}
+
 			const challengeMsg: AgentMessage = {
 				id: `rival-${seatId}-r${round}-${Date.now()}`,
 				fromSeat: "RivalChallenger",
@@ -335,6 +457,20 @@ export class DebateLoop {
 				confidence: result.confidence,
 				round,
 				timestamp: Date.now(),
+				envelope: buildMessageContractEnvelope({
+					id: `rival-${seatId}-r${round}-${Date.now()}`,
+					type: "challenge",
+					content: result.challenge,
+					structured: {
+						position: result.correctedPosition,
+						confidenceSelf: result.confidence,
+						evidence: result.verifiedClaims,
+						caveats: result.unsupportedClaims,
+					},
+					confidence: result.confidence,
+					round,
+					toSeat: seatId,
+				}),
 			};
 			this.transcript.push(challengeMsg);
 			this.challengedSeats.add(seatId);
@@ -361,7 +497,10 @@ export class DebateLoop {
 				.reverse()
 				.find((m) => m.fromSeat === seatId && m.structured);
 			if (!lastMsg) continue;
-			await this.challengeOne(seatId, lastMsg, round);
+			const check = this.shouldChallenge(lastMsg);
+			if (check.challenge) {
+				await this.challengeOne(seatId, lastMsg, round);
+			}
 		}
 	}
 
@@ -388,8 +527,10 @@ export class DebateLoop {
 		const challenger = this.config.rivalChallenger;
 		if (!challenger) return;
 		if (this.challengeCount >= 12) return;
-		// Rival Challenger always challenges to force double-check and verification.
-		const reason = "routine challenge to force verification";
+		// Only trigger Rival Challenger when an epistemic trigger condition fires
+		const check = this.shouldChallenge(m);
+		if (!check.challenge) return;
+		const reason = check.reason || "epistemic verification";
 		const key = m.fromSeat + "|" + (m.structured?.position || "").slice(0, 60);
 		if (this.challengedClaims.has(key)) return;
 		this.challengedClaims.add(key);
@@ -441,6 +582,14 @@ export class DebateLoop {
 				confidence: 0.7,
 				round,
 				timestamp: Date.now(),
+				envelope: buildMessageContractEnvelope({
+					id: `thinker-q-${round}-${Date.now()}`,
+					type: "action_items",
+					content: q.question,
+					confidence: 0.7,
+					round,
+					toSeat: "all",
+				}),
 			};
 			this.transcript.push(msg);
 			this.emit({ type: "message", message: msg });
@@ -461,24 +610,7 @@ export class DebateLoop {
 	private challengedClaims = new Set<string>();
 
 	private async initialProposals(task: string): Promise<void> {
-		this.emit({ type: "round_start", round: 0 });
-		for (const seatId of this.seatIds) {
-			if (!this.transport.hasSeat(seatId)) continue;
-			if (this.haltReason) return;
-			this.emit({ type: "seat_thinking", seatId, round: 0 });
-			try {
-				const proposal = await this.transport.propose(seatId, task, 0);
-				this.transcript.push(proposal);
-				this.emit({ type: "message", message: proposal });
-			} catch (err) {
-				this.handleSeatFailure(seatId, err);
-				if (this.haltReason) {
-					this.emit({ type: "halt", reason: this.haltReason });
-					return;
-				}
-			}
-		}
-		this.emit({ type: "round_end", round: 0, consensus: false });
+		await this.executeRoundZeroProposals(task, false);
 	}
 
 	public getAdversarialRoundsLog() {
@@ -731,14 +863,35 @@ export class DebateLoop {
 		return challenges.find((challenge) => !answered.has(challenge.id));
 	}
 
-	private hasConsensus(): boolean {
+	public hasConsensus(targetRound = this.round): boolean {
 		const thisRound = this.transcript.filter(
-			(message) => message.round === this.round,
+			(message) => message.round === targetRound,
 		);
 		const consensusMessages = thisRound.filter(
 			(message) => message.type === "consensus",
 		);
 		if (consensusMessages.length < this.config.minConsensusSeats) return false;
+
+		if (this.credibilityManager) {
+			const totalWeight = consensusMessages.reduce(
+				(sum, m) =>
+					sum +
+					this.credibilityManager.getWeightMultiplier(m.fromSeat),
+				0,
+			);
+			if (totalWeight > 0) {
+				const weightedSum = consensusMessages.reduce(
+					(sum, m) =>
+						sum +
+						this.credibilityManager.getWeightMultiplier(m.fromSeat) *
+							m.confidence,
+					0,
+				);
+				const avgConfidence = weightedSum / totalWeight;
+				return avgConfidence >= this.config.consensusThreshold;
+			}
+		}
+
 		const avgConfidence =
 			consensusMessages.reduce((sum, message) => sum + message.confidence, 0) /
 			consensusMessages.length;
@@ -763,6 +916,154 @@ export class DebateLoop {
 		return dissentCount >= this.config.dissentTriggerCount;
 	}
 
+	/**
+	 * Dynamic stance divergence measurement across debate rounds:
+	 * D = 0.50 * d_dissent + 0.30 * d_support + 0.20 * d_confVariance
+	 * using structured message fields (dissents_from, supports, confidence_self).
+	 */
+	public calculateStanceDivergence(messages: AgentMessage[]): StanceDivergenceResult {
+		if (messages.length <= 1) {
+			const singleConf =
+				messages[0]?.structured?.confidence_self ??
+				messages[0]?.structured?.confidenceSelf ??
+				messages[0]?.confidence ??
+				1.0;
+			return {
+				divergenceScore: 0,
+				divergence: 0,
+				dissentsCount: 0,
+				dissentScore: 0,
+				supportsCount: 0,
+				supportScore: 0,
+				confidenceVariance: 0,
+				confVariance: 0,
+				avgConfidence: singleConf,
+				isUnanimous: true,
+			};
+		}
+
+		const n = messages.length;
+		let dissentsCount = 0;
+		let supportsCount = 0;
+		const confidences: number[] = [];
+
+		for (const msg of messages) {
+			const conf =
+				msg.structured?.confidence_self ??
+				msg.structured?.confidenceSelf ??
+				msg.confidence ??
+				0;
+			confidences.push(conf);
+
+			const dissents =
+				msg.structured?.dissents_from ??
+				msg.structured?.dissentsFrom ??
+				[];
+			dissentsCount += dissents.length;
+
+			const supports = msg.structured?.supports ?? [];
+			supportsCount += supports.length;
+		}
+
+		const maxPairs = Math.max(1, n * (n - 1));
+		const d_dissent = Math.min(1.0, dissentsCount / maxPairs);
+
+		// Support deficit measurement:
+		let d_support: number;
+		if (dissentsCount === 0 && supportsCount === 0) {
+			// In independent initial proposals without peer cross-citations,
+			// zero dissents implies no support deficit.
+			d_support = 0.0;
+		} else {
+			const supportRatio = Math.min(1.0, supportsCount / maxPairs);
+			d_support = Math.max(0, 1.0 - supportRatio);
+		}
+
+		const avgConfidence = confidences.reduce((a, b) => a + b, 0) / n;
+		const variance =
+			confidences.reduce((acc, c) => acc + Math.pow(c - avgConfidence, 2), 0) / n;
+		const d_confVariance = Math.min(1.0, 2 * Math.sqrt(variance));
+
+		const divergenceScore = Math.min(
+			1.0,
+			Math.max(0, 0.5 * d_dissent + 0.3 * d_support + 0.2 * d_confVariance),
+		);
+
+		const isUnanimous =
+			dissentsCount === 0 &&
+			divergenceScore <= 0.1 &&
+			confidences.every((c) => c >= 0.75);
+
+		return {
+			divergenceScore,
+			divergence: divergenceScore,
+			dissentsCount,
+			dissentScore: d_dissent,
+			supportsCount,
+			supportScore: d_support,
+			confidenceVariance: d_confVariance,
+			confVariance: d_confVariance,
+			avgConfidence,
+			isUnanimous,
+		};
+	}
+
+	/**
+	 * Evaluates epistemic convergence for a given round.
+	 */
+	public evaluateEpistemicConvergence(round: number): EpistemicConvergenceResult {
+		const roundMessages = this.transcript.filter(
+			(m) =>
+				m.round === round &&
+				m.type !== "summary" &&
+				m.type !== "escalation",
+		);
+		const minSeats = this.config.minConsensusSeats ?? 2;
+		if (roundMessages.length < minSeats) {
+			return {
+				converged: false,
+				isUnanimous: false,
+				divergence: 1.0,
+				divergenceScore: 1.0,
+				confidence: 0,
+				avgConfidence: 0,
+				round,
+			};
+		}
+
+		const divResult = this.calculateStanceDivergence(roundMessages);
+		const threshold = this.config.consensusThreshold ?? 0.75;
+		const allHighConfidence = roundMessages.every((m) => {
+			const c =
+				m.structured?.confidence_self ??
+				m.structured?.confidenceSelf ??
+				m.confidence ??
+				0;
+			return c >= threshold;
+		});
+
+		const isUnanimous =
+			divResult.dissentsCount === 0 &&
+			allHighConfidence &&
+			divResult.divergenceScore <= 0.1;
+
+		const converged =
+			isUnanimous ||
+			(divResult.dissentsCount === 0 &&
+				divResult.avgConfidence >= threshold &&
+				divResult.divergenceScore <= 0.2);
+
+		return {
+			converged,
+			isUnanimous,
+			divergence: divResult.divergenceScore,
+			divergenceScore: divResult.divergenceScore,
+			confidence: divResult.avgConfidence,
+			avgConfidence: divResult.avgConfidence,
+			round,
+		};
+	}
+
 	private async triggerJudgeResolution(instruction: string): Promise<void> {
 		const judgeSeatId = this.resolveJudgeSeatId();
 		if (!judgeSeatId) {
@@ -778,7 +1079,7 @@ export class DebateLoop {
 				judgeSeatId,
 				this.transcript,
 				this.round,
-				`${instruction}\\n\\nUse the available evidence to declare the strongest position and return a unified answer.`,
+				`${instruction}\n\nUse the available evidence to declare the strongest position and return a unified answer.`,
 			);
 			this.transcript.push(resolution);
 			this.emit({ type: "message", message: resolution });
@@ -793,6 +1094,7 @@ export class DebateLoop {
 			"Judge",
 			"Synthesizer",
 			"synthesizer",
+			...this.seatIds,
 		].filter(Boolean);
 		return candidates.find(
 			(seatId) => seatId && this.transport.hasSeat(seatId),
@@ -841,6 +1143,14 @@ export class DebateLoop {
 			round: older[older.length - 1].round,
 			timestamp: Date.now(),
 			token_count: Math.ceil(summaryText.length / 4),
+			envelope: buildMessageContractEnvelope({
+				id: `summary-${this.round}-${older.length}`,
+				type: "summary",
+				content: summaryText,
+				confidence: this.averageConfidence(older),
+				round: older[older.length - 1].round,
+				toSeat: "all",
+			}),
 		};
 
 		this.transcript = [summaryMessage, ...recent];
@@ -855,15 +1165,50 @@ export class DebateLoop {
 		);
 	}
 
-	private computeFinalConfidence(): number {
+	public computeFinalConfidence(targetRound = this.round): number {
 		const lastRound = this.transcript.filter(
-			(message) => message.round === this.round,
+			(message) => message.round === targetRound,
 		);
 		if (lastRound.length === 0) return 0;
-		return (
-			lastRound.reduce((sum, message) => sum + message.confidence, 0) /
-			lastRound.length
-		);
+
+		let rawConfidence: number;
+		if (this.credibilityManager) {
+			const totalWeight = lastRound.reduce(
+				(sum, m) =>
+					sum +
+					this.credibilityManager.getWeightMultiplier(m.fromSeat),
+				0,
+			);
+			if (totalWeight > 0) {
+				const weightedSum = lastRound.reduce(
+					(sum, m) =>
+						sum +
+						this.credibilityManager.getWeightMultiplier(m.fromSeat) *
+							(Number.isFinite(m.confidence) ? m.confidence : 0),
+					0,
+				);
+				rawConfidence = weightedSum / totalWeight;
+			} else {
+				rawConfidence =
+					lastRound.reduce((sum, message) => sum + (Number.isFinite(message.confidence) ? message.confidence : 0), 0) /
+					lastRound.length;
+			}
+		} else {
+			rawConfidence =
+				lastRound.reduce((sum, message) => sum + (Number.isFinite(message.confidence) ? message.confidence : 0), 0) /
+				lastRound.length;
+		}
+
+		if (!Number.isFinite(rawConfidence)) rawConfidence = 0.5;
+		return Math.round(Math.min(1.0, Math.max(0.0, rawConfidence)) * 100) / 100;
+	}
+
+	public pushTranscriptMessage(message: AgentMessage): void {
+		this.transcript.push(message);
+	}
+
+	public setRound(round: number): void {
+		this.round = round;
 	}
 
 	private computeQueryHash(): string {
@@ -912,6 +1257,14 @@ export class DebateLoop {
 				confidence: 0.5,
 				round: this.round,
 				timestamp: Date.now(),
+				envelope: buildMessageContractEnvelope({
+					id: `uncertainty-report-${Date.now()}`,
+					type: "escalation",
+					content: `Unresolved interventions escalated: ${summary}. Final answer carries residual uncertainty.`,
+					confidence: 0.5,
+					round: this.round,
+					toSeat: "all",
+				}),
 			};
 			this.transcript.push(reportMsg);
 			this.emit({ type: "uncertainty_report", interventions: this.interventionLog });
@@ -920,7 +1273,8 @@ export class DebateLoop {
 		const resolvedByJudgeOrSynth =
 			!this.haltReason &&
 			(this.consensusMethod === "synthesizer" ||
-				this.consensusMethod === "tiebreaker") &&
+				this.consensusMethod === "tiebreaker" ||
+				this.consensusMethod === "unanimous_initial") &&
 			this.transcript[this.transcript.length - 1]?.type === "consensus";
 		const result: DebateResult = {
 			session_id: crypto.randomUUID(),

@@ -123,9 +123,32 @@ export class AuditTrailEmitter {
 		});
 	}
 
-	private emit(
+	emitGovernanceRecalibration(
+		params: {
+			sessionId: string;
+			seatId: string;
+			rating: string;
+			credibilityScore: number;
+			weightMultiplier: number;
+			alpha?: number;
+			beta?: number;
+			sampleCount?: number;
+			[key: string]: unknown;
+		},
+		linkedDecayHash?: string,
+	): AuditEvent {
+		return this.emit({
+			event_type: "governance_recalibration",
+			session_id: params.sessionId,
+			timestamp: Date.now(),
+			linked_decay_hash: linkedDecayHash,
+			payload: { ...params },
+		});
+	}
+
+	emit(
 		params: Omit<AuditEvent, "id" | "previous_hash" | "hash" | "signature">,
-	): void {
+	): AuditEvent {
 		const id = `audit_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
 
 		const event: AuditEvent = {
@@ -156,6 +179,7 @@ export class AuditTrailEmitter {
 		console.log(
 			`[AuditTrail][${event.event_type}] Hash: ${event.hash.substr(0, 8)}... LinkedDecay: ${event.linked_decay_hash?.substr(0, 8) || "none"}`,
 		);
+		return event;
 	}
 
 	private hashGenesis(): string {

@@ -1,10 +1,13 @@
 import React, { useEffect, useRef, useState } from "react";
 import { MessageBubble } from "./MessageBubble";
 import { FinalAnswerCard } from "./FinalAnswerCard";
+import { ParallelCrewStack } from "./ParallelCrewStack";
 import type { ChatMessage, AgentProfile, ScenarioItem, Conversation } from "../../types";
-import { AGENT_REGISTRY } from "../../services/agentRegistry";
+import type { CrewRound } from "../../types/crew";
+import { AGENT_REGISTRY, getAgentProfile } from "../../services/agentRegistry";
 import { AgentAvatar } from "../common/AgentAvatar";
-import { ArrowDown, Bot, ShieldCheck, Sparkles, AlertCircle, Database, Play, ArrowRight, Layers } from "lucide-react";
+import { ArrowDown, Bot, ShieldCheck, Sparkles, AlertCircle, Database, Play, ArrowRight, Layers, Volume2, VolumeX } from "lucide-react";
+import { ttsService } from "../../services/ttsService";
 
 interface GroupConversationProps {
 	conversation?: Conversation | null;
@@ -18,11 +21,14 @@ interface GroupConversationProps {
 	auditVerified?: boolean;
 	onSelectAgent: (seatId: string) => void;
 	onStartPrompt: (prompt: string) => void;
-	onRateMessage?: (messageId: string, rating: "up" | "down" | null) => void;
+	onRate?: (messageId: string, rating: "up" | "down" | null, seatId: string) => void;
+	onRateMessage?: (messageId: string, rating: "up" | "down" | null, seatId?: string) => void;
 	activeScenario?: ScenarioItem | null;
 	allScenarios?: ScenarioItem[];
 	onSelectScenario?: (file: string) => void;
 	mode?: "live" | "demo" | "sample";
+	activeCrewRound?: CrewRound | null;
+	isCrewClosing?: boolean;
 }
 
 export const GroupConversation: React.FC<GroupConversationProps> = ({
@@ -42,11 +48,23 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 	allScenarios = [],
 	onSelectScenario,
 	mode = "sample",
+	activeCrewRound = null,
+	isCrewClosing = false,
 }) => {
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const [showScrollBottom, setShowScrollBottom] = useState(false);
 	const [filterMode, setFilterMode] = useState<"all" | "consensus">("all");
+	const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+	const [audioProgress, setAudioProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
+
+	useEffect(() => {
+		const unsub = ttsService.subscribeSequential((isPlaying, current, total) => {
+			setIsAudioPlaying(isPlaying);
+			setAudioProgress({ current: current + 1, total });
+		});
+		return unsub;
+	}, []);
 
 	const scrollToBottom = () => {
 		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -63,12 +81,16 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 		setShowScrollBottom(!isNearBottom);
 	};
 
-	// Determine final consensus message
-	const finalMessage = messages.find(
+	// Determine final consensus / orchestrator presentation message
+	// Must ONLY match the concluding message of the debate (Synthesizer final consensus or Orchestrator final decree),
+	// never the initial Orchestrator convening announcement (round === 0 or type === orchestrator).
+	const finalMessage = conversation?.status === "completed" ? [...messages].reverse().find(
 		(m) =>
 			m.type === "final" ||
-			(m.type === "consensus" && m.fromSeat === "Synthesizer" && (m.round || 0) >= 1),
-	);
+			(m.type === "consensus" && m.fromSeat === "Synthesizer") ||
+			(m.fromSeat === "Synthesizer" && (m.structured as any)?.verdict) ||
+			(m.fromSeat === "Orchestrator" && (m.round || 0) >= 1 && m.type !== "orchestrator"),
+	) : undefined;
 
 	// Get other scenarios for the quick switch cards
 	const otherScenarios = allScenarios.filter(
@@ -96,19 +118,59 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 			className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 space-y-6 relative"
 		>
 			<div className="max-w-4xl mx-auto space-y-6">
-				{/* Top Status Bar: Inquiry Assessment & Mode banner if score exists */}
+				{/* Top Status Bar: Council Complexity banner if score exists */}
 				{inquiryScore != null && (
 					<div className="p-3.5 rounded-xl bg-[#12182b] border border-[#1e2842] flex items-center justify-between text-xs animate-fadeIn">
 						<div className="flex items-center gap-2">
-							<span className="text-slate-400 font-mono">Assessed Inquiry Score:</span>
-							<span className="font-mono font-bold text-amber-300">{inquiryScore} / 10</span>
+							<span className="text-slate-400 font-medium">Council Complexity:</span>
+							<span className="font-mono font-bold text-amber-300">Level {inquiryScore}/10</span>
 						</div>
 						<div className="text-[11px] text-slate-400">
 							{inquiryScore >= 7
-								? "High Complexity (Requires Deep Research + Challenger Intervention)"
+								? "High Complexity · Full Cross-Functional Council & Challenger Review"
 								: inquiryScore >= 4
-									? "Moderate Complexity (Multi-Seat Deliberation)"
-									: "Standard Inquiry"}
+									? "Moderate Complexity · Multi-Seat Deliberation"
+									: "Standard Inquiry · Core Review"}
+						</div>
+					</div>
+				)}
+
+				{/* Deliverable Contract & Authoritative Output Banner */}
+				{conversation?.contract && (
+					<div className="p-3 rounded-xl bg-gradient-to-r from-[#172038] via-[#121a2e] to-[#172038] border border-[#2b3a62] flex items-center justify-between text-xs animate-fadeIn flex-wrap gap-2">
+						<div className="flex items-center gap-2.5">
+							<span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+							<div>
+								<span className="font-bold text-slate-200">Deliverable Contract: </span>
+								<span className="font-mono font-bold text-amber-400 uppercase">
+									{conversation.contract.primaryOutputType}
+								</span>
+								<span className="text-slate-400 ml-1.5 font-mono text-[11px]">
+									({conversation.contract.fileFormat.toUpperCase()})
+								</span>
+							</div>
+						</div>
+
+						<div className="flex items-center gap-2">
+							{conversation.supervisorDecision === "APPROVED" && conversation.primaryArtifact ? (
+								<div className="flex items-center gap-2">
+									<span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[10.5px] font-mono font-semibold flex items-center gap-1">
+										<ShieldCheck className="w-3.5 h-3.5" />
+										Validated &amp; Approved
+									</span>
+									<a
+										href={conversation.primaryArtifact.downloadUrl}
+										download
+										className="px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-[11px] transition-colors"
+									>
+										Get {conversation.contract.primaryOutputType}
+									</a>
+								</div>
+							) : (
+								<span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10.5px] font-mono">
+									Parallel Generation in Progress
+								</span>
+							)}
 						</div>
 					</div>
 				)}
@@ -229,12 +291,43 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 					</div>
 				)}
 
-				{/* Stream Mode Toggle Bar */}
+				{/* Stream Mode & Sequential Audio Player Bar */}
 				{messages.length > 0 && (
-					<div className="flex items-center justify-between pb-3 border-b border-[#22222a] text-xs">
-						<div className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
-							Deliberation Stream Filter:
+					<div className="flex items-center justify-between pb-3 border-b border-[#22222a] text-xs flex-wrap gap-2">
+						<div className="flex items-center gap-2">
+							<span className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
+								Council Stream:
+							</span>
+							<button
+								type="button"
+								onClick={() => {
+									if (isAudioPlaying) {
+										ttsService.stop();
+									} else {
+										ttsService.playSequential(visibleMessages);
+									}
+								}}
+								className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold transition-all border ${
+									isAudioPlaying
+										? "bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-md shadow-amber-950/40"
+										: "text-slate-300 hover:text-amber-300 bg-[#16161c] hover:bg-[#202028] border-[#262630]"
+								}`}
+								title={isAudioPlaying ? "Stop sequential audio playback" : "Listen to all agents speaking their arguments in order"}
+							>
+								{isAudioPlaying ? (
+									<>
+										<VolumeX className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+										<span>Stop Deliberation Audio ({audioProgress.current}/{audioProgress.total})</span>
+									</>
+								) : (
+									<>
+										<Volume2 className="w-3.5 h-3.5 text-amber-400" />
+										<span>Listen to Deliberation</span>
+									</>
+								)}
+							</button>
 						</div>
+
 						<div className="flex items-center gap-1 bg-[#16161c] p-1 rounded-xl border border-[#262630]">
 							<button
 								type="button"
@@ -265,7 +358,10 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 
 				{/* Messages Stream */}
 				{visibleMessages.map((m) => {
-					const agentProfile = agentRoster?.find((a) => a.id === m.fromSeat);
+					const assignment = conversation?.agentAssignments?.[m.fromSeat];
+					const agentProfile =
+						agentRoster?.find((a) => a.id === m.fromSeat) ||
+						(assignment ? getAgentProfile(m.fromSeat, assignment) : undefined);
 					// If this is the final consensus message, we render the highlighted FinalAnswerCard!
 					if (m === finalMessage) {
 						return (
@@ -298,6 +394,14 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 						/>
 					);
 				})}
+
+				{/* Parallel Crew Research Stack with Barrier Synchronization */}
+				{activeCrewRound && (
+					<ParallelCrewStack
+						round={activeCrewRound}
+						isClosing={isCrewClosing}
+					/>
+				)}
 
 				{/* Active Agent Thinking Indicator */}
 				{activeAgentThinking && (

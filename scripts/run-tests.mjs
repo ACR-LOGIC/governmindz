@@ -14,6 +14,15 @@ const testFiles = [
 	"libs/core/test/meterless.test.ts",
 	"libs/core/test/zetaris.test.ts",
 	"libs/core/test/workflow.test.ts",
+	"libs/core/test/scheduler.test.ts",
+	"libs/core/test/convergence.test.ts",
+	"libs/core/test/resilience.test.ts",
+	"libs/core/test/documents.test.ts",
+	"libs/core/test/feedback.test.ts",
+	"libs/core/test/audit_chain_verifier.test.ts",
+	"libs/core/test/supervisor_multi_agent_workflow.test.ts",
+	"tests/crew_barrier_types.test.ts",
+	"tests/crew_barrier.test.ts",
 ];
 
 const result = spawnSync(
