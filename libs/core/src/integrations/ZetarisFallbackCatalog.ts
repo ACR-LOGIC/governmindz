@@ -66,7 +66,10 @@ export class ZetarisFallbackCatalog {
 	 * Match read-only SQL and return structured schema or synthetic demonstration evidence.
 	 */
 	resolveQuery(sql: string, limit = 50): FallbackQueryResult {
-		const cleanSql = sql.trim().replace(/;+$/, "").trim();
+		let cleanSql = sql.trim();
+		while (cleanSql.endsWith(";")) {
+			cleanSql = cleanSql.slice(0, -1).trim();
+		}
 		const upper = cleanSql.toUpperCase();
 
 		// 1. SHOW LIGHTNING DATABASES

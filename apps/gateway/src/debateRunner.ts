@@ -312,7 +312,7 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 					sha256: parsed.sha256,
 				});
 			} catch (docErr) {
-				console.warn(`Failed to ingest document ${att.name}:`, docErr);
+				console.warn("Failed to ingest document:", String(att?.name), docErr);
 			}
 		}
 

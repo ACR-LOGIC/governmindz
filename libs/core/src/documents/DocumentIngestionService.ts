@@ -241,14 +241,37 @@ export function getExcelColumnName(colIndex: number): string {
 }
 
 /**
+ * Decodes XML entities safely in a single pass without double-unescaping vulnerability.
+ */
+function decodeXmlEntities(str: string): string {
+	return str.replace(/&(amp|lt|gt|quot|apos);/g, (match, entity) => {
+		switch (entity) {
+			case "amp":
+				return "&";
+			case "lt":
+				return "<";
+			case "gt":
+				return ">";
+			case "quot":
+				return '"';
+			case "apos":
+				return "'";
+			default:
+				return match;
+		}
+	});
+}
+
+/**
  * Normalizes a citation tag or coordinate string for canonical exact matching.
  */
 export function normalizeCitationTag(tag: string): string {
 	return tag
 		.trim()
 		.toLowerCase()
-		.replace(/\s*,\s*/g, ", ")
-		.replace(/\s+/g, " ");
+		.split(",")
+		.map((part) => part.trim().split(/\s+/).filter(Boolean).join(" "))
+		.join(", ");
 }
 
 // ---------------------------------------------------------------------------
@@ -274,7 +297,7 @@ export function parseXlsxDocument(
 		const xml = sstData.toString("utf8");
 		const matches = xml.matchAll(/<si>(?:(?!<\/si>).)*?<t[^>]*>([\s\S]*?)<\/t>/gi);
 		for (const m of matches) {
-			sharedStrings.push(m[1].replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">"));
+			sharedStrings.push(decodeXmlEntities(m[1]));
 		}
 	}
 
@@ -396,14 +419,23 @@ export function parsePdfDocument(
 	const chunks: DocumentEvidenceChunk[] = [];
 	const rawText = buffer.toString("latin1");
 
-	// Extract stream contents
+	// Extract stream contents linearly without polynomial backtracking (ReDoS prevention)
 	const pageTexts: string[] = [];
-	const streamMatches = rawText.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g);
+	let streamPos = 0;
 
-	for (const sm of streamMatches) {
-		const streamRaw = Buffer.from(sm[1], "latin1");
+	while (streamPos < rawText.length) {
+		const startIdx = rawText.indexOf("stream", streamPos);
+		if (startIdx === -1) break;
+		let streamStart = startIdx + 6;
+		if (rawText[streamStart] === "\r") streamStart++;
+		if (rawText[streamStart] === "\n") streamStart++;
+		const endIdx = rawText.indexOf("endstream", streamStart);
+		if (endIdx === -1) break;
+
+		const streamRaw = Buffer.from(rawText.slice(streamStart, endIdx), "latin1");
+		streamPos = endIdx + 9;
+
 		let uncompressed: string = "";
-
 		try {
 			uncompressed = zlib.inflateSync(streamRaw).toString("utf8");
 		} catch {
@@ -414,22 +446,30 @@ export function parsePdfDocument(
 			}
 		}
 
-		// Look for PDF text objects: BT ... ET
+		// Look for PDF text objects: BT ... ET linearly
 		const textBlocks: string[] = [];
-		const btMatches = uncompressed.matchAll(/BT[\s\S]*?ET/g);
-		for (const btm of btMatches) {
-			const block = btm[0];
-			// Matches strings in parentheses: (text) Tj or [(t1) (t2)] TJ
-			const stringMatches = block.matchAll(/\(([^)]+)\)\s*(?:Tj|'|")/g);
-			for (const stm of stringMatches) {
-				textBlocks.push(stm[1]);
-			}
-			const arrayMatches = block.matchAll(/\[(.*?)\]\s*TJ/g);
-			for (const arm of arrayMatches) {
-				const innerStrings = arm[1].matchAll(/\(([^)]+)\)/g);
-				for (const ism of innerStrings) {
-					textBlocks.push(ism[1]);
+		let btPos = 0;
+		while (btPos < uncompressed.length) {
+			const btIdx = uncompressed.indexOf("BT", btPos);
+			if (btIdx === -1) break;
+			const etIdx = uncompressed.indexOf("ET", btIdx + 2);
+			if (etIdx === -1) break;
+
+			const block = uncompressed.slice(btIdx + 2, etIdx);
+			btPos = etIdx + 2;
+
+			// Extract string contents inside parentheses: (text)
+			let pPos = 0;
+			while (pPos < block.length) {
+				const openP = block.indexOf("(", pPos);
+				if (openP === -1) break;
+				const closeP = block.indexOf(")", openP + 1);
+				if (closeP === -1) break;
+				const str = block.slice(openP + 1, closeP);
+				if (str.trim().length > 0) {
+					textBlocks.push(str);
 				}
+				pPos = closeP + 1;
 			}
 		}
 
@@ -438,15 +478,13 @@ export function parsePdfDocument(
 		}
 	}
 
-	// If stream extraction produced no text, fallback to form feed or regex text extraction
+	// Fallback to form feed delimiters if stream extraction produced no text
 	if (pageTexts.length === 0) {
 		const fullStr = buffer.toString("utf8");
-		// Split by form feeds \f or Page markers
-		const pages = fullStr.split(/\f|---+\s*Page\s*\d+\s*---+/i).filter((p) => p.trim().length > 0);
+		const pages = fullStr.split("\f").filter((p) => p.trim().length > 0);
 		if (pages.length > 0) {
 			pageTexts.push(...pages);
 		} else {
-			// Extract any readable text paragraphs
 			pageTexts.push(fullStr);
 		}
 	}

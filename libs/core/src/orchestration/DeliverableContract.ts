@@ -93,11 +93,24 @@ export function classifyDeliverable(userRequest: string): DeliverableContract {
 	if (mentionsSpreadsheet) detectedTypes.push("spreadsheet");
 	if (mentionsChart) detectedTypes.push("chart");
 
-	// Clean safe slug from request topic
-	const slug = lower
-		.replace(/[^a-z0-9]+/g, "-")
-		.replace(/^-+|-+$/g, "")
-		.slice(0, 32) || "governmindz-deliverable";
+	// Clean safe slug from request topic without polynomial regex backtracking
+	const slugChars: string[] = [];
+	let prevDash = true;
+	for (let i = 0; i < lower.length && slugChars.length < 32; i++) {
+		const c = lower.charCodeAt(i);
+		if ((c >= 97 && c <= 122) || (c >= 48 && c <= 57)) {
+			slugChars.push(lower[i]);
+			prevDash = false;
+		} else if (!prevDash) {
+			slugChars.push("-");
+			prevDash = true;
+		}
+	}
+	let slug = slugChars.join("");
+	while (slug.endsWith("-")) {
+		slug = slug.slice(0, -1);
+	}
+	slug = slug || "governmindz-deliverable";
 
 	// Handle Multiple requested deliverables
 	if (detectedTypes.length > 1) {

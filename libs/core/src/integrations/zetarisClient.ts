@@ -57,8 +57,8 @@ function env(name: string): string {
 }
 
 function normalizeBaseUrl(value: string): string {
-	const trimmed = value.trim() || DEFAULT_REST_URL;
-	return trimmed.replace(/\/+$/, "");
+	let trimmed = value.trim() || DEFAULT_REST_URL;
+	while (trimmed.endsWith("/")) { trimmed = trimmed.slice(0, -1); } return trimmed;
 }
 
 /**
