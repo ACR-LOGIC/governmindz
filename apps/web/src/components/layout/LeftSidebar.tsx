@@ -54,7 +54,12 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
 
 	if (!isOpen) return null;
 
-	const filtered = conversations.filter(
+	// Clean mode isolation: Live mode shows only live debates; Demo mode shows demo runs
+	const modeScoped = conversations.filter((c) =>
+		mode === "live" ? c.mode === "live" : c.mode === "sample" || c.mode === "demo",
+	);
+
+	const filtered = modeScoped.filter(
 		(c) =>
 			c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
 			c.topic.toLowerCase().includes(searchQuery.toLowerCase()),
@@ -173,8 +178,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
 					</button>
 				</div>
 
-				{/* Scenario Selector */}
-				{scenarios.length > 0 && (
+				{/* Scenario Selector: Only visible in Demo Mode */}
+				{mode === "sample" && scenarios.length > 0 && (
 					<div className="space-y-1">
 						<label className="text-[10px] text-slate-400 uppercase tracking-wider block">
 							Governance Template

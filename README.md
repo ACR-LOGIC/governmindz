@@ -2,27 +2,41 @@
 
 # GOVERNMINDZ
 
-**A governed, competition-ready multi-agent debate and explanation platform that shows the exact evidence, disagreements, and cryptographic proof behind AI decisions.**
+**A governed, competition-ready multi-agent research, debate, and deliverable-synthesis platform that shows the exact evidence, disagreements, and cryptographic proof behind AI decisions.**
 
-GOVERNMINDZ runs role-separated agents over Zetaris Lightning evidence, executes seat inference via local Meterless Runtime (routing to NVIDIA Nemotron), maintains a 12-state deterministic workflow engine, and produces a tamper-evident SHA-256 signed audit trail. Built for the **Open Agent Hackathon 2026**.
+GOVERNMINDZ conducts parallel multi-agent research across **Zetaris Lightning federated database fabrics** and **authoritative external web sources**, visualizes real-time progress via **parallel crew bubbles with barrier synchronization**, resolves conflicting claims through role-separated debate, and compiles verified user deliverables (PowerPoint presentations, PDF reports, spreadsheets, charts, and audit ledgers). Built for the **Open Agent Hackathon 2026**.
 
 Available both as an **interactive Mission Control Web Application** (React 19, TypeScript, Vite, Tailwind CSS v4, Lucide React, SQLite persistence) and a **production-grade CLI pipeline**.
 
 ---
 
-## Track & Project Overview
+## Key Capabilities
 
-- **Primary track:** Track 02 — The Agent That Can Explain Why.
-- **Target user:** Data platform teams, analytics governance groups, compliance officers, and reviewers who must defend an AI-assisted decision to another human.
-- **Problem:** Conventional LLM agents provide fluent but untraceable answers over federated data—failing to show which table was queried, which agent objected, how confidence evolved, or whether the transcript was altered.
-- **Core capabilities:**
-  - **Zetaris Lightning REST Evidence:** Read-only SQL guard and policy gate preventing writes, DDL, injections, and unauthorized catalog access.
-  - **Role-Separated Multi-Agent Roster:** FactChecker, CloudArchitect, Synthesizer, RivalChallenger, and Thinker with distinctive identities, funny persona quirks, and visual character avatars.
-  - **Bounded Deliberative Consensus:** Multi-round structured debate with dual-confidence scoring (self-confidence + expert agreement) and explicit dissent tracking.
-  - **Meterless Model Execution:** Local-first OpenAI-compatible runtime resolving to NVIDIA Nemotron with deterministic JSON output contracts.
-  - **Cryptographic Audit Trail:** In-memory and SQLite-persisted SHA-256 hash-chained ledger guaranteeing tamper evidence.
-  - **GovernMindz Mission Control Web UI:** Competition-ready 3-view interface (AI Group Conversation, 12-State Execution Explorer, Trust & Evidence Ledger) with Server-Sent Events (SSE) live streaming and local SQLite conversation history.
-  - **Playwright Automated Browser Testing:** Full end-to-end test suite capturing live session videos and screenshots.
+- **Parallel Research Crews (8 Agents):**
+  - **Data Crew (4 specialized agents):** Database Catalog Specialist, Query Investigator, Anomaly Detector, and Provenance Analyst querying Zetaris Lightning via read-only SQL gates.
+  - **Web Search Crew (4 specialized agents):** Regulatory Standards Verifier (NIST/ISO), Temporal Freshness Analyst, Scholarly Researcher, and Counter-Evidence Investigator.
+- **Parallel Crew Chat Bubbles & Barrier Synchronization:**
+  - Independent, animated conversational bubbles for each active research crew.
+  - Observational scrollable message streams, milestone checkpoints, and status pips (`talking`, `wrapping_up`, `ready`).
+  - Strict **barrier synchronization**: no bubble closes early; all required crews must reach `ready` before an authoritative combined summary is posted to the main deliberation.
+- **Authoritative Deliverable Contracts:**
+  - Classifies user requests and produces real, physically validated files:
+    - **Presentations:** OpenXML `.pptx` slides generated with zero third-party dependencies.
+    - **Executive Reports:** Publication-grade PDF documents (`%PDF-1.4`).
+    - **Data Exports:** RFC 4180-compliant `.csv` spreadsheets.
+    - **Data Visualizations:** Responsive vector charts (`.svg`).
+  - Supplementary evidence and audit traces are exported separately (`-evidence.json`), never substituting for requested deliverables.
+- **Role-Separated Deliberation Council:**
+  - **Supervisor (1):** Central coordinator, contract classifier, and release certifier.
+  - **Rival Challenger / Hater (1):** Independently audits data and web crew outputs separately; non-voting.
+  - **Fact Checker (1):** Validates claims against primary sources; eliminates ungrounded assumptions.
+  - **Thinker (1):** Evaluates inquiry depth, deliverable satisfaction, and long-term edge cases.
+  - **Synthesizer (1):** Reconciles evidence and crafts deliverable-structured content.
+  - **Design Assistant (1):** Compiles and validates physical artifacts on disk.
+- **Cryptographic Auditability:**
+  - Unbroken SHA-256 hash-chained ledger verifying every agent action from genesis block to session completion with NIST SP 800-92 / RFC 6962 attestation certificates.
+- **Local-First & Meterless Runtime:**
+  - Zero-cloud-cost model execution via Meterless Runtime routing to NVIDIA Nemotron 3.5 Lightning 30B with deterministic JSON schema output contracts. Offline demo benchmarks run with zero API keys.
 
 ---
 
@@ -30,225 +44,259 @@ Available both as an **interactive Mission Control Web Application** (React 19, 
 
 ```mermaid
 flowchart TD
-    subgraph UI ["GovernMindz Mission Control (Web & CLI)"]
+    subgraph UI ["Mission Control Interface"]
         CLI[Operator CLI]
         WEB[React 19 Mission Control Web UI]
+        BUBBLES["Parallel Crew Bubbles<br/>(Animated Live Streams)"]
     end
 
-    subgraph GW ["Gateway & Orchestration"]
-        GATE[Gateway / SSE Stream]
-        FSM["12-State Deterministic Workflow Engine<br/>(RECEIVED ➔ ASSESSED ➔ RESEARCHING ➔ DEBATING ➔ COMPLETED)"]
-        PERSIST[SQLite Conversation & Audit Persistence]
+    subgraph ORCH ["Supervisor & Barrier Synchronization"]
+        SUP["Supervisor Authority"]
+        CONTRACT["Deliverable Contract<br/>(PPTX / PDF / CSV / SVG)"]
+        BARRIER{"Barrier Synchronization Gate<br/>(All Crews Ready?)"}
+        SUMMARY["Harmonized Crew Summary<br/>(Preserving Discrepancies)"]
     end
 
-    subgraph EVIDENCE ["Evidence & Policy Gate"]
-        ZET[Zetaris Lightning REST SQL]
-        GUARD[Read-Only SQL Guard & Policy Gate]
-        BOUND[Bounded Evidence Context]
+    subgraph CREWS ["Concurrent Research Crews"]
+        DC["Data Crew (4 Agents)<br/>• Catalog & Schema<br/>• Query & Records<br/>• Anomaly & Outliers<br/>• Provenance & Lineage"]
+        WC["Web Search Crew (4 Agents)<br/>• Regulatory & NIST Standards<br/>• Temporal Freshness<br/>• Scholarly Analysis<br/>• Counter-Evidence & Disputes"]
     end
 
-    subgraph DEBATE ["Multi-Agent Deliberation Seats"]
-        FC["FactChecker (Forensic Detective)"]
-        CA["CloudArchitect (Safety Beaver)"]
-        SY["Synthesizer (Judicial Capybara)"]
-        RC["RivalChallenger (Boxing Badger)"]
-        TK["Thinker (Cosmic Octopus)"]
+    subgraph AUDIT ["Evidence & Verification Gates"]
+        ZET["Zetaris Lightning Virtual Fabric"]
+        HATER["Rival Challenger / Hater<br/>(Independent Dual Audit)"]
+        FC["Fact Checker (Claim Grounding)"]
+        TK["Thinker (Reasoning Completeness)"]
     end
 
-    subgraph MODEL ["Model Runtime"]
-        MTR[Meterless Local Runtime]
-        NEMO[NVIDIA Nemotron 3.5 Lightning 30B]
+    subgraph RELEASE ["Synthesis & Delivery"]
+        SYN["Synthesizer"]
+        DA["Design Assistant & Validator"]
+        ARTIFACTS["Validated Physical Artifacts<br/>(data/artifacts/ & /api/artifacts/:id)"]
+        CHAIN["SHA-256 Cryptographic Audit Ledger"]
     end
 
-    subgraph TRUST ["Trust & Cryptographic Audit"]
-        AUDIT[SHA-256 Hash-Chained Audit Emitter]
-        RECEIPT[Gravity Cryptographic Receipt]
-        LOGS[JSONL Ordered Traces]
-    end
-
-    CLI --> GATE
-    WEB -->|SSE Stream + REST| GATE
-    GATE --> FSM
-    FSM --> PERSIST
-    FSM --> GUARD
-    GUARD --> ZET
-    ZET --> BOUND
-    BOUND --> DEBATE
-    DEBATE --> MTR
-    MTR --> NEMO
-    DEBATE --> AUDIT
-    AUDIT --> RECEIPT
-    AUDIT --> LOGS
-    AUDIT --> PERSIST
-    PERSIST --> WEB
+    CLI --> SUP
+    WEB --> SUP
+    SUP --> CONTRACT
+    SUP --> DC
+    SUP --> WC
+    DC --> BUBBLES
+    WC --> BUBBLES
+    DC --> BARRIER
+    WC --> BARRIER
+    BARRIER --> SUMMARY
+    SUMMARY --> HATER
+    HATER --> FC
+    FC --> TK
+    TK --> SYN
+    SYN --> DA
+    DA --> ARTIFACTS
+    ARTIFACTS --> SUP
+    SUP --> WEB
+    SUP --> CHAIN
 ```
 
 ---
 
-## Mission Control Web Interface
+## Quickstart & Installation (OS-Specific Instructions)
 
-The web interface (`apps/web/`) provides an elegant, modern group conversation experience supported by deep observability across three integrated views:
+GovernMindz supports **Windows**, **Linux**, and **macOS** with Node.js v22+ and npm v10+.
 
-1. **View A — AI Group Conversation:**
-   - Real-time SSE streaming of agent proposals, rebuttals, challenges, and consensus votes.
-   - **Expressive Character Avatars:** Each agent features a custom-drawn, humorous SVG character illustration matching their mandate (e.g., FactChecker's forensic monocle & magnifying glass, CloudArchitect's safety hard hat & blueprints, Synthesizer's judicial wig & gavel, RivalChallenger's boxing gloves, Thinker's wire glasses & teacup).
-   - **Persona Catchphrases:** Humorous thought bubbles capturing each seat's unique governance priority.
-   - **Dual Confidence Telemetry:** Real-time visualization of individual Self-Confidence alongside cross-seat Expert Agreement percentages.
-   - **Evidence & Caveat Chips:** Interactive verification pills for cited tables, least-privilege caveats, and dissent records.
-   - **Synthesized Final Answer Card:** High-contrast amber card highlighting the calibrated final confidence score, consensus method, and cryptographic sign-off.
-   - **Collapsible Agent Inspector Drawer:** Detailed slide-over displaying role boundaries, active tools, and complete contribution history.
+### System Prerequisites
 
-2. **View B — Deterministic Execution Explorer:**
-   - Visual step progression through the 12-state formal state machine (`RECEIVED`, `ASSESSED`, `CONTEXT_READY`, `RESEARCHING`, `DEBATING`, `FINAL_REVIEW`, `COMPLETED`).
-   - Chronological transition log with exact microsecond timestamps, triggering agents, and state payload inspector.
-
-3. **View C — Trust & Evidence Catalog & Cryptographic Ledger:**
-   - **Zetaris Lightning Federated Data Catalog:** Interactive tabular explorer for federated databases, row counts, and data classifications.
-   - **Tamper-Evident SHA-256 Ledger:** Live block-by-block hash-chain viewer verifying unbroken sequential hashes from genesis to session completion.
-
-4. **Persistence & System Settings:**
-   - Durable SQLite conversation database (`data/conversations.db`) with full search, rename, export, and delete capabilities.
-   - Settings modal providing live connectivity probes for Meterless Runtime and Zetaris Lightning.
+| Requirement | Minimum Version | Notes |
+| :--- | :--- | :--- |
+| **Node.js** | `v22.0.0` or higher | Required for native `--env-file` support and Node test runner |
+| **npm** | `v10.0.0` or higher | Included with Node.js v22 |
+| **Git** | `v2.30.0` or higher | Clone and version control |
 
 ---
 
-## Quickstart & Installation
+### Windows (PowerShell or Command Prompt)
 
-### Requirements
+1. **Open PowerShell as Administrator** (or Windows Terminal) and verify prerequisites:
+   ```powershell
+   node --version
+   npm --version
+   git --version
+   ```
+   *(If Node.js is missing, install it via `winget install OpenJS.NodeJS.LTS` or download from [nodejs.org](https://nodejs.org/)).*
 
-- **Node.js:** v22.0.0 or later
-- **npm:** v10.0.0 or later
-- **OS:** Windows, macOS, or Linux
+2. **Clone the repository and install dependencies:**
+   ```powershell
+   git clone https://github.com/ACR-LOGIC/governmindz.git
+   Set-Location governmindz
+   npm ci
+   ```
 
-```bash
-git clone https://github.com/ACR-LOGIC/governmindz.git
-cd governmindz
-npm ci
-```
+3. **Launch the Mission Control Web Application:**
+   ```powershell
+   npm run web
+   ```
+   Open **`http://127.0.0.1:8787`** in your browser.
 
-Windows PowerShell:
+4. **Optional: Run with Vite frontend Hot Module Replacement (HMR):**
+   ```powershell
+   # In terminal 1 (Backend API & SSE Server):
+   npm run web
 
-```powershell
-git clone https://github.com/ACR-LOGIC/governmindz.git
-Set-Location governmindz
-npm ci
-```
-
----
-
-## Usage Commands
-
-### 1. Launch Mission Control Web UI
-
-```bash
-npm run web
-```
-
-Open **`http://127.0.0.1:8787`** in your browser. The web UI operates out of the box in key-free Demo mode or Live mode with SQLite conversation persistence.
-
-- **First-Launch Demo Experience:** Launches automatically in Demo mode on fresh installations without requiring upfront credentials or API keys.
-- **Interactive UI Tour:** Includes an intuitive 5-step guided introduction highlighting the multi-agent chat, live agent roster, debate history, mode switcher, and execution explorer. Re-launch anytime from Settings.
-- **3 Distinct Demo Scenarios:** Selectable prompt bubbles for:
-  1. *Research & Evidence:* Investigate disparate tables (CRM, Billing, Support) across freshness windows to ensure cross-source provenance.
-  2. *Technical Decision:* Evaluate least privilege, read-only SQL guards, byte quotas, and role-based policy gates.
-  3. *Conflicting Claims:* Examine conflicting retention claims, challenge assumptions, and enforce verifiable tamper-evident signatures.
-- **Restricted Free-Text in Demo Mode:** Free-text is disabled during Demo mode to guarantee deterministic offline execution, featuring a prominent **Start Over** action once a run concludes.
-- **Live Mode Transition & Preference Persistence:** Confirming the switch to Live mode saves future launch preferences (`Yes — Show Demo Again` vs `No — Open Live Mode Next Time`) persistently in `localStorage` and server SQLite (`data/conversations.db`).
-- **AES-256-GCM Credential Vault:** Secure modal for configuring Zetaris Lightning and Meterless credentials. Encrypted at rest in local master key vault and written safely to `.env.local`. Plaintext secrets are never exposed back to the client.
-- **Independent Connection Indicators:** Dedicated pills in the header displaying verified connectivity (Green = live connected, Red = failed/offline, Yellow/Gray = demo/unconfigured) with contextual diagnostics.
-
-For frontend development with Vite Hot Module Replacement (HMR):
-
-```bash
-npm run dev
-```
-
-(Runs on `http://127.0.0.1:5173` with automatic reverse proxying of `/api` to the backend on port 8787).
+   # In terminal 2 (Vite Client Server):
+   npm run dev
+   ```
+   Open **`http://127.0.0.1:5173`**.
 
 ---
 
-### 2. Run Playwright Automated Browser Tests (with Video Recording)
+### Linux (Ubuntu, Debian, Fedora, Arch)
 
-Playwright runs headless Chromium against the application stack, exercising all 3 views, message submission, agent drawer inspection, settings, and captures high-resolution screenshots and video:
+1. **Verify or install Node.js v22 and build essentials:**
+   ```bash
+   # On Ubuntu / Debian:
+   curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+   sudo apt-get install -y nodejs git build-essential
 
-```bash
-npm run test:e2e
-```
+   # On Fedora / RHEL:
+   sudo dnf module install -y nodejs:22
+   sudo dnf install -y git make gcc-c++
 
-- **Video Recording:** Automatically written to `test-results/recordings/govern_mindz_e2e_full_journey.webm`.
-- **View Screen Captures:** Saved to `test-results/recordings/screenshots/`.
+   # On Arch Linux:
+   sudo pacman -S nodejs npm git base-devel
+   ```
+
+2. **Clone and install dependencies:**
+   ```bash
+   git clone https://github.com/ACR-LOGIC/governmindz.git
+   cd governmindz
+   npm ci
+   ```
+
+3. **Launch the Web Application:**
+   ```bash
+   npm run web
+   ```
+   Open **`http://127.0.0.1:8787`** in your browser.
+
+4. **Optional: Headless E2E Browser Testing prerequisites:**
+   ```bash
+   # Install Playwright browser dependencies on Linux:
+   npx playwright install-deps
+   npx playwright install chromium
+   ```
 
 ---
 
-### 3. Run Backend Unit & Integration Tests
+### macOS (Apple Silicon M1/M2/M3/M4 & Intel)
+
+1. **Verify or install prerequisites via Homebrew:**
+   ```bash
+   # Install Homebrew if not installed:
+   # /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+   brew install node@22 git
+   brew link node@22
+   node --version
+   ```
+
+2. **Clone and install dependencies:**
+   ```bash
+   git clone https://github.com/ACR-LOGIC/governmindz.git
+   cd governmindz
+   npm ci
+   ```
+
+3. **Launch the Web Application:**
+   ```bash
+   npm run web
+   ```
+   Open **`http://127.0.0.1:8787`** in your browser.
+
+4. **Optional: Playwright E2E browser installation:**
+   ```bash
+   npx playwright install chromium
+   ```
+
+---
+
+## Operating Modes
+
+GovernMindz runs in two distinct operational modes:
+
+### 1. Demo Mode (Zero Credentials Required)
+- **Out-of-the-Box Execution:** Operates immediately upon first launch without any API keys, tokens, or cloud configuration.
+- **Deterministic Precedents:** Executes deterministic Zetaris catalog queries, parallel crew research, and adversarial debate loops over cached governance benchmarks.
+- **Safe Experimentation:** Evaluates complex multi-agent reasoning, barrier synchronization, and deliverable validation safely offline.
+
+### 2. Live Mode (Connected Infrastructure)
+- **Zetaris Lightning Integration:** Queries live federated data tables across PostgreSQL, BigQuery, Parquet, and REST silos through read-only SQL gates (`assertReadOnlySql()`).
+- **Meterless Runtime:** Connects to local Meterless inference engines (`http://127.0.0.1:8088/v1`), invoking NVIDIA Nemotron 3.5 Lightning 30B models.
+- **AES-256-GCM Credential Vault:** Secure modal in the web interface encrypts Zetaris and Meterless credentials at rest into `.env.local`. Sensitive keys are automatically redacted from error traces and logs.
+
+---
+
+## Command Reference
+
+| Command | Purpose | Platform | Network |
+| :--- | :--- | :--- | :--- |
+| **`npm run web`** | Start full-stack Mission Control web server (`http://127.0.0.1:8787`) | Win / Linux / Mac | Localhost |
+| **`npm run dev`** | Launch Vite frontend with Hot Module Replacement (`http://127.0.0.1:5173`) | Win / Linux / Mac | Localhost |
+| **`npm run build`** | Compile production client bundle (`apps/web/dist`) | Win / Linux / Mac | None |
+| **`npm test`** | Run full automated test suite (**138 / 138 passing**) | Win / Linux / Mac | None |
+| **`npm run typecheck`** | Run strict TypeScript validation (`tsc --noEmit`) | Win / Linux / Mac | None |
+| **`npm run demo:sample`** | Run standalone CLI multi-agent debate scenario | Win / Linux / Mac | None |
+| **`npm run samples`** | Execute all benchmark scenarios and generate traces | Win / Linux / Mac | None |
+| **`npm run test:e2e`** | Execute Playwright E2E browser tests with video capture | Win / Linux / Mac | None |
+| **`npm run demo:dry`** | Validate live Zetaris and Meterless connectivity | Win / Linux / Mac | Yes (if Live) |
+| **`npm run demo`** | Execute live multi-agent deliberation CLI | Win / Linux / Mac | Yes |
+| **`npm run smoke`** | Run preflight API and schema health checks | Win / Linux / Mac | Yes |
+
+---
+
+## Automated Verification & Test Suite
+
+The test suite runs natively across Windows, Linux, and macOS via Node.js's built-in test runner:
 
 ```bash
 npm test
 ```
 
-Executes the complete test suite (**57 / 57 passing**):
-- **Gravity Receipt Tests (5/5):** Verification, master key enforcement, and signature validity.
-- **Meterless Provider Tests (12/12):** URL normalization, auth token resolution, chat completion contract, retry logic, and status detection.
-- **Zetaris SQL Guard Tests (6/6):** Semicolon parsing, read-only SQL assertion, DDL/write rejection, and HTTP error sanitization.
-- **12-State Workflow State Machine Tests (34/34):** State transitions, cycle bounds, inquiry scoring, intervention triggers, and audit hash-chain integrity.
+### Complete Test Coverage (**138 / 138 Passing**):
+1. **Cryptographic Audit Chain Verifier Tests (8/8):** RFC-6962 / NIST SP 800-92 proof certificates, genesis anchor validation, corrupted block localization, broken link detection, and HMAC signature verification.
+2. **Parallel Crew Barrier Synchronization Tests (7/7):** Authoritative crew roster management, barrier locking while crews work, soft timeout transitions to `wrapping_up`, divergence detection, and release idempotency.
+3. **Crew Barrier Types & State Tests (7/7):** Type contracts, timestamp-ordered message appending, duplicate message prevention, and readiness predicates.
+4. **Supervisor Multi-Agent Workflow Tests (12/12):** Deliverable classification, concurrent crew execution, independent Hater dual audit, OpenXML `.pptx` generation, PDF-1.4 generation, CSV generation, SVG chart generation, supplementary evidence separation, and release approval gates.
+5. **Gravity Cryptographic Receipts Tests (5/5):** Verification, master key enforcement, and signature validity.
+6. **Meterless Provider Tests (12/12):** URL normalization, auth token resolution, JSON schema output constraints, and retry backoff.
+7. **Zetaris SQL Guard Tests (6/6):** Semicolon parsing, read-only assertion, DDL/write rejection, and HTTP token sanitization.
+8. **12-State Workflow State Machine Tests (34/34):** Formal state transitions, cycle bounds, inquiry scoring, intervention triggers, and audit hash-chain integrity.
+9. **Scheduler & Resilience Tests (47/47):** Concurrent execution scheduling, circuit breaker tripping/recovery, and adversarial stress testing.
 
 ---
 
-### 4. CLI Entry Points
+## Deliverable Generation Pipeline
 
-| Command | Purpose | Network Required |
-|---|---|---|
-| `npm run web` | Launch Mission Control Web Server | Optional (works offline) |
-| `npm run dev` | Launch Vite Dev Server with HMR | Optional |
-| `npm run build` | Build production frontend bundle (`apps/web/dist`) | None |
-| `npm run test:e2e` | Run Playwright E2E browser tests with recording | None (local server) |
-| `npm test` | Run all 57 backend core test suites | None |
-| `npm run typecheck` | Run full project TypeScript verification | None |
-| `npm run demo:sample` | Run deterministic sample debate scenario | None |
-| `npm run samples` | Generate all sample outputs and JSONL traces | None |
-| `npm run demo:dry` | Verify Zetaris and Meterless connectivity | Yes |
-| `npm run demo` | Run live multi-agent debate | Yes |
-| `npm run smoke` | Preflight contract and API health checks | Yes |
+GovernMindz inspects the user prompt and establishes an authoritative **Deliverable Contract**:
 
----
+```
+User Prompt ➔ Deliverable Contract ➔ Design Assistant ➔ Physical File ➔ Validation Gate ➔ Supervisor Release
+```
 
-## Continuous Integration & Security Automation
-
-GovernMindz includes automated GitHub Actions workflows:
-- **Cross-Platform CI (`.github/workflows/ci.yml`):** Runs type checking (`npm run typecheck`), core test suite (`npm test`), and web application compilation (`npm run build`) on both **Ubuntu** (`ubuntu-latest`) and **Windows** (`windows-latest`) on every push and pull request to `main`.
-- **CodeQL Security Analysis (`.github/workflows/codeql.yml`):** Scans TypeScript and JavaScript source code for vulnerabilities and adherence to security best practices.
-- **Dependabot (`.github/dependabot.yml`):** Automated weekly vulnerability monitoring and dependency updates for both npm and GitHub Actions.
+- **Presentations (`.pptx`):** Generates valid multi-slide Microsoft PowerPoint OpenXML presentations using native `node:zlib` deflate and CRC-32 algorithms with zero external dependencies.
+- **Executive Reports (`.pdf`):** Generates valid PDF-1.4 documents containing header catalogs, cross-reference tables, and text objects.
+- **Spreadsheets (`.csv`):** Formats tabular findings with RFC 4180 escaping and structured schema columns.
+- **Vector Charts (`.svg`):** Renders responsive vector graphics with viewboxes, bars, lines, and data point labels.
+- **Validation Gate:** Every generated file is verified on disk for existence, non-zero byte size, and format signatures before the Supervisor authorizes delivery.
+- **Isolated Evidence:** Technical audit trails and raw database rows are exported separately as secondary files (`*-evidence.json`), never substituting for primary deliverables.
 
 ---
 
-## AI & Model Disclosures
+## Security, Privacy & Integrity
 
-- **Reasoning Model:** The live path invokes local Meterless Runtime (`http://127.0.0.1:8088/v1`). The seat lane defaults to `meterless/fast`, resolving to `nvidia/nemotron-3.5-lightning-30b-a3b`. No direct cloud API key is needed.
-- **Evaluator / Judge:** No separate LLM judge. Consensus is evaluated deterministically based on calibrated seat confidence thresholds, invoking the Synthesizer seat when deliberation requires cross-seat reconciliation.
-- **Embeddings:** None. There are no vector stores, external vector databases, or semantic embeddings.
-- **Agent Architecture:** Custom TypeScript ESM state-machine kernel (`libs/core/`). No heavy third-party agent frameworks (LangGraph, CrewAI, AutoGen) are required.
-- **Safety Controls:** Zetaris SQL statements pass through an AST/regex policy gate rejecting non-read statements prior to socket dispatch; debate loops are strictly bounded by turn counters and cycle detectors to prevent infinite loops.
-
----
-
-## Sponsor Technology Integration
-
-### 1. Zetaris Lightning
-Zetaris serves as the federated data evidence layer. Queries are executed via the REST endpoint through `assertReadOnlySql()`. The preflight query `SHOW LIGHTNING DATABASES` supplies live catalog evidence into the deliberation context.
-
-### 2. Meterless
-Meterless operates as the local zero-cost model runtime. The client supports `/connect` links, `proxy-token` auto-discovery, structured JSON schema response constraints, and automatic retry backoff.
-
-### 3. NVIDIA Nemotron
-Routed through Meterless, NVIDIA Nemotron 3.5 Lightning 30B provides fast, high-quality reasoning across all debate seats without incurring external cloud bills.
-
----
-
-## Security & Privacy
-
-- **Local-First Zero External Leakage:** All sample runs, SQLite databases, and Meterless inferences execute entirely locally.
-- **Secrets Protection:** `.env.local` is gitignored. Runtime tokens, audit signing secrets, and connect URLs are automatically redacted from error traces and logs.
-- **Cryptographic Auditability:** Every agent proposal, dissent, intervention, and workflow state transition is minted into an unbroken SHA-256 hash chain with HMAC signatures.
+- **Strict Local Execution:** Offline sample runs, SQLite databases, and Meterless inferences execute entirely locally with zero telemetry leakage.
+- **Tamper-Evident Hash Chain:** Every agent task, finding, challenge, and consensus vote is minted into an immutable SHA-256 hash chain:
+  $$\text{Block Hash} = \text{HMAC-SHA256}(\text{Index} \parallel \text{PrevHash} \parallel \text{Timestamp} \parallel \text{PayloadHash})$$
+- **AST / Regex SQL Policy Gate:** All Zetaris queries pass through an AST/regex guard that blocks `INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, `TRUNCATE`, and multiple statements prior to socket dispatch.
+- **Secrets Redaction:** `.env.local` is gitignored. Runtime tokens, audit keys, and connect URLs are automatically redacted from error traces and logs.
 
 ---
 
@@ -256,5 +304,5 @@ Routed through Meterless, NVIDIA Nemotron 3.5 Lightning 30B provides fast, high-
 
 - **Event:** Open Agent Hackathon 2026 (October 22–27, 2026)
 - **Track:** Track 02 — The Agent That Can Explain Why
-- **Repository:** `https://github.com/ACR-LOGIC/governmindz`
+- **Repository:** [https://github.com/ACR-LOGIC/governmindz](https://github.com/ACR-LOGIC/governmindz)
 - **License:** Apache-2.0 / MIT

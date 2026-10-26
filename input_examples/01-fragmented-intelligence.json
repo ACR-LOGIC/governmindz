@@ -1,0 +1,94 @@
+{
+	"id": "fragmented-intelligence",
+	"topic": "Reconcile conflicting supplier delivery dates and inventory records across fragmented ERP export (Postgres), Logistics Ticket API, and Risk Feed without fabricating missing data.",
+	"zetaris": {
+		"query": "SELECT supplier_id, order_id, promised_date, status, source_system, freshness FROM supplier_cross_silo_sync",
+		"columns": ["supplier_id", "source_system", "promised_date", "status", "risk_flag", "freshness"],
+		"rows": [
+			["SUP-8021 (Acme Global)", "erp_postgres_export", "2026-11-01", "Shipped (On Schedule)", "Low", "15m"],
+			["SUP-8021 (Acme Global)", "logistics_tickets_api", "2026-11-14", "Delayed (Port Strike)", "High", "2h"],
+			["SUP-8021 (Acme Global)", "vendor_risk_parquet", "2026-11-14", "Flagged (Critical Chokepoint)", "High", "6h"],
+			["SUP-4419 (Apex Industrial)", "erp_postgres_export", "2026-10-30", "Delivered", "None", "15m"],
+			["SUP-4419 (Apex Industrial)", "logistics_tickets_api", "2026-10-30", "Confirmed Received", "None", "2h"]
+		],
+		"total": 5
+	},
+	"seats": {
+		"FactChecker": [
+			{
+				"position": "Hey team, I ran a cross-silo comparison across our suppliers. We have a direct conflict on SUP-8021 (Acme Global): ERP records promise delivery on 2026-11-01 as 'Shipped', but Logistics Ticket API (2h freshness) and Vendor Risk feed (6h freshness) both report delivery delayed to 2026-11-14 due to a port strike. The ERP snapshot simply hasn't ingested the carrier exception yet. @CloudArchitect, how should our ingestion handle this freshness delta?",
+				"confidence_self": 0.88,
+				"confidence_expert_agreement": 0.82,
+				"evidence": [
+					"ERP export reports SUP-8021 promised 2026-11-01",
+					"Logistics Ticket API reports SUP-8021 delayed to 2026-11-14 with High risk",
+					"Vendor Risk Parquet corroborates critical port chokepoint"
+				],
+				"caveats": ["ERP export is 15m fresh but lacks carrier API webhook updates; logistics ticket has 2h latency."],
+				"supports": []
+			},
+			{
+				"position": "Spot-on approach, @CloudArchitect. Citing ERP for the initial PO creation, Logistics API for operational delay status, and Vendor Risk for root cause verification settles it. SUP-8021 delivery date is officially treated as 2026-11-14 (delayed 13 days). Meanwhile, SUP-4419 is reconciled as fully delivered with unanimous 2-source agreement. Zero hallucinated timestamps.",
+				"confidence_self": 0.94,
+				"confidence_expert_agreement": 0.92,
+				"evidence": [
+					"Multi-source cross-silo join on supplier_id",
+					"2-of-3 sources corroborate the 2026-11-14 delay",
+					"No data fabricated for missing intermediate checkpoint timestamps"
+				],
+				"caveats": ["Customs clearance timestamps require manual broker confirmation."],
+				"supports": ["CloudArchitect"]
+			}
+		],
+		"CloudArchitect": [
+			{
+				"position": "Good catch @FactChecker. Instead of a naive overwrite, let's establish a federated reconciliation schema: attach source system provenance, record observation timestamps, and compute freshness confidence weights (Logistics API weight 0.65 for shipment status vs ERP weight 0.35 for dynamic transit). @Synthesizer, this avoids silent data corruption.",
+				"confidence_self": 0.85,
+				"confidence_expert_agreement": 0.81,
+				"evidence": [
+					"3 distinct data silos: Postgres ERP export, REST Ticket API, and Object Storage Parquet",
+					"Conflicting state on SUP-8021"
+				],
+				"caveats": ["API throttling on the ticket system could delay real-time alerts."],
+				"supports": ["FactChecker"]
+			},
+			{
+				"position": "Approved from the infrastructure side, @FactChecker. I have added automated bidirectional sync to our signed policy contract: flag the ERP record as pending revision, publish a webhook to warehouse ops, and log cryptographic audit hashes of all three source payloads.",
+				"confidence_self": 0.93,
+				"confidence_expert_agreement": 0.91,
+				"evidence": [
+					"Zetaris federated query executes across relational and object storage without ETL",
+					"Read-only SQL safety guards active",
+					"Reconciled output schema includes explicit source attribution columns"
+				],
+				"caveats": ["Production rollout requires automated retry queues for logistics webhooks."],
+				"supports": ["FactChecker"]
+			}
+		],
+		"Synthesizer": [
+			{
+				"position": "Great collaboration @FactChecker and @CloudArchitect. Synthesizing the cross-silo records: SUP-8021 clearly exhibits an active data divergence. Recommending a single sourced answer: mark delivery as delayed to 2026-11-14 with high operational risk, clearly citing Logistics and Risk feeds while documenting the ERP snapshot lag.",
+				"confidence_self": 0.87,
+				"confidence_expert_agreement": 0.85,
+				"evidence": [
+					"Cross-silo reconciliation identifies 13-day delta",
+					"SUP-4419 validated across 2 independent silos"
+				],
+				"caveats": ["Missing ERP warehouse acknowledgement."],
+				"supports": ["FactChecker", "CloudArchitect"]
+			},
+			{
+				"position": "We have reached calibrated consensus! Final Sourced Agreement: Successfully reconciled fragmented intelligence across ERP, Ticket API, and Risk feeds. Established canonical status for SUP-8021 (Delayed to 2026-11-14, High Risk) and SUP-4419 (Delivered, Zero Risk). Every fact is explicitly attributed to its origin silo with zero hallucination. Handing off to the Orchestrator.",
+				"confidence_self": 0.95,
+				"confidence_expert_agreement": 0.94,
+				"evidence": [
+					"Provenance table attached to audit envelope",
+					"Conflict resolution rule favors verified external logistics signal over un-refreshed ERP snapshot",
+					"Signed audit event emitted to tamper-proof ledger"
+				],
+				"caveats": ["Physical inspection recommended upon vessel docking."],
+				"supports": ["FactChecker", "CloudArchitect"]
+			}
+		]
+	}
+}

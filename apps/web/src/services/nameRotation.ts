@@ -1,42 +1,41 @@
 /**
- * GovernMindz Agent Human Name Rotation & Job Task Service
+ * GovernMindz Agent Human Name Rotation & 3D Character Persona Service
  *
- * Randomly rotates and assigns friendly, relatable human names (TOM, LUIS, LUCY,
- * SHANIQUA, JOVITA, ARTURO, RJ, ELVIA, VICKY, RAUL, ALEJANDRO AKA ALEX, MECHE,
- * EMELY, VAL, LEAH, ABBY, etc.) to specialized agent seats at the start of each
- * deliberation, along with specific job tasks and instructions.
+ * Rotates and assigns friendly coworker personas and matching 3D character
+ * profile avatars (Priya, Marcus, Arturo, Val, Lucy, Kenji, Sophia, RJ, Tom, Jovita,
+ * Raul, etc.) to specialized agent seats at the start of each deliberation,
+ * along with specific domain specializations.
  */
 
+import { getCartoonPerson } from "./cartoonPeople";
+
 export const HUMAN_NAMES_POOL: string[] = [
-	"Vicky",
+	"Priya",
+	"Marcus",
 	"Arturo",
-	"Luis",
-	"Shaniqua",
-	"RJ",
+	"Val",
 	"Lucy",
+	"Kenji",
+	"Sophia",
+	"RJ",
+	"Vicky",
+	"Shaniqua",
+	"Luis",
 	"Tom",
 	"Jovita",
 	"Elvia",
 	"Raul",
-	"Alejandro aka Alex",
+	"Alex",
 	"Meche",
 	"Emely",
-	"Val",
 	"Leah",
 	"Abby",
-	"Carlos",
-	"Maya",
-	"Kenji",
-	"Sofia",
-	"Darius",
-	"Chloe",
-	"Priya",
-	"Marcus",
 ];
 
 export interface SeatAssignment {
 	seatId: string;
 	humanName: string;
+	avatarId: string;
 	role: string;
 	jobTask: string;
 }
@@ -54,21 +53,21 @@ export const SEAT_ROLES: Record<string, string> = {
 
 export const SEAT_JOB_TASKS: Record<string, string> = {
 	FactChecker:
-		"strictly inspect and verify database entities, primary keys, and schema definitions against the Zetaris catalog — no hallucinations allowed!",
+		"Inspect database schemas, primary keys, and catalog definitions to verify empirical accuracy against Zetaris.",
 	CredibleSourcesResearchAgent:
-		"check, search, and verify claims using only reliable web sources, official documentation, and government standards.",
+		"Cross-reference claims with authoritative technical standards, peer-reviewed docs, and official registries.",
 	CloudArchitect:
-		"enforce least-privilege security boundaries, statement limits, and verify zero-trust firewall policies.",
+		"Evaluate least-privilege security boundaries, statement limits, and zero-trust cloud infrastructure safety.",
 	Synthesizer:
-		"monitor council convergence, calibrate confidence scores, and deliver the final synthesized consensus decree.",
+		"Weigh calibrated confidence, reconcile team disagreements, and formulate unified consensus recommendations.",
 	RivalChallenger:
-		"interrogate unverified assumptions, challenge weak arguments, and demand cryptographic audit proof.",
+		"Stress-test assumptions, probe contradictory findings, and request cryptographic receipts for all claims.",
 	Thinker:
-		"probe hidden governance angles, exploratory hypotheses, and edge-case retention risks.",
+		"Probe operational edge cases, unexamined hypotheses, and contingency protocols before decisions finalize.",
 	ContextAgent:
-		"cross-reference round-by-round transcripts and assess historical memory.",
+		"Track conversation transcripts, assess historical memory precedents, and ensure context continuity.",
 	SocialCommunityResearchAgent:
-		"assess ecosystem stakeholder impact, user experience, and community sentiment.",
+		"Assess user experience impact, stakeholder feedback, and community sentiment.",
 };
 
 /**
@@ -84,8 +83,20 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 /**
- * Assigns unique human names and job tasks to all participating seats for a run
+ * Assigns unique human names, matching 3D character avatars, and focus areas
  */
+export const CANONICAL_COWORKER_IDENTITIES: Record<string, { humanName: string; avatarId: string }> = {
+	FactChecker: { humanName: "Priya", avatarId: "priya" },
+	CloudArchitect: { humanName: "Marcus", avatarId: "marcus" },
+	Synthesizer: { humanName: "Val", avatarId: "val" },
+	RivalChallenger: { humanName: "Arturo", avatarId: "arturo" },
+	Thinker: { humanName: "Lucy", avatarId: "lucy" },
+	CredibleSourcesResearchAgent: { humanName: "Arturo", avatarId: "arturo" },
+	ContextAgent: { humanName: "Kenji", avatarId: "kenji" },
+	SocialCommunityResearchAgent: { humanName: "Sophia", avatarId: "sophia" },
+	Orchestrator: { humanName: "Marcus", avatarId: "marcus" },
+};
+
 export function assignHumanCouncil(
 	seatIds: string[] = [
 		"FactChecker",
@@ -97,11 +108,10 @@ export function assignHumanCouncil(
 		"ContextAgent",
 	],
 ): Record<string, SeatAssignment> {
-	const shuffledNames = shuffle(HUMAN_NAMES_POOL);
 	const assignments: Record<string, SeatAssignment> = {};
 
-	seatIds.forEach((seatId, idx) => {
-		const humanName = shuffledNames[idx % shuffledNames.length];
+	seatIds.forEach((seatId) => {
+		const canonical = CANONICAL_COWORKER_IDENTITIES[seatId] || { humanName: "Priya", avatarId: "priya" };
 		const role = SEAT_ROLES[seatId] || seatId;
 		const jobTask =
 			SEAT_JOB_TASKS[seatId] ||
@@ -109,7 +119,8 @@ export function assignHumanCouncil(
 
 		assignments[seatId] = {
 			seatId,
-			humanName,
+			humanName: canonical.humanName,
+			avatarId: canonical.avatarId,
 			role,
 			jobTask,
 		};
@@ -122,15 +133,15 @@ export function assignHumanCouncil(
  * Generates the friendly task delegation announcement formatted for the orchestrator
  */
 export function generateTaskDelegationAnnouncement(
-	assignments: Record<string, { humanName: string; jobTask: string; role?: string; seatId?: string }>,
+	assignments: Record<string, { humanName: string; jobTask: string; role?: string; seatId?: string; avatarId?: string }>,
 	mode: string = "sample",
 ): string {
 	const lines: string[] = [];
 	lines.push(
-		`🏛️ Council Convened for Task Delegation: Inquiry initiated in ${mode.toUpperCase()} mode.`,
+		`🏛️ Council Convened: Deliberation initiated in ${mode.toUpperCase()} mode.`,
 	);
 	lines.push("");
-	lines.push("Assignments & Job Tasks for this deliberation:");
+	lines.push("Coworker Assignments & Focus Areas for this deliberation:");
 
 	// Prioritize major active seats in order
 	const orderedSeatIds = [
@@ -151,11 +162,12 @@ export function generateTaskDelegationAnnouncement(
 	for (const seatId of activeSeats) {
 		const a = assignments[seatId];
 		const role = a.role || SEAT_ROLES[seatId] || seatId;
-		lines.push(`• ${a.humanName}, you will be the ${role}: ${a.jobTask}`);
+		const cartoon = getCartoonPerson(a.avatarId || a.humanName);
+		lines.push(`• ${a.humanName} [${cartoon.tagline}], assigned as ${role}: ${a.jobTask}`);
 	}
 
 	lines.push("");
-	lines.push("All team members have received their assignments. Commencing deliberation...");
+	lines.push("The council team has synced on focus areas. Deliberation is starting...");
 
 	return lines.join("\n");
 }

@@ -18,10 +18,18 @@ export abstract class AgentBase implements IAgent {
 
 	getSystemPrompt(): string {
 		const basePrompt = this.role
-			? `You are ${this.name}. Your role in GOVERNMINDZ is ${this.role}.`
-			: `You are ${this.name}, a GOVERNMINDZ participant.`;
+			? `You are ${this.name}, an expert coworker in GOVERNMINDZ specializing in ${this.role}.`
+			: `You are ${this.name}, a knowledgeable coworker in GOVERNMINDZ.`;
 
-		return basePrompt + getToolboxSystemPrompt();
+		const coworkerGuidance = `
+Collaborate naturally like a knowledgeable coworker in an engineering team discussion:
+- Acknowledge other agents' contributions naturally when appropriate.
+- Agree, disagree, challenge, clarify, and explain your reasoning clearly.
+- Ask relevant follow-up questions when evidence or details are missing.
+- Use natural phrasing and contractions without robotic presentation, headers, or corporate boilerplate.
+- Maintain professional expertise grounded in verified facts and catalog data.`;
+
+		return `${basePrompt}\n${coworkerGuidance}\n${getToolboxSystemPrompt()}`;
 	}
 
 	protected result(content: string, confidence: number = 1.0): AgentResult {

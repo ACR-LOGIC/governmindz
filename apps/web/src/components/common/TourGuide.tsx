@@ -61,11 +61,18 @@ const TOUR_STEPS: TourStep[] = [
 export const TourGuide: React.FC<TourGuideProps> = ({ isOpen, onClose, onFinish }) => {
 	const [currentIndex, setCurrentIndex] = useState(0);
 	const [highlightRect, setHighlightRect] = useState<DOMRect | null>(null);
+	const [windowSize, setWindowSize] = useState({
+		width: typeof window !== "undefined" ? window.innerWidth : 1280,
+		height: typeof window !== "undefined" ? window.innerHeight : 800,
+	});
 
 	const currentStep = useMemo(() => TOUR_STEPS[currentIndex], [currentIndex]);
 
-	// Calculate target element position
+	// Calculate target element position and handle smooth scroll
 	const updateTargetPosition = useCallback(() => {
+		if (typeof window === "undefined") return;
+		setWindowSize({ width: window.innerWidth, height: window.innerHeight });
+
 		if (!isOpen || !currentStep?.selector) {
 			setHighlightRect(null);
 			return;
@@ -79,88 +86,235 @@ export const TourGuide: React.FC<TourGuideProps> = ({ isOpen, onClose, onFinish 
 		}
 	}, [isOpen, currentStep]);
 
+	// Auto scroll element into view when step changes
 	useEffect(() => {
+		if (!isOpen || !currentStep?.selector) return;
+		const el = document.querySelector(currentStep.selector);
+		if (el) {
+			el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+		}
 		updateTargetPosition();
+		const t1 = setTimeout(updateTargetPosition, 80);
+		const t2 = setTimeout(updateTargetPosition, 320);
+		return () => {
+			clearTimeout(t1);
+			clearTimeout(t2);
+		};
+	}, [isOpen, currentStep, updateTargetPosition]);
+
+	// Listen to resize and scroll
+	useEffect(() => {
+		if (!isOpen) return;
 		window.addEventListener("resize", updateTargetPosition);
 		window.addEventListener("scroll", updateTargetPosition, true);
 		return () => {
 			window.removeEventListener("resize", updateTargetPosition);
 			window.removeEventListener("scroll", updateTargetPosition, true);
 		};
-	}, [updateTargetPosition]);
+	}, [isOpen, updateTargetPosition]);
 
-	if (!isOpen) return null;
-
-	const handleNext = () => {
+	const handleNext = useCallback(() => {
 		if (currentIndex < TOUR_STEPS.length - 1) {
 			setCurrentIndex(currentIndex + 1);
 		} else {
 			onFinish();
 		}
-	};
+	}, [currentIndex, onFinish]);
 
-	const handleBack = () => {
+	const handleBack = useCallback(() => {
 		if (currentIndex > 0) {
 			setCurrentIndex(currentIndex - 1);
 		}
+	}, [currentIndex]);
+
+	const handleSkip = useCallback(() => {
+		onClose();
+	}, [onClose]);
+
+	// Keyboard controls (ArrowRight, ArrowLeft, Escape)
+	useEffect(() => {
+		if (!isOpen) return;
+		const handleKeyDown = (e: KeyboardEvent) => {
+			if (e.key === "Escape") {
+				handleSkip();
+			} else if (e.key === "ArrowRight" || e.key === "Enter") {
+				handleNext();
+			} else if (e.key === "ArrowLeft") {
+				handleBack();
+			}
+		};
+		window.addEventListener("keydown", handleKeyDown);
+		return () => window.removeEventListener("keydown", handleKeyDown);
+	}, [isOpen, handleNext, handleBack, handleSkip]);
+
+	if (!isOpen) return null;
+
+	// Calculate popover positioning style so dialog doesn't block the highlighted element
+	const getPopoverStyle = (): React.CSSProperties => {
+		const { width: winWidth, height: winHeight } = windowSize;
+		const cardWidth = Math.min(480, winWidth - 32);
+
+		if (!highlightRect || winWidth < 768) {
+			return {
+				position: "fixed",
+				bottom: "24px",
+				left: "16px",
+				right: "16px",
+				maxWidth: `${cardWidth}px`,
+				margin: "0 auto",
+				zIndex: 60,
+			};
+		}
+
+		// If element is in header (mode, explorer)
+		if (highlightRect.top < 120 && highlightRect.bottom < winHeight * 0.35) {
+			const idealLeft = highlightRect.left + highlightRect.width / 2 - cardWidth / 2;
+			const clampedLeft = Math.max(16, Math.min(winWidth - cardWidth - 16, idealLeft));
+			return {
+				position: "fixed",
+				top: `${Math.min(winHeight - 260, highlightRect.bottom + 16)}px`,
+				left: `${clampedLeft}px`,
+				width: `${cardWidth}px`,
+				zIndex: 60,
+			};
+		}
+
+		// If element is on the right side (roster)
+		if (highlightRect.left > winWidth * 0.55) {
+			const cardRight = winWidth - highlightRect.left + 24;
+			const idealTop = Math.max(24, Math.min(winHeight - 280, highlightRect.top + 32));
+			return {
+				position: "fixed",
+				top: `${idealTop}px`,
+				right: `${cardRight}px`,
+				width: `${cardWidth}px`,
+				zIndex: 60,
+			};
+		}
+
+		// If element is on the left side (history)
+		if (highlightRect.right < winWidth * 0.45) {
+			const cardLeft = highlightRect.right + 24;
+			const idealTop = Math.max(24, Math.min(winHeight - 280, highlightRect.top + 32));
+			return {
+				position: "fixed",
+				top: `${idealTop}px`,
+				left: `${cardLeft}px`,
+				width: `${cardWidth}px`,
+				zIndex: 60,
+			};
+		}
+
+		// Large central element (chat)
+		return {
+			position: "fixed",
+			bottom: "32px",
+			left: "50%",
+			transform: "translateX(-50%)",
+			width: `${cardWidth}px`,
+			zIndex: 60,
+		};
 	};
 
-	const handleSkip = () => {
-		onClose();
-	};
+	// Pad cutout dimensions around target element
+	const pad = 6;
+	const cutoutX = highlightRect ? Math.max(0, highlightRect.left - pad) : 0;
+	const cutoutY = highlightRect ? Math.max(0, highlightRect.top - pad) : 0;
+	const cutoutW = highlightRect ? Math.max(0, highlightRect.width + pad * 2) : 0;
+	const cutoutH = highlightRect ? Math.max(0, highlightRect.height + pad * 2) : 0;
 
 	return (
-		<div className="fixed inset-0 z-50 overflow-hidden pointer-events-auto">
-			{/* Dark spotlight overlay */}
-			<div className="absolute inset-0 bg-[#050811]/75 backdrop-blur-[2px] transition-opacity duration-300" />
+		<div className="fixed inset-0 z-50 pointer-events-auto overflow-hidden">
+			{/* SVG Mask: Transparent cutout over highlighted element, darkened everywhere else */}
+			<svg
+				className="fixed inset-0 w-full h-full pointer-events-none select-none"
+				xmlns="http://www.w3.org/2000/svg"
+				width="100%"
+				height="100%"
+			>
+				<defs>
+					<mask id="tour-spotlight-mask">
+						{/* Base mask: white reveals dark overlay */}
+						<rect x="0" y="0" width="100%" height="100%" fill="white" />
+						{/* Cutout hole: black conceals dark overlay so target element shines through at 100% brightness */}
+						{highlightRect && (
+							<rect
+								x={cutoutX}
+								y={cutoutY}
+								width={cutoutW}
+								height={cutoutH}
+								rx="16"
+								ry="16"
+								fill="black"
+							/>
+						)}
+					</mask>
+				</defs>
+				{/* Darkened backdrop with cutout hole */}
+				<rect
+					x="0"
+					y="0"
+					width="100%"
+					height="100%"
+					fill="#050811"
+					fillOpacity="0.78"
+					mask="url(#tour-spotlight-mask)"
+				/>
+			</svg>
 
-			{/* Spotlight cutout border if target element exists */}
+			{/* Spotlight luminous border around the cutout */}
 			{highlightRect && (
 				<div
 					style={{
-						top: `${Math.max(8, highlightRect.top - 6)}px`,
-						left: `${Math.max(8, highlightRect.left - 6)}px`,
-						width: `${highlightRect.width + 12}px`,
-						height: `${highlightRect.height + 12}px`,
+						top: `${cutoutY}px`,
+						left: `${cutoutX}px`,
+						width: `${cutoutW}px`,
+						height: `${cutoutH}px`,
 					}}
-					className="absolute pointer-events-none rounded-2xl border-2 border-amber-400/90 shadow-[0_0_35px_rgba(245,158,11,0.35)] transition-all duration-300 animate-pulse"
-				/>
+					className="fixed pointer-events-none z-50 rounded-2xl border-2 border-amber-400 shadow-[0_0_35px_rgba(245,158,11,0.45)] ring-1 ring-amber-300/40 transition-all duration-300"
+				>
+					{/* Spotlight indicator badge */}
+					<div className="absolute -top-3.5 right-4 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 text-[10px] font-black uppercase tracking-wider shadow-md shadow-amber-950/40 flex items-center gap-1">
+						<Sparkles className="w-2.5 h-2.5" />
+						<span>Spotlight</span>
+					</div>
+				</div>
 			)}
 
 			{/* Tour Dialog Popover */}
-			<div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
-				<div className="pointer-events-auto max-w-lg w-full bg-[#0d1326] border border-[#232f50] rounded-2xl shadow-2xl p-6 text-slate-100 relative space-y-4 animate-scaleUp">
+			<div style={getPopoverStyle()} className="animate-scaleUp">
+				<div className="bg-[#0d1326] border border-[#232f50] rounded-2xl shadow-2xl p-5 sm:p-6 text-slate-100 space-y-4 backdrop-blur-md">
 					{/* Header bar */}
 					<div className="flex items-center justify-between border-b border-[#1b2542] pb-3">
-						<div className="flex items-center gap-2">
-							<div className="p-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400">
+						<div className="flex items-center gap-2.5">
+							<div className="p-2 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-400 shadow-sm shadow-amber-500/10">
 								<Compass className="w-4 h-4" />
 							</div>
 							<div>
-								<span className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold">
+								<span className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold block">
 									{currentStep.badge}
 								</span>
-								<h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+								<h3 className="text-sm font-bold text-white flex items-center gap-1.5 leading-snug">
 									{currentStep.title}
 								</h3>
 							</div>
 						</div>
 						<button
 							onClick={handleSkip}
-							className="text-slate-400 hover:text-slate-200 p-1 rounded-lg hover:bg-[#1a233d] transition-colors"
-							title="Close tour"
+							className="text-slate-400 hover:text-slate-200 p-1.5 rounded-lg hover:bg-[#1a233d] transition-colors"
+							title="Close tour (Esc)"
 						>
 							<X className="w-4 h-4" />
 						</button>
 					</div>
 
 					{/* Step description */}
-					<div className="text-xs sm:text-sm text-slate-300 leading-relaxed min-h-[48px]">
+					<div className="text-xs sm:text-sm text-slate-300 leading-relaxed min-h-[44px]">
 						{currentStep.description}
 					</div>
 
 					{/* Step Dots indicator */}
-					<div className="flex items-center justify-center gap-1.5 py-1">
+					<div className="flex items-center justify-center gap-1.5 py-0.5">
 						{TOUR_STEPS.map((step, idx) => (
 							<button
 								key={step.id}
@@ -176,7 +330,7 @@ export const TourGuide: React.FC<TourGuideProps> = ({ isOpen, onClose, onFinish 
 					</div>
 
 					{/* Navigation action buttons */}
-					<div className="flex items-center justify-between pt-2 border-t border-[#1b2542]">
+					<div className="flex items-center justify-between pt-2.5 border-t border-[#1b2542]">
 						<button
 							onClick={handleSkip}
 							className="text-xs text-slate-400 hover:text-slate-200 px-3 py-1.5 rounded-lg hover:bg-[#161f36] transition-colors"

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
 	X,
 	Settings as SettingsIcon,
@@ -9,8 +9,14 @@ import {
 	Download,
 	Trash2,
 	Sliders,
+	Volume2,
+	VolumeX,
+	Play,
+	Sparkles,
 } from "lucide-react";
 import type { Conversation, HealthStatus } from "../../types";
+import { ttsService, type AgentVoiceRegistryEntry } from "../../services/ttsService";
+import { AgentAvatar } from "../common/AgentAvatar";
 
 interface SettingsModalProps {
 	isOpen: boolean;
@@ -22,7 +28,7 @@ interface SettingsModalProps {
 	onOpenCredentials?: () => void;
 }
 
-type TabType = "general" | "models" | "data" | "about";
+type TabType = "general" | "audio" | "models" | "data" | "about";
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
 	isOpen,
@@ -37,7 +43,47 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 	const [defaultMode, setDefaultMode] = useState<"live" | "sample">("sample");
 	const [autoScroll, setAutoScroll] = useState(true);
 
+	// TTS state
+	const [ttsEnabled, setTtsEnabled] = useState(ttsService.isMasterEnabled());
+	const [ttsMuted, setTtsMuted] = useState(ttsService.isMuted());
+	const [voiceRegistry, setVoiceRegistry] = useState<AgentVoiceRegistryEntry[]>([]);
+	const [speakingSeat, setSpeakingSeat] = useState<string | null>(null);
+
+	useEffect(() => {
+		if (isOpen) {
+			setVoiceRegistry(ttsService.getVoiceRegistry());
+			setTtsEnabled(ttsService.isMasterEnabled());
+			setTtsMuted(ttsService.isMuted());
+		}
+	}, [isOpen]);
+
+	useEffect(() => {
+		const unsub = ttsService.subscribe((isSpeaking, seatId) => {
+			setSpeakingSeat(isSpeaking ? seatId || null : null);
+		});
+		return unsub;
+	}, []);
+
 	if (!isOpen) return null;
+
+	const handleToggleMasterTts = (val: boolean) => {
+		setTtsEnabled(val);
+		ttsService.setTtsEnabled(val);
+	};
+
+	const handleToggleMute = (val: boolean) => {
+		setTtsMuted(val);
+		ttsService.setMuted(val);
+	};
+
+	const handlePreviewVoice = (seatId: string) => {
+		ttsService.previewVoice(seatId);
+	};
+
+	const handleToggleAgentVoice = (seatId: string, currentVal: boolean) => {
+		ttsService.updateVoiceRegistryEntry(seatId, { enabled: !currentVal });
+		setVoiceRegistry(ttsService.getVoiceRegistry());
+	};
 
 	const handleExportJson = () => {
 		if (!activeConversation) return;
@@ -79,6 +125,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 					<div className="w-full sm:w-48 bg-[#0a0e1a] border-r border-[#1e2842] p-3 space-y-1 shrink-0">
 						{[
 							{ id: "general", label: "General", icon: Sliders },
+							{ id: "audio", label: "Voice & Audio", icon: Volume2 },
 							{ id: "models", label: "Models & Providers", icon: Cpu },
 							{ id: "data", label: "Privacy & Data", icon: ShieldCheck },
 							{ id: "about", label: "About & Architecture", icon: Info },
@@ -160,6 +207,159 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 										onChange={(e) => setAutoScroll(e.target.checked)}
 										className="w-4 h-4 accent-teal-500 rounded"
 									/>
+								</div>
+							</div>
+						)}
+
+						{/* Voice & Audio Section */}
+						{activeTab === "audio" && (
+							<div className="space-y-4">
+								<div className="flex items-center justify-between">
+									<h4 className="font-bold text-sm text-slate-100">Voice & Audio Settings</h4>
+									<span className="text-[11px] font-mono px-2 py-0.5 rounded bg-teal-950/60 border border-teal-800 text-teal-300">
+										Multi-Agent TTS Registry
+									</span>
+								</div>
+
+								{/* Master Audio Controls */}
+								<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+									<div className="p-3.5 rounded-xl bg-[#12182b] border border-[#1e2842] flex items-center justify-between">
+										<div>
+											<div className="font-semibold text-slate-200 flex items-center gap-1.5">
+												<Volume2 className="w-4 h-4 text-amber-400" />
+												<span>Voice Playback</span>
+											</div>
+											<div className="text-[11px] text-slate-400">
+												Enable text-to-speech for agents
+											</div>
+										</div>
+										<input
+											type="checkbox"
+											checked={ttsEnabled}
+											onChange={(e) => handleToggleMasterTts(e.target.checked)}
+											className="w-4 h-4 accent-teal-500 rounded"
+										/>
+									</div>
+
+									<div className="p-3.5 rounded-xl bg-[#12182b] border border-[#1e2842] flex items-center justify-between">
+										<div>
+											<div className="font-semibold text-slate-200 flex items-center gap-1.5">
+												<VolumeX className="w-4 h-4 text-rose-400" />
+												<span>Mute All Audio</span>
+											</div>
+											<div className="text-[11px] text-slate-400">
+												Silences ongoing speech
+											</div>
+										</div>
+										<input
+											type="checkbox"
+											checked={ttsMuted}
+											onChange={(e) => handleToggleMute(e.target.checked)}
+											className="w-4 h-4 accent-rose-500 rounded"
+										/>
+									</div>
+								</div>
+
+								{/* Agent Voice Registry Showcase */}
+								<div className="space-y-3 pt-2">
+									<div className="text-xs font-mono uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+										<Sparkles className="w-3.5 h-3.5 text-amber-400" />
+										<span>Agent Coworker Voice Profiles & Previews:</span>
+									</div>
+
+									<div className="space-y-2.5">
+										{voiceRegistry.map((agent) => {
+											const isSpeaking = speakingSeat === agent.seatId;
+											return (
+												<div
+													key={agent.seatId}
+													className={`p-3 rounded-xl bg-[#12182b] border transition-all flex items-center justify-between gap-3 ${
+														isSpeaking
+															? "border-amber-400/80 ring-1 ring-amber-400/40 bg-[#18203a]"
+															: "border-[#1e2842] hover:border-[#2c385c]"
+													}`}
+												>
+													<div className="flex items-center gap-3 min-w-0">
+														<AgentAvatar
+															seatId={agent.seatId}
+															avatarId={agent.avatarId}
+															humanName={agent.displayName}
+															size="sm"
+															showStatusPip={true}
+															status={isSpeaking ? "analyzing" : "completed"}
+														/>
+														<div className="min-w-0 truncate">
+															<div className="font-bold text-slate-200 text-xs flex items-center gap-1.5">
+																<span>{agent.displayName}</span>
+																<span className="text-[11px] text-slate-400 font-normal">
+																	· {agent.role}
+																</span>
+															</div>
+															<div className="text-[10.5px] text-slate-400 truncate font-sans">
+																{agent.personality}
+															</div>
+															<div className="flex flex-wrap items-center gap-2.5 mt-2 text-[10px] text-slate-300">
+																<label className="flex items-center gap-1.5 bg-[#18203a] px-2 py-0.5 rounded border border-[#263254]">
+																	<span className="text-slate-400 font-mono text-[9px]">Pitch:</span>
+																	<input
+																		type="range"
+																		min="0.5"
+																		max="1.5"
+																		step="0.05"
+																		value={agent.pitch}
+																		onChange={(e) => {
+																			ttsService.updateVoiceRegistryEntry(agent.seatId, { pitch: parseFloat(e.target.value) });
+																			setVoiceRegistry(ttsService.getVoiceRegistry());
+																		}}
+																		className="w-14 h-1 accent-teal-400 bg-slate-700 rounded cursor-pointer"
+																	/>
+																	<span className="font-mono text-teal-300 w-7 text-right text-[9px]">{agent.pitch.toFixed(2)}x</span>
+																</label>
+																<label className="flex items-center gap-1.5 bg-[#18203a] px-2 py-0.5 rounded border border-[#263254]">
+																	<span className="text-slate-400 font-mono text-[9px]">Speed:</span>
+																	<input
+																		type="range"
+																		min="0.75"
+																		max="1.35"
+																		step="0.05"
+																		value={agent.rate}
+																		onChange={(e) => {
+																			ttsService.updateVoiceRegistryEntry(agent.seatId, { rate: parseFloat(e.target.value) });
+																			setVoiceRegistry(ttsService.getVoiceRegistry());
+																		}}
+																		className="w-14 h-1 accent-amber-400 bg-slate-700 rounded cursor-pointer"
+																	/>
+																	<span className="font-mono text-amber-300 w-7 text-right text-[9px]">{agent.rate.toFixed(2)}x</span>
+																</label>
+																<span className="bg-[#18203a] px-1.5 py-0.5 rounded border border-[#263254] font-mono text-[9px] text-slate-400">
+																	{agent.lang}
+																</span>
+															</div>
+														</div>
+													</div>
+
+													<div className="flex items-center gap-2 shrink-0">
+														<button
+															type="button"
+															onClick={() => handlePreviewVoice(agent.seatId)}
+															className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 font-semibold text-xs border border-teal-500/40 transition-colors"
+															title={`Preview voice of ${agent.displayName}`}
+														>
+															<Play className="w-3 h-3 fill-current" />
+															<span>Preview</span>
+														</button>
+														<input
+															type="checkbox"
+															checked={agent.enabled}
+															onChange={() => handleToggleAgentVoice(agent.seatId, agent.enabled)}
+															className="w-4 h-4 accent-teal-500 rounded"
+															title="Enable/disable voice for this agent"
+														/>
+													</div>
+												</div>
+											);
+										})}
+									</div>
 								</div>
 							</div>
 						)}

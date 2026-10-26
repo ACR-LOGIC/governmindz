@@ -1,6 +1,6 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: legacy untyped interfaces pending refactor
 
-// packages/core/src/debate/AgentMessage.ts — v1.1 ENHANCED
+// packages/core/src/debate/AgentMessage.ts — v1.1 ENHANCED with Normalized Contract Envelope
 
 import type { ConfidenceResult } from "../scoring/ConfidenceScorer";
 
@@ -12,6 +12,80 @@ export type MessageType =
 	| "escalation"
 	| "action_items"
 	| "summary";
+
+// Normalized Message-Generation Contract Version 1.0
+export interface MessageContractMessage {
+	type: string;
+	text: string;
+	replyTo?: string;
+}
+
+export interface MessageContractResult {
+	conclusion: string;
+	confidence: number;
+	evidenceIds: string[];
+	unresolvedQuestions: string[];
+}
+
+export interface MessageContractExecution {
+	taskId: string;
+	status: "pending" | "running" | "completed" | "error" | string;
+	round?: number;
+	latency_ms?: number;
+	auditRef?: string;
+}
+
+export interface MessageGenerationContract {
+	schemaVersion: "1.0";
+	message: MessageContractMessage;
+	result: MessageContractResult;
+	execution: MessageContractExecution;
+}
+
+export function buildMessageContractEnvelope(msg: {
+	id?: string;
+	type?: string;
+	content?: string;
+	structured?: Partial<AgentOutputContract>;
+	confidence?: number;
+	round?: number;
+	latency_ms?: number;
+	toSeat?: string;
+	inReplyTo?: string;
+	taskId?: string;
+	status?: string;
+}): MessageGenerationContract {
+	const text = msg.structured?.position || msg.content || "";
+	const confidence =
+		msg.structured?.confidenceSelf ??
+		msg.structured?.confidence_self ??
+		msg.confidence ??
+		1.0;
+	const evidenceIds = (msg.structured?.evidence || []).map((_e, idx) => `ev-${idx + 1}`);
+	const unresolved = msg.structured?.caveats || [];
+
+	return {
+		schemaVersion: "1.0",
+		message: {
+			type: msg.type || "proposal",
+			text,
+			replyTo: msg.inReplyTo || (msg.toSeat && msg.toSeat !== "all" ? msg.toSeat : undefined),
+		},
+		result: {
+			conclusion: text,
+			confidence,
+			evidenceIds,
+			unresolvedQuestions: unresolved,
+		},
+		execution: {
+			taskId: msg.taskId || msg.id || `task-${Date.now()}`,
+			status: msg.status || "completed",
+			round: msg.round,
+			latency_ms: msg.latency_ms,
+			auditRef: msg.id,
+		},
+	};
+}
 
 // Structured output contract — machine-readable agent response
 export interface AgentOutputContract {
@@ -60,6 +134,9 @@ export interface AgentMessage {
 	latency_ms?: number; // response latency for AgentSeatWeightCalculator weighting
 	token_count?: number; // verbosity signal
 	inReplyTo?: string;
+
+	// Normalized Contract Envelope v1.0
+	envelope?: MessageGenerationContract;
 
 	// Enhanced Enterprise Metadata
 	agentId?: string;

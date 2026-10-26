@@ -65,3 +65,32 @@ body {
 .animate-pulse-dot {
   animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+
+@keyframes scaleIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-scaleIn {
+  animation: scaleIn 150ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 150ms ease-out forwards;
+}
+

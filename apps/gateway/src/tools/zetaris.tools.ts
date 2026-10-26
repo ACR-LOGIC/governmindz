@@ -1,5 +1,5 @@
 
-import { ZetarisClient } from "@governmindz/core/integrations/zetarisClient";
+import { sharedResilientZetarisClient } from "@governmindz/core/integrations/ResilientZetarisClient";
 import type {
 	McpRegistry,
 	ToolContext,
@@ -88,7 +88,7 @@ const handler: ToolHandler = async (rawInput, context: ToolContext) => {
 	}
 
 	const input = parseInput(rawInput);
-	const client = new ZetarisClient();
+	const client = sharedResilientZetarisClient;
 	const result = await client.query(input.query, { limit: input.limit });
 
 	return {
@@ -97,6 +97,10 @@ const handler: ToolHandler = async (rawInput, context: ToolContext) => {
 		rows: result.rows,
 		total: result.total,
 		timeUsed: result.timeUsed,
+		circuitBreakerState: result.circuitBreakerState,
+		isSynthetic: result.isSynthetic,
+		evidenceSource: result.evidenceSource,
+		fallbackReason: result.fallbackReason,
 	};
 };
 

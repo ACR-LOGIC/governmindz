@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Header } from "./components/layout/Header";
 import { LeftSidebar } from "./components/layout/LeftSidebar";
 import { RightSidebar } from "./components/layout/RightSidebar";
 import { GroupConversation } from "./components/chat/GroupConversation";
-import { MessageComposer } from "./components/chat/MessageComposer";
+import { MessageComposer, DEMO_SCENARIOS } from "./components/chat/MessageComposer";
 import { ExecutionExplorer } from "./components/explorer/ExecutionExplorer";
 import { TrustEvidenceView } from "./components/evidence/TrustEvidenceView";
 import { AgentDetailDrawer } from "./components/modals/AgentDetailDrawer";
@@ -22,9 +22,14 @@ import {
 	subscribeRunEvents,
 	fetchPreferences,
 	savePreferences,
+	submitFeedback,
 } from "./services/api";
-import { AGENT_REGISTRY, getAgentProfile } from "./services/agentRegistry";
+import { AGENT_REGISTRY, getAgentProfile, getAllAgentProfiles } from "./services/agentRegistry";
 import { assignHumanCouncil, generateTaskDelegationAnnouncement } from "./services/nameRotation";
+import { ttsService } from "./services/ttsService";
+import { CrewBarrierManager } from "./services/crewBarrier";
+import { DemoPresentationQueue, type DemoQueueState } from "./services/demoPresentationQueue";
+import type { CrewRound } from "./types/crew";
 import type {
 	ActiveTab,
 	ChatMessage,
@@ -46,7 +51,7 @@ export const App: React.FC = () => {
 
 	const [health, setHealth] = useState<HealthStatus | null>(null);
 	const [scenarios, setScenarios] = useState<ScenarioItem[]>([]);
-	const [selectedScenario, setSelectedScenario] = useState<string>("01-governance-readiness.json");
+	const [selectedScenario, setSelectedScenario] = useState<string>("01-fragmented-intelligence.json");
 	const [mode, setMode] = useState<"live" | "sample">("sample");
 	const [tourOpen, setTourOpen] = useState(false);
 	const [liveConfirmModalOpen, setLiveConfirmModalOpen] = useState(false);
@@ -56,18 +61,20 @@ export const App: React.FC = () => {
 	const [activeId, setActiveId] = useState<string | null>(null);
 	const [isBusy, setIsBusy] = useState(false);
 	const [activeAgentThinking, setActiveAgentThinking] = useState<string | null>(null);
+	const [activeCrewRound, setActiveCrewRound] = useState<CrewRound | null>(null);
+	const [isCrewClosing, setIsCrewClosing] = useState(false);
 	const [toastMsg, setToastMsg] = useState<string | null>(null);
 
+	// Non-blocking holding message state & timer
+	const [holdingMessage, setHoldingMessage] = useState<string | null>(null);
+	const holdingTimerRef = useRef<any>(null);
+
+	// Demo presentation queue state & controller
+	const demoQueueRef = useRef<DemoPresentationQueue | null>(null);
+	const [demoQueueState, setDemoQueueState] = useState<DemoQueueState>("idle");
+
 	// Agent roster state
-	const [agentRoster, setAgentRoster] = useState<AgentProfile[]>([
-		getAgentProfile("FactChecker"),
-		getAgentProfile("CloudArchitect"),
-		getAgentProfile("Synthesizer"),
-		getAgentProfile("RivalChallenger"),
-		getAgentProfile("Thinker"),
-		getAgentProfile("CredibleSourcesResearchAgent"),
-		getAgentProfile("ContextAgent"),
-	]);
+	const [agentRoster, setAgentRoster] = useState<AgentProfile[]>(getAllAgentProfiles());
 
 	// Confidence chart points
 	const [chartData, setChartData] = useState<Record<string, Array<{ round: number; conf: number }>>>({
@@ -80,6 +87,82 @@ export const App: React.FC = () => {
 		setToastMsg(msg);
 		setTimeout(() => setToastMsg(null), 3500);
 	}, []);
+
+	// Soft deadline periodic check for active research crews
+	useEffect(() => {
+		if (!activeCrewRound || activeCrewRound.barrierReleased) return;
+		const timer = setInterval(() => {
+			setActiveCrewRound((prev) => {
+				if (!prev || prev.barrierReleased) return prev;
+				return CrewBarrierManager.checkSoftDeadlines(prev);
+			});
+		}, 1000);
+		return () => clearInterval(timer);
+	}, [activeCrewRound]);
+
+	// Barrier Release & Combined Summary Posting
+	const triggerBarrierRelease = useCallback(
+		(round: CrewRound) => {
+			if (!activeId || round.barrierReleased) return;
+
+			try {
+				const summaryResult = CrewBarrierManager.generateCombinedSummary(round);
+				const summaryMsg: ChatMessage = {
+					id: `msg_crew_summary_${Date.now()}`,
+					fromSeat: "Supervisor",
+					type: "summary",
+					content: summaryResult.summaryText,
+					timestamp: Date.now(),
+				};
+
+				setConversations((prev) => {
+					const curr = prev.find((c) => c.id === activeId);
+					if (!curr) return prev;
+					if (
+						curr.messages.some(
+							(m) =>
+								m.id === summaryMsg.id ||
+								(m.type === "summary" &&
+									m.fromSeat === "Supervisor" &&
+									m.content === summaryResult.summaryText),
+						)
+					) {
+						return prev;
+					}
+					const updated = {
+						...curr,
+						messages: [...curr.messages, summaryMsg],
+						updatedAt: Date.now(),
+					};
+					saveConversation(updated);
+					return prev.map((c) => (c.id === activeId ? updated : c));
+				});
+
+				setActiveCrewRound((curr) => {
+					if (!curr) return null;
+					return CrewBarrierManager.markSummaryPosted(curr, summaryResult.summaryText);
+				});
+
+				// Coordinated exit animation
+				setIsCrewClosing(true);
+				setTimeout(() => {
+					setActiveCrewRound(null);
+					setIsCrewClosing(false);
+				}, 250);
+			} catch (err: any) {
+				console.error("Barrier summary posting error:", err);
+				setActiveCrewRound((curr) => {
+					if (!curr) return null;
+					return CrewBarrierManager.markSummaryFailed(
+						curr,
+						err?.message || "Failed to post crew summary",
+					);
+				});
+				showToast("Failed to post combined crew summary. Crew state preserved for retry.");
+			}
+		},
+		[activeId, showToast],
+	);
 
 	// Active conversation lookup
 	const activeConv = useMemo(() => {
@@ -121,7 +204,7 @@ export const App: React.FC = () => {
 					setAgentRoster((prev) =>
 						prev.map((a) => {
 							const m = assigns[a.id];
-							return m ? { ...a, humanName: m.humanName, jobTask: m.jobTask } : a;
+							return m ? { ...a, humanName: m.humanName, jobTask: m.jobTask, avatarId: m.avatarId } : a;
 						}),
 					);
 				}
@@ -238,13 +321,46 @@ export const App: React.FC = () => {
 	};
 
 	// Start Demo scenario directly
-	const handleStartDemoScenario = (scenarioFile: string, question: string) => {
+	const handleStartDemoScenario = async (scenarioFile: string, question: string) => {
 		setSelectedScenario(scenarioFile);
-		handleSendMessage(question);
+
+		// If active conversation doesn't exist or already has completed messages, start a fresh conversation for this demo scenario!
+		if (!activeConv || activeConv.messages.length > 0) {
+			const councilAssignments = assignHumanCouncil();
+			const matchedScenario = DEMO_SCENARIOS.find((s) => s.file === scenarioFile);
+			const title = matchedScenario ? matchedScenario.title : `Demo: ${scenarioFile.replace(".json", "")}`;
+			const newConv: Conversation = {
+				id: `conv_${Date.now()}`,
+				title,
+				createdAt: Date.now(),
+				updatedAt: Date.now(),
+				topic: question,
+				mode: "sample",
+				scenarioId: scenarioFile.replace(".json", ""),
+				messages: [],
+				auditEvents: [],
+				status: "idle",
+				workflowEvents: [],
+				agentAssignments: councilAssignments,
+			};
+			setConversations((prev) => [newConv, ...prev]);
+			setActiveId(newConv.id);
+			saveConversation(newConv);
+			await handleSendMessageWithConv(newConv, question, scenarioFile);
+			return;
+		}
+
+		await handleSendMessageWithConv(activeConv, question, scenarioFile);
 	};
 
 	// Start Over in Demo mode
 	const handleStartOver = () => {
+		demoQueueRef.current?.reset();
+		if (holdingTimerRef.current) {
+			clearTimeout(holdingTimerRef.current);
+			holdingTimerRef.current = null;
+		}
+		setHoldingMessage(null);
 		handleNewConversation();
 		showToast("Demo restarted. Choose a scenario to begin.");
 	};
@@ -285,6 +401,7 @@ export const App: React.FC = () => {
 						...a,
 						humanName: match.humanName,
 						jobTask: match.jobTask,
+						avatarId: match.avatarId,
 					};
 				}
 				return a;
@@ -352,11 +469,26 @@ export const App: React.FC = () => {
 	}, []);
 
 	// Handle thumbs up / down message ratings
-	const handleRateMessage = (messageId: string, rating: "up" | "down" | null) => {
+	const handleRateMessage = (messageId: string, rating: "up" | "down" | null, seatId?: string) => {
 		if (!activeId) return;
 		setConversations((prev) => {
 			const curr = prev.find((c) => c.id === activeId);
 			if (!curr) return prev;
+			const targetMsg = curr.messages.find((m) => m.id === messageId);
+			const resolvedSeat = seatId || targetMsg?.fromSeat || "unknown";
+
+			if (rating) {
+				submitFeedback({
+					conversationId: activeId,
+					messageId,
+					seatId: resolvedSeat,
+					rating,
+					round: targetMsg?.round,
+				}).catch((err) => {
+					console.warn("Failed to submit message feedback to backend:", err);
+				});
+			}
+
 			const updatedMessages = curr.messages.map((m) =>
 				m.id === messageId ? { ...m, userRating: rating } : m,
 			);
@@ -370,13 +502,53 @@ export const App: React.FC = () => {
 	};
 
 	// Run Debate Submission
-	const handleSendMessage = async (userTopic: string) => {
-		if (isBusy || !activeConv) return;
+	const handleSendMessage = async (
+		userTopic: string,
+		optionsOrOverride?: string | { searchModes?: string[]; model?: string; attachments?: any[] },
+	) => {
+		if (isBusy) return;
 
-		const topicToRun = userTopic || activeConv.topic || "Assess the Zetaris data available to this agent.";
+		const scenarioOverride = typeof optionsOrOverride === "string" ? optionsOrOverride : undefined;
+		const options = typeof optionsOrOverride === "object" ? optionsOrOverride : undefined;
+
+		let convToUse = activeConv;
+		if (!convToUse) {
+			const councilAssignments = assignHumanCouncil();
+			convToUse = {
+				id: `conv_${Date.now()}`,
+				title: `AI Debate #${conversations.length + 1}`,
+				createdAt: Date.now(),
+				updatedAt: Date.now(),
+				topic: userTopic,
+				mode,
+				scenarioId: (scenarioOverride || selectedScenario).replace(".json", ""),
+				messages: [],
+				auditEvents: [],
+				status: "idle",
+				workflowEvents: [],
+				agentAssignments: councilAssignments,
+			};
+			setConversations((prev) => [convToUse!, ...prev]);
+			setActiveId(convToUse.id);
+			saveConversation(convToUse);
+		}
+
+		await handleSendMessageWithConv(convToUse, userTopic, scenarioOverride, options);
+	};
+
+	const handleSendMessageWithConv = async (
+		targetConv: Conversation,
+		userTopic: string,
+		scenarioOverride?: string,
+		options?: { searchModes?: string[]; model?: string; attachments?: any[] },
+	) => {
+		if (isBusy) return;
+
+		const scenarioToUse = scenarioOverride || selectedScenario;
+		const topicToRun = userTopic || targetConv.topic || "Assess the Zetaris data available to this agent.";
 
 		// Assign / rotate friendly human names & job tasks for this deliberation
-		const councilAssignments = activeConv.agentAssignments || assignHumanCouncil();
+		const councilAssignments = targetConv.agentAssignments || assignHumanCouncil();
 
 		// Update active roster with the assigned human names and tasks
 		setAgentRoster((prev) =>
@@ -387,42 +559,89 @@ export const App: React.FC = () => {
 						...a,
 						humanName: match.humanName,
 						jobTask: match.jobTask,
+						avatarId: match.avatarId,
 					};
 				}
 				return a;
 			}),
 		);
 
+		// Format user message content if files or sources are attached
+		let formattedContent = topicToRun;
+		if (options?.attachments && options.attachments.length > 0) {
+			const names = options.attachments.map((a: any) => a.name).join(", ");
+			formattedContent += `\n\n📎 Attached Files: ${names}`;
+		}
+		if (options?.searchModes && options.searchModes.length > 0) {
+			const modesStr = options.searchModes.map((m) => (m === "zetaris" ? "Zetaris AI" : m === "web" ? "Web Search" : m)).join(" + ");
+			formattedContent += `\n🔍 Sources Consulted: ${modesStr}`;
+		}
+
 		// Add user message to conversation
 		const userMsg: ChatMessage = {
 			id: `msg_user_${Date.now()}`,
 			fromSeat: "user",
 			type: "user",
-			content: topicToRun,
+			content: formattedContent,
 			timestamp: Date.now(),
+			envelope: {
+				schemaVersion: "1.0",
+				message: {
+					type: "user",
+					text: formattedContent,
+				},
+				result: {
+					conclusion: formattedContent,
+					confidence: 1.0,
+					evidenceIds: [],
+					unresolvedQuestions: [],
+				},
+				execution: {
+					taskId: `task_user_${Date.now()}`,
+					status: "completed",
+				},
+			},
 		};
 
-		const updatedMessages = [...activeConv.messages, userMsg];
+		const updatedMessages = [...targetConv.messages, userMsg];
 
 		const updatedConv: Conversation = {
-			...activeConv,
+			...targetConv,
 			topic: topicToRun,
-			title: activeConv.title.startsWith("AI Debate #") ? topicToRun.slice(0, 32) + "…" : activeConv.title,
+			scenarioId: scenarioToUse.replace(".json", ""),
+			title: targetConv.title.startsWith("AI Debate #") ? topicToRun.slice(0, 32) + "…" : targetConv.title,
 			messages: updatedMessages,
 			status: "running",
 			agentAssignments: councilAssignments,
 			updatedAt: Date.now(),
 		};
 
-		setConversations((prev) => prev.map((c) => (c.id === activeConv.id ? updatedConv : c)));
+		setConversations((prev) => prev.map((c) => (c.id === targetConv.id ? updatedConv : c)));
 		setIsBusy(true);
+		setActiveCrewRound(null);
+		setIsCrewClosing(false);
+
+		// Non-blocking holding message timer: triggers after meaningful 2.6s processing pause
+		if (holdingTimerRef.current) clearTimeout(holdingTimerRef.current);
+		setHoldingMessage(null);
+		holdingTimerRef.current = setTimeout(() => {
+			setHoldingMessage("I’m still checking the evidence across federated databases and external sources.");
+		}, 2600);
+
+		if (mode !== "live") {
+			demoQueueRef.current?.reset();
+			demoQueueRef.current?.play();
+		}
 
 		try {
 			const { runId } = await startRun({
 				mode,
-				scenario: selectedScenario,
+				scenario: scenarioToUse,
 				topic: topicToRun,
-				conversationId: activeConv.id,
+				conversationId: targetConv.id,
+				searchModes: options?.searchModes,
+				model: options?.model,
+				attachments: options?.attachments,
 			});
 
 			// Subscribe to SSE event stream
@@ -433,25 +652,70 @@ export const App: React.FC = () => {
 					handleStreamEvent(ev);
 				},
 				(err) => {
-					console.error("SSE stream error:", err);
+					console.warn("SSE stream closed/completed:", err);
+					if (holdingTimerRef.current) {
+						clearTimeout(holdingTimerRef.current);
+						holdingTimerRef.current = null;
+					}
+					setHoldingMessage(null);
 					setIsBusy(false);
 					setActiveAgentThinking(null);
 				},
 				() => {
+					if (holdingTimerRef.current) {
+						clearTimeout(holdingTimerRef.current);
+						holdingTimerRef.current = null;
+					}
+					setHoldingMessage(null);
 					setIsBusy(false);
 					setActiveAgentThinking(null);
 				},
 			);
 		} catch (err: any) {
+			if (holdingTimerRef.current) {
+				clearTimeout(holdingTimerRef.current);
+				holdingTimerRef.current = null;
+			}
+			setHoldingMessage(null);
 			showToast(`Run failed: ${err.message}`);
 			setIsBusy(false);
 		}
 	};
 
-	// Handle SSE Stream Events
-	const handleStreamEvent = useCallback(
+	// Apply individual SSE stream event to React conversation state
+	const applyStreamEvent = useCallback(
 		(ev: any) => {
 			if (!activeId) return;
+
+			// Handle Parallel Crew & Barrier State Synchronization
+			if (
+				ev.type === "crew_start" ||
+				ev.type === "agent_task_assigned" ||
+				ev.type === "research_finding" ||
+				ev.type === "crew_complete" ||
+				(typeof ev.type === "string" && ev.type.startsWith("crew:"))
+			) {
+				setActiveCrewRound((prev) => {
+					const round =
+						prev ||
+						CrewBarrierManager.createRound(
+							String(ev.roundId || `round_${Date.now()}`),
+							["data-crew", "web-crew"],
+							activeId,
+							{ softDeadlineMs: 25000 },
+						);
+
+					const updatedRound = CrewBarrierManager.processEvent(round, ev);
+
+					if (CrewBarrierManager.canRelease(updatedRound)) {
+						setTimeout(() => {
+							triggerBarrierRelease(updatedRound);
+						}, 300);
+					}
+
+					return updatedRound;
+				});
+			}
 
 			setConversations((prev) => {
 				const curr = prev.find((c) => c.id === activeId);
@@ -473,6 +737,12 @@ export const App: React.FC = () => {
 					};
 					updated.messages = [...updated.messages, orchMsg];
 					updated.status = "running";
+				} else if (ev.type === "agent_pre_cue") {
+					// Pre-cue: lightweight scheduling signal informing downstream agents
+					appendAgentReasoning(
+						ev.targetAgent,
+						`[Internal Pre-Cue: ${ev.taskType}] ${ev.hint || "Preparing background analysis for upcoming debate turn..."}`,
+					);
 				} else if (ev.type === "web_search") {
 					updated.webSearchData = {
 						query: ev.query,
@@ -516,9 +786,40 @@ export const App: React.FC = () => {
 						confidence: rawMsg.confidence ?? rawMsg.structured?.confidence_self,
 						timestamp: rawMsg.timestamp || Date.now(),
 						latency_ms: rawMsg.latency_ms,
+						replyToExcerpt: rawMsg.replyToExcerpt,
+						envelope: rawMsg.envelope || (rawMsg.structured ? {
+							schemaVersion: "1.0",
+							message: {
+								type: rawMsg.type || "proposal",
+								text: rawMsg.structured?.position || rawMsg.content || "",
+								replyTo: rawMsg.toSeat && rawMsg.toSeat !== "all" ? rawMsg.toSeat : undefined,
+							},
+							result: {
+								conclusion: rawMsg.structured?.position || rawMsg.content || "",
+								confidence: rawMsg.confidence ?? rawMsg.structured?.confidence_self ?? 1.0,
+								evidenceIds: (rawMsg.structured?.evidence || []).map((_: any, idx: number) => `ev-${idx + 1}`),
+								unresolvedQuestions: rawMsg.structured?.caveats || [],
+							},
+							execution: {
+								taskId: rawMsg.id || `task-${Date.now()}`,
+								status: "completed",
+								round: rawMsg.round,
+								latency_ms: rawMsg.latency_ms,
+								auditRef: rawMsg.id,
+							},
+						} : undefined),
 					};
 
 					updated.messages = [...updated.messages, newMsg];
+
+					// Live text-to-speech reading if voice enabled (associated with main group)
+					if (ttsService.isTtsEnabled("main")) {
+						const speakerName = updated.agentAssignments?.[rawMsg.fromSeat]?.humanName || rawMsg.fromSeat;
+						const speechText = newMsg.content || "";
+						if (speechText) {
+							ttsService.queueSpeak(speechText, speakerName, newMsg.id, "main");
+						}
+					}
 
 					// Record contribution step in live scratchpad
 					appendAgentReasoning(
@@ -553,7 +854,34 @@ export const App: React.FC = () => {
 					if (ev.event) {
 						updated.auditEvents = [...updated.auditEvents, ev.event];
 					}
-				} else if (ev.type === "complete") {
+				} else if (ev.type === "deliverable_contract") {
+					updated.contract = ev.contract;
+				} else if (ev.type === "crew_start") {
+					appendAgentReasoning("Supervisor", `Launched parallel ${ev.crew} with ${ev.agentCount} independent agents.`);
+				} else if (ev.type === "agent_task_assigned") {
+					updateAgentStatus(ev.agentId, "analyzing");
+					appendAgentReasoning(ev.agentId, `[Task] ${ev.task}`);
+				} else if (ev.type === "research_finding") {
+					updateAgentStatus(ev.agentId, "completed");
+					appendAgentReasoning(ev.agentId, `[Finding: ${ev.finding?.title || "Evidence"}] ${ev.finding?.claim || ""}`);
+				} else if (ev.type === "crew_complete") {
+					appendAgentReasoning("Supervisor", `[${ev.crew} Completed] ${ev.summary || "Findings verified"}`);
+				} else if (ev.type === "hater_crew_challenge") {
+					updateAgentStatus("RivalChallenger", "challenging");
+					appendAgentReasoning("RivalChallenger", `[Independent Challenge to ${ev.targetAgent}] ${ev.challenge}`);
+				} else if (ev.type === "crew_challenge_response") {
+					appendAgentReasoning("Synthesizer", `[${ev.crew} Defense] ${ev.defenseStatement}`);
+				} else if (ev.type === "artifact_created" || ev.type === "artifact_ready") {
+					if (ev.contract) updated.contract = ev.contract;
+					if (ev.primaryArtifact) updated.primaryArtifact = ev.primaryArtifact;
+					if (ev.additionalArtifacts) updated.additionalArtifacts = ev.additionalArtifacts;
+					if (ev.evidenceExport) updated.evidenceExport = ev.evidenceExport;
+				} else if (ev.type === "delivery_approved") {
+					updated.supervisorResponse = ev.supervisorResponse;
+					updated.supervisorDecision = "APPROVED";
+				} else if (ev.type === "delivery_rejected") {
+					updated.supervisorDecision = "REJECTED";
+				} else if (ev.type === "complete" || ev.type === "done") {
 					setActiveAgentThinking(null);
 					setIsBusy(false);
 					updated.status = "completed";
@@ -563,14 +891,77 @@ export const App: React.FC = () => {
 					if (ev.auditEvents) {
 						updated.auditEvents = ev.auditEvents;
 					}
+					if (ev.contract) updated.contract = ev.contract;
+					if (ev.primaryArtifact) updated.primaryArtifact = ev.primaryArtifact;
+					if (ev.additionalArtifacts) updated.additionalArtifacts = ev.additionalArtifacts;
+					if (ev.evidenceExport) updated.evidenceExport = ev.evidenceExport;
+					if (ev.supervisorResponse) updated.supervisorResponse = ev.supervisorResponse;
+					if (ev.supervisorDecision) updated.supervisorDecision = ev.supervisorDecision;
+					if (ev.dataCrewReport) updated.dataCrewReport = ev.dataCrewReport;
+					if (ev.webCrewReport) updated.webCrewReport = ev.webCrewReport;
 					showToast("AI Deliberation complete · Cryptographic audit verified");
+				} else if (ev.type === "error") {
+					setActiveAgentThinking(null);
+					setIsBusy(false);
+					updated.status = "error";
+					showToast(`Run failed: ${ev.message || "Deliberation error"}`);
 				}
 
 				saveConversation(updated);
 				return prev.map((c) => (c.id === activeId ? updated : c));
 			});
 		},
-		[activeId, updateAgentStatus, showToast],
+		[activeId, updateAgentStatus, showToast, triggerBarrierRelease],
+	);
+
+	// Initialize Demo presentation queue
+	useEffect(() => {
+		const queue = new DemoPresentationQueue(
+			(item) => {
+				applyStreamEvent(item.payload);
+			},
+			(queueState) => {
+				setDemoQueueState(queueState);
+			},
+		);
+		queue.setLiveMode(mode === "live");
+		demoQueueRef.current = queue;
+
+		return () => {
+			queue.destroy();
+		};
+	}, [applyStreamEvent, mode]);
+
+	// Route incoming SSE stream events through the Demo Presentation Queue in Demo Mode, or instantly in Live Mode
+	const handleStreamEvent = useCallback(
+		(ev: any) => {
+			// Non-blocking holding message clears immediately upon substantive content, completion, or error
+			if (ev.type === "message" || ev.type === "complete" || ev.type === "done" || ev.type === "error") {
+				if (holdingTimerRef.current) {
+					clearTimeout(holdingTimerRef.current);
+					holdingTimerRef.current = null;
+				}
+				setHoldingMessage(null);
+			}
+
+			if (mode === "live" || !demoQueueRef.current) {
+				applyStreamEvent(ev);
+			} else {
+				const textLength =
+					ev.type === "message"
+						? (ev.message?.content || ev.message?.structured?.position || "").length
+						: 20;
+
+				demoQueueRef.current.enqueue({
+					id: `demo_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+					type: ev.type,
+					payload: ev,
+					textLength,
+					fromSeat: ev.message?.fromSeat || ev.seatId,
+				});
+			}
+		},
+		[mode, applyStreamEvent],
 	);
 
 	// Select Agent in Roster
@@ -661,6 +1052,8 @@ export const App: React.FC = () => {
 							{activeTab === "chat" && (
 								<>
 									<GroupConversation
+										conversation={activeConv}
+										mode={mode}
 										messages={activeConv.messages}
 										agentRoster={agentRoster}
 										activeAgentThinking={activeAgentThinking}
@@ -669,11 +1062,21 @@ export const App: React.FC = () => {
 										rounds={2}
 										auditVerified={true}
 										onSelectAgent={handleSelectAgentFromChat}
-										onStartPrompt={(prompt) => handleSendMessage(prompt)}
+										onStartPrompt={(prompt) => handleSendMessage(prompt, activeScenarioItem?.file)}
 										onRateMessage={handleRateMessage}
 										activeScenario={activeScenarioItem}
 										allScenarios={scenarios}
 										onSelectScenario={handleSelectScenario}
+										activeCrewRound={activeCrewRound}
+										isCrewClosing={isCrewClosing}
+										holdingMessage={holdingMessage}
+										demoQueueState={demoQueueState}
+										onPauseDemo={() => demoQueueRef.current?.pause()}
+										onResumeDemo={() => demoQueueRef.current?.resume()}
+										onResetDemo={() => {
+											demoQueueRef.current?.reset();
+											handleStartOver();
+										}}
 									/>
 									<MessageComposer
 										mode={mode}
@@ -683,7 +1086,7 @@ export const App: React.FC = () => {
 										selectedScenarioFile={selectedScenario}
 										onSelectScenarioFile={handleSelectScenario}
 										isBusy={isBusy}
-										disabled={!activeConv}
+										disabled={false}
 										defaultTopic={activeScenarioItem?.topic}
 										hasCompletedMessages={Boolean(activeConv?.messages && activeConv.messages.length > 0)}
 									/>

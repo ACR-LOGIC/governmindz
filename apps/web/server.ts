@@ -5,10 +5,14 @@ import { randomUUID } from "node:crypto";
 import Database from "better-sqlite3";
 import { runDebate } from "../gateway/src/debateRunner.js";
 import { auditTrail } from "@governmindz/core/engine/AuditTrailEmitter";
+import { AuditChainVerifier } from "@governmindz/core/engine/AuditChainVerifier";
+import { credibilityManager, type AgentCredibilityRecord } from "@governmindz/core/kernel/CredibilityManager";
+import { HMemService } from "@governmindz/core/memory/HMemService";
 import { MeterlessProvider } from "@governmindz/core/providers/MeterlessProvider";
 import { zetarisQueryHandler } from "../gateway/src/tools/zetaris.tools.js";
 import { executeWebSearch } from "../gateway/src/tools/webSearch.tools.js";
-import { getConfigStatus, saveSecureConfig } from "../gateway/src/services/cryptoConfig.js";
+import { getConfigStatus, saveSecureConfig, loadLocalEnvIfPresent } from "../gateway/src/services/cryptoConfig.js";
+loadLocalEnvIfPresent();
 
 const PORT = Number(process.env.WEB_PORT || 8787);
 
@@ -48,7 +52,50 @@ db.exec(`
 		key TEXT PRIMARY KEY,
 		value TEXT NOT NULL
 	);
+
+	CREATE TABLE IF NOT EXISTS message_feedback (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		conversation_id TEXT,
+		message_id TEXT,
+		seat_id TEXT,
+		rating TEXT,
+		round INTEGER,
+		comment TEXT,
+		created_at INTEGER
+	);
+
+	CREATE TABLE IF NOT EXISTS agent_credibility (
+		seat_id TEXT PRIMARY KEY,
+		alpha REAL,
+		beta REAL,
+		sample_count INTEGER,
+		credibility_score REAL,
+		weight_multiplier REAL,
+		updated_at INTEGER
+	);
 `);
+
+const hmem = new HMemService();
+
+function initCredibilityFromDb(): void {
+	try {
+		const rows = db.prepare("SELECT * FROM agent_credibility").all() as any[];
+		for (const row of rows) {
+			credibilityManager.setCredibility({
+				seatId: row.seat_id,
+				alpha: Number(row.alpha),
+				beta: Number(row.beta),
+				sampleCount: Number(row.sample_count),
+				credibilityScore: Number(row.credibility_score),
+				weightMultiplier: Number(row.weight_multiplier),
+				updatedAt: Number(row.updated_at),
+			});
+		}
+	} catch (e) {
+		console.warn("Failed to load agent credibility from db:", e);
+	}
+}
+initCredibilityFromDb();
 
 function getPreference(key: string, defaultValue = ""): string {
 	try {
@@ -90,6 +137,14 @@ function getAllConversations() {
 				workflowEvents: parsed.workflowEvents || [],
 				agentAssignments: parsed.agentAssignments || null,
 				webSearchData: parsed.webSearchData || null,
+				contract: parsed.contract || null,
+				primaryArtifact: parsed.primaryArtifact || null,
+				additionalArtifacts: parsed.additionalArtifacts || [],
+				evidenceExport: parsed.evidenceExport || null,
+				supervisorResponse: parsed.supervisorResponse || null,
+				supervisorDecision: parsed.supervisorDecision || null,
+				dataCrewReport: parsed.dataCrewReport || null,
+				webCrewReport: parsed.webCrewReport || null,
 			};
 		} catch {
 			return {
@@ -130,6 +185,14 @@ function getConversationById(id: string) {
 			workflowEvents: parsed.workflowEvents || [],
 			agentAssignments: parsed.agentAssignments || null,
 			webSearchData: parsed.webSearchData || null,
+			contract: parsed.contract || null,
+			primaryArtifact: parsed.primaryArtifact || null,
+			additionalArtifacts: parsed.additionalArtifacts || [],
+			evidenceExport: parsed.evidenceExport || null,
+			supervisorResponse: parsed.supervisorResponse || null,
+			supervisorDecision: parsed.supervisorDecision || null,
+			dataCrewReport: parsed.dataCrewReport || null,
+			webCrewReport: parsed.webCrewReport || null,
 		};
 	} catch {
 		return null;
@@ -159,6 +222,14 @@ function upsertConversation(conv: any) {
 		workflowEvents: conv.workflowEvents || [],
 		agentAssignments: conv.agentAssignments || null,
 		webSearchData: conv.webSearchData || null,
+		contract: conv.contract || null,
+		primaryArtifact: conv.primaryArtifact || null,
+		additionalArtifacts: conv.additionalArtifacts || [],
+		evidenceExport: conv.evidenceExport || null,
+		supervisorResponse: conv.supervisorResponse || null,
+		supervisorDecision: conv.supervisorDecision || null,
+		dataCrewReport: conv.dataCrewReport || null,
+		webCrewReport: conv.webCrewReport || null,
 	};
 
 	stmt.run({
@@ -305,9 +376,14 @@ async function handleRun(req: http.IncomingMessage, res: http.ServerResponse) {
 			sendJson(res, 400, { error: "invalid json" });
 			return;
 		}
-		if (activeRun && runs.get(activeRun) && !runs.get(activeRun)!.done) {
-			sendJson(res, 409, { error: "a run is already in progress" });
-			return;
+		if (activeRun) {
+			const current = runs.get(activeRun);
+			if (!current || current.done) {
+				activeRun = null;
+			} else {
+				sendJson(res, 409, { error: "a run is already in progress" });
+				return;
+			}
 		}
 		const runId = randomUUID();
 		const run: RunRecord = {
@@ -355,6 +431,10 @@ async function handleRun(req: http.IncomingMessage, res: http.ServerResponse) {
 					scenarioPath: scenarioPath,
 					topicOverride: params.topic,
 					eventSink: sink,
+					searchModes: params.searchModes,
+					model: params.model,
+					attachments: params.attachments,
+					conversationId: params.conversationId,
 				});
 				run.result = out;
 				run.done = true;
@@ -365,8 +445,40 @@ async function handleRun(req: http.IncomingMessage, res: http.ServerResponse) {
 					if (existing) {
 						existing.status = "completed";
 						existing.finalConfidence = out.result?.finalConfidence;
+						existing.contract = out.contract || null;
+						existing.primaryArtifact = out.primaryArtifact || null;
+						existing.additionalArtifacts = out.additionalArtifacts || [];
+						existing.evidenceExport = out.evidenceExport || null;
+						existing.supervisorResponse = out.supervisorResponse || null;
+						existing.supervisorDecision = out.supervisorDecision || null;
+						existing.dataCrewReport = out.dataCrewReport || null;
+						existing.webCrewReport = out.webCrewReport || null;
 						existing.updatedAt = Date.now();
 						upsertConversation(existing);
+					}
+				}
+
+				const completeEv = {
+					type: "complete",
+					runId,
+					result: out.result,
+					auditEvents: out.auditEvents,
+					auditIntegrity: out.auditIntegrity,
+					contract: out.contract,
+					primaryArtifact: out.primaryArtifact,
+					additionalArtifacts: out.additionalArtifacts,
+					evidenceExport: out.evidenceExport,
+					supervisorResponse: out.supervisorResponse,
+					supervisorDecision: out.supervisorDecision,
+					dataCrewReport: out.dataCrewReport,
+					webCrewReport: out.webCrewReport,
+				};
+				run.events.push(completeEv);
+				for (const r of run.listeners) {
+					try {
+						r.write("data: " + JSON.stringify(completeEv) + "\n\n");
+					} catch {
+						// ignore
 					}
 				}
 
@@ -375,12 +487,21 @@ async function handleRun(req: http.IncomingMessage, res: http.ServerResponse) {
 				for (const r of run.listeners) {
 					try {
 						r.write("data: " + JSON.stringify(doneEv) + "\n\n");
-						r.end();
 					} catch {
 						// ignore
 					}
 				}
-				run.listeners.clear();
+
+				setTimeout(() => {
+					for (const r of run.listeners) {
+						try {
+							r.end();
+						} catch {
+							// ignore
+						}
+					}
+					run.listeners.clear();
+				}, 500);
 			} catch (err) {
 				run.error = err instanceof Error ? err.message : String(err);
 				run.done = true;
@@ -389,15 +510,23 @@ async function handleRun(req: http.IncomingMessage, res: http.ServerResponse) {
 				for (const r of run.listeners) {
 					try {
 						r.write("data: " + JSON.stringify(errEv) + "\n\n");
-						r.end();
 					} catch {
 						// ignore
 					}
 				}
-				run.listeners.clear();
+				setTimeout(() => {
+					for (const r of run.listeners) {
+						try {
+							r.end();
+						} catch {
+							// ignore
+						}
+					}
+					run.listeners.clear();
+				}, 500);
 			} finally {
 				offAudit();
-				if (activeRun === runId) activeRun = null;
+				activeRun = null;
 			}
 		})();
 
@@ -423,9 +552,12 @@ function handleResult(req: http.IncomingMessage, res: http.ServerResponse, runId
 }
 
 async function handleHealth(_req: http.IncomingMessage, res: http.ServerResponse) {
+	loadLocalEnvIfPresent();
 	const provider = new MeterlessProvider();
 	const hasMeterless = Boolean((process.env.METERLESS_BASE_URL || process.env.METERLESS_ENDPOINT)?.trim());
-	const hasZetaris = Boolean(process.env.ZETARIS_HOST?.trim());
+	const hasZetaris = Boolean(
+		(process.env.ZETARIS_HOST || process.env.ZETARIS_REST_URL || process.env.ZETARIS_JDBC_URL)?.trim()
+	);
 
 	let meterless: any = null;
 	try {
@@ -646,6 +778,208 @@ function handleConfig(req: http.IncomingMessage, res: http.ServerResponse) {
 	res.end();
 }
 
+function handleFeedback(req: http.IncomingMessage, res: http.ServerResponse) {
+	if (req.method !== "POST") {
+		res.writeHead(405);
+		res.end();
+		return;
+	}
+
+	let body = "";
+	req.on("data", (c: any) => (body += c));
+	req.on("end", () => {
+		try {
+			const payload = JSON.parse(body || "{}");
+			const { conversationId, messageId, seatId, rating, round, userComment } = payload;
+			if (!conversationId || !messageId || !seatId || !rating) {
+				sendJson(res, 400, { error: "Missing required fields: conversationId, messageId, seatId, rating" });
+				return;
+			}
+			if (rating !== "up" && rating !== "down") {
+				sendJson(res, 400, { error: "rating must be 'up' or 'down'" });
+				return;
+			}
+
+			// 1. Insert into message_feedback table
+			const insertStmt = db.prepare(`
+				INSERT INTO message_feedback (conversation_id, message_id, seat_id, rating, round, comment, created_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?)
+			`);
+			const now = Date.now();
+			insertStmt.run(conversationId, messageId, seatId, rating, round ?? null, userComment ?? null, now);
+
+			// 2. Update CredibilityManager
+			const updated = credibilityManager.recordRating(seatId, rating, round);
+
+			// 3. Upsert into agent_credibility table
+			const upsertStmt = db.prepare(`
+				INSERT INTO agent_credibility (seat_id, alpha, beta, sample_count, credibility_score, weight_multiplier, updated_at)
+				VALUES (@seat_id, @alpha, @beta, @sample_count, @credibility_score, @weight_multiplier, @updated_at)
+				ON CONFLICT(seat_id) DO UPDATE SET
+					alpha = excluded.alpha,
+					beta = excluded.beta,
+					sample_count = excluded.sample_count,
+					credibility_score = excluded.credibility_score,
+					weight_multiplier = excluded.weight_multiplier,
+					updated_at = excluded.updated_at
+			`);
+			upsertStmt.run({
+				seat_id: updated.seatId,
+				alpha: updated.alpha,
+				beta: updated.beta,
+				sample_count: updated.sampleCount,
+				credibility_score: updated.credibilityScore,
+				weight_multiplier: updated.weightMultiplier,
+				updated_at: updated.updatedAt,
+			});
+
+			// 4. Update HMemService
+			hmem.recordFeedback(conversationId, messageId, seatId, rating);
+
+			// 5. Emit governance_recalibration audit event
+			auditTrail.emitGovernanceRecalibration({
+				sessionId: conversationId,
+				seatId,
+				rating,
+				credibilityScore: updated.credibilityScore,
+				weightMultiplier: updated.weightMultiplier,
+				alpha: updated.alpha,
+				beta: updated.beta,
+				sampleCount: updated.sampleCount,
+			});
+
+			// 6. Return response
+			sendJson(res, 200, { success: true, updatedCredibility: updated });
+		} catch (err: any) {
+			sendJson(res, 500, { error: err.message || "Feedback processing failed" });
+		}
+	});
+}
+
+function handleAgentCredibility(req: http.IncomingMessage, res: http.ServerResponse) {
+	if (req.method !== "GET") {
+		res.writeHead(405);
+		res.end();
+		return;
+	}
+
+	try {
+		const creds = credibilityManager.getAllCredibilities();
+		sendJson(res, 200, { success: true, credibilities: creds });
+	} catch (err: any) {
+		sendJson(res, 500, { error: err.message || "Failed to retrieve credibilities" });
+	}
+}
+
+function handleAuditVerify(req: http.IncomingMessage, res: http.ServerResponse) {
+	if (req.method !== "POST") {
+		res.writeHead(405);
+		res.end();
+		return;
+	}
+
+	let body = "";
+	req.on("data", (c: any) => (body += c));
+	req.on("end", () => {
+		try {
+			const payload = JSON.parse(body || "{}");
+			const { conversationId, secret } = payload;
+			let events = payload.auditEvents;
+
+			// If client explicitly passed auditEvents (e.g. from Tamper Lab or external upload), prioritize them.
+			// Only fall back to database if client did not supply auditEvents.
+			if (!Array.isArray(events) && conversationId) {
+				const conv = getConversationById(conversationId);
+				if (conv && Array.isArray(conv.auditEvents)) {
+					events = conv.auditEvents;
+				}
+			}
+
+			if (!Array.isArray(events)) {
+				events = [];
+			}
+
+			const effectiveSecret = secret || process.env.AUDIT_TRAIL_SECRET || "governmindz-audit-secret-v1";
+			const report = AuditChainVerifier.verify(events, effectiveSecret);
+			sendJson(res, 200, report);
+		} catch (err: any) {
+			sendJson(res, 500, { error: err.message || "Audit verification failed" });
+		}
+	});
+}
+
+function handleAuditCertificate(req: http.IncomingMessage, res: http.ServerResponse, id: string) {
+	if (req.method !== "GET") {
+		res.writeHead(405);
+		res.end();
+		return;
+	}
+
+	try {
+		const conv = getConversationById(id);
+		if (!conv) {
+			sendJson(res, 404, { error: "Conversation not found" });
+			return;
+		}
+
+		const events = Array.isArray(conv.auditEvents) ? conv.auditEvents : [];
+		const effectiveSecret = process.env.AUDIT_TRAIL_SECRET || "governmindz-audit-secret-v1";
+		const report = AuditChainVerifier.verify(events, effectiveSecret);
+		const certificate = AuditChainVerifier.generateProofCertificate(report, id, effectiveSecret);
+		sendJson(res, 200, certificate);
+	} catch (err: any) {
+		sendJson(res, 500, { error: err.message || "Failed to generate audit certificate" });
+	}
+}
+
+function handleArtifact(req: http.IncomingMessage, res: http.ServerResponse, rawFilename: string) {
+	if (req.method !== "GET") {
+		res.writeHead(405);
+		res.end();
+		return;
+	}
+
+	const safeFilename = path.basename(decodeURIComponent(rawFilename));
+	const artifactsDir = path.resolve(process.cwd(), "data", "artifacts");
+	const filePath = path.join(artifactsDir, safeFilename);
+
+	if (!filePath.startsWith(artifactsDir) || !fs.existsSync(filePath)) {
+		sendJson(res, 404, { error: `Artifact '${safeFilename}' not found.` });
+		return;
+	}
+
+	try {
+		const stat = fs.statSync(filePath);
+		const ext = path.extname(safeFilename).toLowerCase();
+		const mimeTypes: Record<string, string> = {
+			".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+			".pdf": "application/pdf",
+			".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+			".csv": "text/csv; charset=utf-8",
+			".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+			".svg": "image/svg+xml",
+			".png": "image/png",
+			".json": "application/json; charset=utf-8",
+		};
+
+		const contentType = mimeTypes[ext] || "application/octet-stream";
+		const isDownload = (req.url || "").includes("download=true");
+		const disposition = isDownload ? `attachment; filename="${safeFilename}"` : `inline; filename="${safeFilename}"`;
+
+		res.writeHead(200, {
+			"Content-Type": contentType,
+			"Content-Length": stat.size,
+			"Content-Disposition": disposition,
+			"Cache-Control": "public, max-age=3600",
+		});
+
+		const stream = fs.createReadStream(filePath);
+		stream.pipe(res);
+	} catch (err: any) {
+		sendJson(res, 500, { error: err.message || "Failed to serve artifact" });
+	}
+}
+
 const server = http.createServer((req: http.IncomingMessage, res: http.ServerResponse) => {
 	const url = (req.url || "/").split("?")[0];
 	if (req.method === "GET" && url === "/api/health") return handleHealth(req, res);
@@ -654,6 +988,16 @@ const server = http.createServer((req: http.IncomingMessage, res: http.ServerRes
 	if (url === "/api/search") return handleWebSearch(req, res);
 	if (req.method === "GET" && url === "/api/scenarios") return handleScenarios(req, res);
 	if (req.method === "GET" && url === "/api/models") return handleModels(req, res);
+	if (req.method === "POST" && url === "/api/feedback") return handleFeedback(req, res);
+	if (req.method === "GET" && url === "/api/agents/credibility") return handleAgentCredibility(req, res);
+	if (req.method === "POST" && url === "/api/audit/verify") return handleAuditVerify(req, res);
+
+	const artMatch = url.match(/^\/api\/artifacts\/([^/]+)$/);
+	if (artMatch) return handleArtifact(req, res, artMatch[1]);
+
+	const certMatch = url.match(/^\/api\/conversations\/([^/]+)\/audit-certificate$/);
+	if (certMatch) return handleAuditCertificate(req, res, decodeURIComponent(certMatch[1]));
+
 	if (url === "/api/conversations") return handleConversations(req, res);
 
 	const convMatch = url.match(/^\/api\/conversations\/([^/]+)$/);

@@ -10,6 +10,10 @@ export * from "./providers/MeterlessTokenStore";
 export * from "./providers/MeterlessSeatClient";
 
 export * from "./integrations/zetarisClient";
+export * from "./resilience/CircuitBreaker";
+export * from "./integrations/ZetarisFallbackCatalog";
+export * from "./integrations/ResilientZetarisClient";
+export * from "./documents/DocumentIngestionService";
 
 export * from "./interfaces/IAgent";
 export * from "./interfaces/IProvider";
@@ -28,6 +32,7 @@ export * from "./scoring/ConfidenceScorer";
 export * from "./database/DatabaseService";
 
 export * from "./engine/AuditTrailEmitter";
+export * from "./engine/AuditChainVerifier";
 
 export * from "./integrations/syncEngine";
 export * from "./integrations/googleDocsProvider";
@@ -37,6 +42,8 @@ export * from "./kernel/Logger";
 export * from "./kernel/InterruptManager";
 export * from "./kernel/AdaptiveCalibration";
 export * from "./kernel/CalibrationService";
+export * from "./kernel/CredibilityManager";
+export * from "./memory/HMemService";
 
 export * from "./agents/AgentBase";
 export * from "./agents/AgentRegistry";
@@ -65,3 +72,9 @@ export * from "./orchestration/ModelArmorInterceptor";
 export * from "./gravity/GravityCoordinator";
 export * from "./gravity/GravityReceipt";
 export * from "./gravity/GravityFormula";
+
+export * from "./orchestration/DeliverableContract";
+export * from "./agents/DataCrew";
+export * from "./agents/WebSearchCrew";
+export * from "./documents/DesignAssistant";
+export * from "./orchestration/SupervisorWorkflow";

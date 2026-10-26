@@ -6,11 +6,12 @@ import {
 	PromptPayloadBuilder,
 	renderPromptPayloadMessages,
 } from "../prompt-cache/PromptPayloadBuilder";
-import type {
-	AgentMessage,
-	AgentOutputContract,
-	MessageType,
-} from "./AgentMessage";
+import {
+	type AgentMessage,
+	type AgentOutputContract,
+	type MessageType,
+	buildMessageContractEnvelope,
+} from "./AgentMessage.js";
 
 // JSON schema instruction injected into every LLM system prompt
 const JSON_OUTPUT_INSTRUCTION = `
@@ -320,8 +321,18 @@ export class AgentSeat {
 				structured.evidence.join("").length) /
 				4,
 		);
+		const id = randomUUID();
+		const envelope = buildMessageContractEnvelope({
+			id,
+			type,
+			structured,
+			round,
+			latency_ms,
+			toSeat,
+			inReplyTo,
+		});
 		return {
-			id: randomUUID(),
+			id,
 			fromSeat: this.config.seatId,
 			toSeat,
 			type,
@@ -333,6 +344,7 @@ export class AgentSeat {
 			latency_ms,
 			token_count,
 			inReplyTo,
+			envelope,
 		};
 	}
 }

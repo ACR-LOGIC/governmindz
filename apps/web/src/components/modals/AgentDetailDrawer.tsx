@@ -21,19 +21,6 @@ interface AgentDetailDrawerProps {
 	onClose: () => void;
 }
 
-const CATCHPHRASES: Record<string, string> = {
-	FactChecker: "“Wait... let me inspect the primary keys first!” 🔍",
-	CloudArchitect: "“Who left 0.0.0.0/0 open in the firewall?! 🧱”",
-	Synthesizer: "“Order in the court! We have calibrated consensus. ⚖️”",
-	RivalChallenger: "“Disputed! Show me the cryptographic hash or it didn't happen! 🥊”",
-	Thinker: "“Pondering the existential entropy of this retention policy... ☕”",
-	ContextAgent: "“I distinctly recall what you stated in round one. 📜”",
-	CredibleSourcesResearchAgent: "“Querying authoritative registries and peer-reviewed journals... 🌐”",
-	SocialCommunityResearchAgent: "“Assessing ecosystem stakeholder impact and user sentiment... 👥”",
-	Orchestrator: "“GovernMindz flight director on deck. All seats report in! 🛰️”",
-	user: "“Operator review: inspecting multi-agent deliberation. ☕”",
-};
-
 export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
 	agent,
 	messages,
@@ -42,8 +29,15 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
 	if (!agent) return null;
 
 	const agentMessages = messages.filter((m) => m.fromSeat === agent.id);
-	const catchphrase = CATCHPHRASES[agent.id];
 	const isWorking = agent.status === "analyzing" || agent.status === "challenging" || agent.status === "synthesizing";
+
+	// Gather all structured reasoning records across messages
+	const allEvidence = Array.from(new Set(agentMessages.flatMap((m) => m.structured?.evidence || [])));
+	const allCaveats = Array.from(new Set(agentMessages.flatMap((m) => m.structured?.caveats || [])));
+	const allSupports = Array.from(new Set(agentMessages.flatMap((m) => m.structured?.supports || [])));
+	const allDissents = Array.from(
+		new Set(agentMessages.flatMap((m) => m.structured?.dissents_from || m.structured?.dissentsFrom || [])),
+	);
 
 	return (
 		<div className="fixed inset-0 z-50 overflow-hidden bg-black/60 backdrop-blur-sm flex justify-end animate-fadeIn">
@@ -51,14 +45,21 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
 				{/* Top bar with avatar, name, and creative title */}
 				<div className="flex items-start justify-between pb-4 border-b border-[#1e2842] mb-6">
 					<div className="flex items-center gap-3">
-						<AgentAvatar seatId={agent.id} size="lg" showStatusPip={true} status={agent.status} />
+						<AgentAvatar
+							seatId={agent.id}
+							avatarId={agent.avatarId}
+							humanName={agent.humanName}
+							size="lg"
+							showStatusPip={true}
+							status={agent.status}
+						/>
 						<div>
 							<h3 className="font-display font-bold text-base text-slate-100 flex items-center gap-1.5">
 								<span>{agent.name}</span>
 							</h3>
 							{agent.humanName && (
 								<div className="text-[12px] font-mono font-bold text-amber-300">
-									Assigned Operator: {agent.humanName}
+									Coworker Persona: {agent.humanName}
 								</div>
 							)}
 							<p className="text-xs text-slate-400">{agent.role}</p>
@@ -88,7 +89,7 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
 
 					{agent.humanName && (
 						<div className="flex items-center justify-between text-xs">
-							<span className="text-slate-400">Operator Identity:</span>
+							<span className="text-slate-400">Persona Identity:</span>
 							<span className="font-mono font-bold text-amber-300 text-[11px] px-2 py-0.5 rounded bg-amber-950/50 border border-amber-800/40">
 								{agent.humanName}
 							</span>
@@ -127,13 +128,6 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
 						<div className="text-slate-200 text-xs leading-relaxed font-sans font-medium italic">
 							&ldquo;{agent.jobTask}&rdquo;
 						</div>
-					</div>
-				)}
-
-				{catchphrase && (
-					<div className="p-3 mb-6 rounded-xl bg-[#18203a] border border-[#2c385c] text-xs font-mono italic text-amber-300 flex items-center gap-2 shadow-inner">
-						<Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-						<span>{catchphrase}</span>
 					</div>
 				)}
 
@@ -184,6 +178,94 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
 							</div>
 						)}
 					</div>
+				</div>
+
+				{/* Agent Epistemic Reasoning Records (Moved from under self-confidence in chat) */}
+				<div className="space-y-3 mb-6 p-4 rounded-xl bg-[#0e1322] border border-[#232f50] shadow-md">
+					<div className="flex items-center justify-between border-b border-[#1b2542] pb-2">
+						<h4 className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5 font-mono">
+							<ShieldCheck className="w-4 h-4 text-emerald-400" />
+							<span>Reasoning Records & Assertions</span>
+						</h4>
+						<span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/40 text-emerald-300">
+							{allEvidence.length} Grounded Citations
+						</span>
+					</div>
+
+					{/* Verified Grounding Evidence */}
+					<div className="space-y-1.5">
+						<div className="text-[11px] font-mono text-emerald-400 font-semibold flex items-center gap-1">
+							<CheckCircle2 className="w-3.5 h-3.5" />
+							<span>Verified Grounding Evidence ({allEvidence.length})</span>
+						</div>
+						{allEvidence.length > 0 ? (
+							<div className="flex flex-wrap gap-1.5">
+								{allEvidence.map((ev, i) => (
+									<span
+										key={i}
+										className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] bg-emerald-950/50 border border-emerald-700/50 text-emerald-200 font-mono"
+									>
+										<CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+										<span>{ev}</span>
+									</span>
+								))}
+							</div>
+						) : (
+							<div className="text-[11px] italic text-slate-500 font-mono">
+								No specific evidence citations claimed yet.
+							</div>
+						)}
+					</div>
+
+					{/* Caveats & Boundary Limits */}
+					{allCaveats.length > 0 && (
+						<div className="space-y-1.5 pt-2 border-t border-[#18223c]">
+							<div className="text-[11px] font-mono text-amber-400 font-semibold flex items-center gap-1">
+								<AlertTriangle className="w-3.5 h-3.5" />
+								<span>Operational Caveats & Policy Limits ({allCaveats.length})</span>
+							</div>
+							<div className="flex flex-wrap gap-1.5">
+								{allCaveats.map((cav, i) => (
+									<span
+										key={i}
+										className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] bg-amber-950/50 border border-amber-700/50 text-amber-200 font-mono"
+									>
+										<AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
+										<span>{cav}</span>
+									</span>
+								))}
+							</div>
+						</div>
+					)}
+
+					{/* Peer Alignments (Supports & Dissents) */}
+					{(allSupports.length > 0 || allDissents.length > 0) && (
+						<div className="space-y-1.5 pt-2 border-t border-[#18223c]">
+							<div className="text-[11px] font-mono text-teal-400 font-semibold">
+								Peer Alignments & Cross-References:
+							</div>
+							<div className="flex flex-wrap gap-1.5">
+								{allSupports.map((sup, i) => (
+									<span
+										key={i}
+										className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] bg-sky-950/50 border border-sky-800/50 text-sky-300 font-mono"
+									>
+										<CheckCircle2 className="w-3 h-3 text-sky-400 shrink-0" />
+										<span>Supports @{sup}</span>
+									</span>
+								))}
+								{allDissents.map((dis, i) => (
+									<span
+										key={i}
+										className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] bg-rose-950/50 border border-rose-800/50 text-rose-300 font-mono"
+									>
+										<AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" />
+										<span>Dissents from @{dis}</span>
+									</span>
+								))}
+							</div>
+						</div>
+					)}
 				</div>
 
 				{/* Role Directive & System Description */}
