@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { runDebate } from "../apps/gateway/src/debateRunner.js";
 
 // NOTE: These tests are skipped on CI runners because runDebate in sample mode
 // triggers a native/async crash (SIGSEGV) on the Linux runner environment.
 // Local runs pass; the CI failure is environment-specific, not a code defect.
 
 test.skip("Backend Pre-Cues: runDebate emits agent_pre_cue events with correlation IDs", async () => {
+	const { runDebate } = await import("../apps/gateway/src/debateRunner.js");
 	const emittedEvents: any[] = [];
 	const sink = (ev: any) => {
 		emittedEvents.push(ev);
