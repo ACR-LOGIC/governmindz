@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Header } from "./components/layout/Header";
 import { LeftSidebar } from "./components/layout/LeftSidebar";
 import { RightSidebar } from "./components/layout/RightSidebar";
@@ -28,6 +28,7 @@ import { AGENT_REGISTRY, getAgentProfile, getAllAgentProfiles } from "./services
 import { assignHumanCouncil, generateTaskDelegationAnnouncement } from "./services/nameRotation";
 import { ttsService } from "./services/ttsService";
 import { CrewBarrierManager } from "./services/crewBarrier";
+import { DemoPresentationQueue, type DemoQueueState } from "./services/demoPresentationQueue";
 import type { CrewRound } from "./types/crew";
 import type {
 	ActiveTab,
@@ -63,6 +64,14 @@ export const App: React.FC = () => {
 	const [activeCrewRound, setActiveCrewRound] = useState<CrewRound | null>(null);
 	const [isCrewClosing, setIsCrewClosing] = useState(false);
 	const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+	// Non-blocking holding message state & timer
+	const [holdingMessage, setHoldingMessage] = useState<string | null>(null);
+	const holdingTimerRef = useRef<any>(null);
+
+	// Demo presentation queue state & controller
+	const demoQueueRef = useRef<DemoPresentationQueue | null>(null);
+	const [demoQueueState, setDemoQueueState] = useState<DemoQueueState>("idle");
 
 	// Agent roster state
 	const [agentRoster, setAgentRoster] = useState<AgentProfile[]>(getAllAgentProfiles());
@@ -346,6 +355,12 @@ export const App: React.FC = () => {
 
 	// Start Over in Demo mode
 	const handleStartOver = () => {
+		demoQueueRef.current?.reset();
+		if (holdingTimerRef.current) {
+			clearTimeout(holdingTimerRef.current);
+			holdingTimerRef.current = null;
+		}
+		setHoldingMessage(null);
 		handleNewConversation();
 		showToast("Demo restarted. Choose a scenario to begin.");
 	};
@@ -606,6 +621,18 @@ export const App: React.FC = () => {
 		setActiveCrewRound(null);
 		setIsCrewClosing(false);
 
+		// Non-blocking holding message timer: triggers after meaningful 2.6s processing pause
+		if (holdingTimerRef.current) clearTimeout(holdingTimerRef.current);
+		setHoldingMessage(null);
+		holdingTimerRef.current = setTimeout(() => {
+			setHoldingMessage("I’m still checking the evidence across federated databases and external sources.");
+		}, 2600);
+
+		if (mode !== "live") {
+			demoQueueRef.current?.reset();
+			demoQueueRef.current?.play();
+		}
+
 		try {
 			const { runId } = await startRun({
 				mode,
@@ -626,22 +653,37 @@ export const App: React.FC = () => {
 				},
 				(err) => {
 					console.warn("SSE stream closed/completed:", err);
+					if (holdingTimerRef.current) {
+						clearTimeout(holdingTimerRef.current);
+						holdingTimerRef.current = null;
+					}
+					setHoldingMessage(null);
 					setIsBusy(false);
 					setActiveAgentThinking(null);
 				},
 				() => {
+					if (holdingTimerRef.current) {
+						clearTimeout(holdingTimerRef.current);
+						holdingTimerRef.current = null;
+					}
+					setHoldingMessage(null);
 					setIsBusy(false);
 					setActiveAgentThinking(null);
 				},
 			);
 		} catch (err: any) {
+			if (holdingTimerRef.current) {
+				clearTimeout(holdingTimerRef.current);
+				holdingTimerRef.current = null;
+			}
+			setHoldingMessage(null);
 			showToast(`Run failed: ${err.message}`);
 			setIsBusy(false);
 		}
 	};
 
-	// Handle SSE Stream Events
-	const handleStreamEvent = useCallback(
+	// Apply individual SSE stream event to React conversation state
+	const applyStreamEvent = useCallback(
 		(ev: any) => {
 			if (!activeId) return;
 
@@ -695,6 +737,12 @@ export const App: React.FC = () => {
 					};
 					updated.messages = [...updated.messages, orchMsg];
 					updated.status = "running";
+				} else if (ev.type === "agent_pre_cue") {
+					// Pre-cue: lightweight scheduling signal informing downstream agents
+					appendAgentReasoning(
+						ev.targetAgent,
+						`[Internal Pre-Cue: ${ev.taskType}] ${ev.hint || "Preparing background analysis for upcoming debate turn..."}`,
+					);
 				} else if (ev.type === "web_search") {
 					updated.webSearchData = {
 						query: ev.query,
@@ -764,12 +812,12 @@ export const App: React.FC = () => {
 
 					updated.messages = [...updated.messages, newMsg];
 
-					// Live text-to-speech reading if voice enabled
-					if (ttsService.isTtsEnabled()) {
+					// Live text-to-speech reading if voice enabled (associated with main group)
+					if (ttsService.isTtsEnabled("main")) {
 						const speakerName = updated.agentAssignments?.[rawMsg.fromSeat]?.humanName || rawMsg.fromSeat;
 						const speechText = newMsg.content || "";
 						if (speechText) {
-							ttsService.queueSpeak(speechText, speakerName, newMsg.id);
+							ttsService.queueSpeak(speechText, speakerName, newMsg.id, "main");
 						}
 					}
 
@@ -864,6 +912,56 @@ export const App: React.FC = () => {
 			});
 		},
 		[activeId, updateAgentStatus, showToast, triggerBarrierRelease],
+	);
+
+	// Initialize Demo presentation queue
+	useEffect(() => {
+		const queue = new DemoPresentationQueue(
+			(item) => {
+				applyStreamEvent(item.payload);
+			},
+			(queueState) => {
+				setDemoQueueState(queueState);
+			},
+		);
+		queue.setLiveMode(mode === "live");
+		demoQueueRef.current = queue;
+
+		return () => {
+			queue.destroy();
+		};
+	}, [applyStreamEvent, mode]);
+
+	// Route incoming SSE stream events through the Demo Presentation Queue in Demo Mode, or instantly in Live Mode
+	const handleStreamEvent = useCallback(
+		(ev: any) => {
+			// Non-blocking holding message clears immediately upon substantive content, completion, or error
+			if (ev.type === "message" || ev.type === "complete" || ev.type === "done" || ev.type === "error") {
+				if (holdingTimerRef.current) {
+					clearTimeout(holdingTimerRef.current);
+					holdingTimerRef.current = null;
+				}
+				setHoldingMessage(null);
+			}
+
+			if (mode === "live" || !demoQueueRef.current) {
+				applyStreamEvent(ev);
+			} else {
+				const textLength =
+					ev.type === "message"
+						? (ev.message?.content || ev.message?.structured?.position || "").length
+						: 20;
+
+				demoQueueRef.current.enqueue({
+					id: `demo_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+					type: ev.type,
+					payload: ev,
+					textLength,
+					fromSeat: ev.message?.fromSeat || ev.seatId,
+				});
+			}
+		},
+		[mode, applyStreamEvent],
 	);
 
 	// Select Agent in Roster
@@ -971,6 +1069,14 @@ export const App: React.FC = () => {
 										onSelectScenario={handleSelectScenario}
 										activeCrewRound={activeCrewRound}
 										isCrewClosing={isCrewClosing}
+										holdingMessage={holdingMessage}
+										demoQueueState={demoQueueState}
+										onPauseDemo={() => demoQueueRef.current?.pause()}
+										onResumeDemo={() => demoQueueRef.current?.resume()}
+										onResetDemo={() => {
+											demoQueueRef.current?.reset();
+											handleStartOver();
+										}}
 									/>
 									<MessageComposer
 										mode={mode}

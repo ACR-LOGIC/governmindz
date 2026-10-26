@@ -455,13 +455,17 @@ export const DEFAULT_VOICE_REGISTRY: Record<string, AgentVoiceRegistryEntry> = {
 	},
 };
 
-type SpeakCallback = (isSpeaking: boolean, seatId?: string | null, messageId?: string | null) => void;
+type SpeakCallback = (isSpeaking: boolean, seatId?: string | null, messageId?: string | null, groupId?: string | null) => void;
 type SequentialCallback = (isPlaying: boolean, currentIndex: number, total: number) => void;
+type GroupMuteCallback = (groupId: string, isMuted: boolean) => void;
 
 interface QueuedUtterance {
 	text: string;
 	seatId: string;
 	messageId?: string;
+	groupId: string;
+	generationToken: number;
+	timestamp: number;
 }
 
 class TTSService {
@@ -470,23 +474,42 @@ class TTSService {
 	private paused = false;
 	private currentSpeakingSeat: string | null = null;
 	private currentSpeakingMessageId: string | null = null;
+	private currentSpeakingGroupId: string | null = null;
 	private listeners: Set<SpeakCallback> = new Set();
 	private sequentialListeners: Set<SequentialCallback> = new Set();
+	private groupMuteListeners: Set<GroupMuteCallback> = new Set();
 	private piperEndpoint = "http://127.0.0.1:5000/api/tts";
 	private queue: QueuedUtterance[] = [];
 	private isProcessingQueue = false;
 	private voiceRegistry: Map<string, AgentVoiceRegistryEntry> = new Map();
 
+	// Independent group mute states & current-point unmute boundaries
+	private groupMuted: Map<string, boolean> = new Map();
+	private groupEligibilityToken: Map<string, number> = new Map();
+	private generationToken = 1;
+	private activeAudioElement: HTMLAudioElement | null = null;
+	private inFlightController: AbortController | null = null;
+
 	// Sequential debate playback state
 	private isSequentialActive = false;
 	private sequentialMessages: Array<{ id: string; fromSeat: string; content: string; structured?: any }> = [];
 	private sequentialIndex = 0;
+	private sequentialGroupId = "main";
 
 	constructor() {
 		if (typeof window !== "undefined") {
 			const savedEnabled = localStorage.getItem("governmindz_tts_enabled");
 			this.enabled = savedEnabled !== null ? savedEnabled === "true" : true;
 			this.muted = localStorage.getItem("governmindz_tts_muted") === "true";
+
+			// Initialize default group mute states from storage
+			const mainMuted = localStorage.getItem("governmindz_tts_group_muted_main") === "true";
+			const crewsMuted = localStorage.getItem("governmindz_tts_group_muted_crews") === "true";
+			this.groupMuted.set("main", mainMuted);
+			this.groupMuted.set("crews", crewsMuted);
+		} else {
+			this.groupMuted.set("main", false);
+			this.groupMuted.set("crews", false);
 		}
 
 		// Initialize registry from defaults
@@ -495,8 +518,8 @@ class TTSService {
 		}
 	}
 
-	public isTtsEnabled(): boolean {
-		return this.enabled && !this.muted;
+	public isTtsEnabled(groupId = "main"): boolean {
+		return this.enabled && !this.muted && !this.isGroupMuted(groupId);
 	}
 
 	public isMasterEnabled(): boolean {
@@ -505,6 +528,94 @@ class TTSService {
 
 	public isMuted(): boolean {
 		return this.muted;
+	}
+
+	public isGroupMuted(groupId = "main"): boolean {
+		return this.groupMuted.get(groupId) ?? false;
+	}
+
+	public setGroupMuted(groupId: string, muted: boolean) {
+		const prev = this.isGroupMuted(groupId);
+		this.groupMuted.set(groupId, muted);
+
+		if (typeof window !== "undefined") {
+			localStorage.setItem(`governmindz_tts_group_muted_${groupId}`, muted ? "true" : "false");
+		}
+
+		if (muted) {
+			// Invalidate current generation token so in-flight async chunks are discarded
+			this.generationToken += 1;
+
+			// If current speaker is in this group, immediately cancel audio
+			if (this.currentSpeakingGroupId === groupId) {
+				this.inFlightController?.abort();
+				this.inFlightController = null;
+
+				if (this.activeAudioElement) {
+					try {
+						this.activeAudioElement.pause();
+						this.activeAudioElement.src = "";
+					} catch {
+						// ignore
+					}
+					this.activeAudioElement = null;
+				}
+
+				if (typeof window !== "undefined" && "speechSynthesis" in window) {
+					try {
+						window.speechSynthesis.cancel();
+					} catch {
+						// ignore
+					}
+				}
+
+				this.currentSpeakingSeat = null;
+				this.currentSpeakingMessageId = null;
+				this.currentSpeakingGroupId = null;
+			}
+
+			// Clear queued audio for this group (do NOT buffer for later)
+			this.queue = this.queue.filter((q) => q.groupId !== groupId);
+
+			// If sequential playback is active on this group, stop it
+			if (this.isSequentialActive && this.sequentialGroupId === groupId) {
+				this.isSequentialActive = false;
+				this.sequentialMessages = [];
+				this.sequentialIndex = 0;
+				this.notifySequential();
+			}
+		} else if (prev && !muted) {
+			// UNMUTE: Set clear eligibility boundary to current timestamp.
+			// Only speech generated or queued AFTER this boundary is eligible to play.
+			// Do NOT replay muted backlog or restart from beginning.
+			this.groupEligibilityToken.set(groupId, Date.now());
+		}
+
+		this.notify();
+		this.notifyGroupMute(groupId, muted);
+	}
+
+	public toggleGroupMute(groupId = "main"): boolean {
+		const next = !this.isGroupMuted(groupId);
+		this.setGroupMuted(groupId, next);
+		return next;
+	}
+
+	public subscribeGroupMute(cb: GroupMuteCallback): () => void {
+		this.groupMuteListeners.add(cb);
+		return () => {
+			this.groupMuteListeners.delete(cb);
+		};
+	}
+
+	private notifyGroupMute(groupId: string, isMuted: boolean) {
+		for (const cb of this.groupMuteListeners) {
+			try {
+				cb(groupId, isMuted);
+			} catch {
+				// ignore
+			}
+		}
 	}
 
 	public setTtsEnabled(val: boolean) {
@@ -630,7 +741,12 @@ class TTSService {
 	private notify() {
 		for (const cb of this.listeners) {
 			try {
-				cb(this.currentSpeakingSeat !== null, this.currentSpeakingSeat, this.currentSpeakingMessageId);
+				cb(
+					this.currentSpeakingSeat !== null,
+					this.currentSpeakingSeat,
+					this.currentSpeakingMessageId,
+					this.currentSpeakingGroupId,
+				);
 			} catch {
 				// ignore
 			}
@@ -648,6 +764,7 @@ class TTSService {
 	}
 
 	public stop() {
+		this.generationToken += 1;
 		this.queue = [];
 		this.isProcessingQueue = false;
 		this.isSequentialActive = false;
@@ -655,47 +772,112 @@ class TTSService {
 		this.sequentialIndex = 0;
 		this.paused = false;
 
+		this.inFlightController?.abort();
+		this.inFlightController = null;
+
+		if (this.activeAudioElement) {
+			try {
+				this.activeAudioElement.pause();
+				this.activeAudioElement.src = "";
+			} catch {
+				// ignore
+			}
+			this.activeAudioElement = null;
+		}
+
 		if (typeof window !== "undefined" && "speechSynthesis" in window) {
-			window.speechSynthesis.cancel();
+			try {
+				window.speechSynthesis.cancel();
+			} catch {
+				// ignore
+			}
 		}
 		this.currentSpeakingSeat = null;
 		this.currentSpeakingMessageId = null;
+		this.currentSpeakingGroupId = null;
 		this.notify();
 		this.notifySequential();
 	}
 
 	/**
-	 * Queues an utterance to be spoken in order so agents sound like a natural meeting
+	 * Queues an utterance to be spoken in order so agents sound like a natural meeting.
+	 * Decoupled from text streaming; never blocks or alters text generation.
 	 */
-	public queueSpeak(text: string, seatIdOrName = "Synthesizer", messageId?: string) {
-		if (!this.isTtsEnabled() || !text) return;
-		this.queue.push({ text, seatId: seatIdOrName, messageId });
+	public queueSpeak(
+		text: string,
+		seatIdOrName = "Synthesizer",
+		messageId?: string,
+		groupId = "main",
+	) {
+		if (!this.isTtsEnabled(groupId) || !text) return;
+
+		// Discard speech if queued prior to latest unmute boundary
+		const boundary = this.groupEligibilityToken.get(groupId) || 0;
+		const now = Date.now();
+		if (now < boundary) return;
+
+		this.queue.push({
+			text,
+			seatId: seatIdOrName,
+			messageId,
+			groupId,
+			generationToken: this.generationToken,
+			timestamp: now,
+		});
+
 		if (!this.isProcessingQueue) {
 			this.processQueue();
 		}
 	}
 
 	private async processQueue() {
-		if (!this.isTtsEnabled() || this.queue.length === 0) {
+		if (this.queue.length === 0) {
 			this.isProcessingQueue = false;
 			this.currentSpeakingSeat = null;
 			this.currentSpeakingMessageId = null;
+			this.currentSpeakingGroupId = null;
 			this.notify();
 			return;
 		}
 
 		this.isProcessingQueue = true;
-		const next = this.queue.shift();
-		if (!next) {
-			this.isProcessingQueue = false;
+
+		while (this.queue.length > 0) {
+			const next = this.queue.shift();
+			if (!next) break;
+
+			const boundary = this.groupEligibilityToken.get(next.groupId) || 0;
+
+			// Verify token, group mute state, and unmute boundary eligibility
+			if (
+				next.generationToken !== this.generationToken ||
+				this.isGroupMuted(next.groupId) ||
+				!this.isTtsEnabled(next.groupId) ||
+				next.timestamp < boundary
+			) {
+				// Drop muted, invalidated, or stale chunk
+				continue;
+			}
+
+			await this.speak(
+				next.text,
+				next.seatId,
+				next.messageId,
+				() => {
+					setTimeout(() => {
+						this.processQueue();
+					}, 300);
+				},
+				next.groupId,
+			);
 			return;
 		}
 
-		await this.speak(next.text, next.seatId, next.messageId, () => {
-			setTimeout(() => {
-				this.processQueue();
-			}, 300);
-		});
+		this.isProcessingQueue = false;
+		this.currentSpeakingSeat = null;
+		this.currentSpeakingMessageId = null;
+		this.currentSpeakingGroupId = null;
+		this.notify();
 	}
 
 	/**
@@ -740,11 +922,13 @@ class TTSService {
 	 */
 	public playSequential(
 		messages: Array<{ id: string; fromSeat: string; content: string; structured?: any }>,
+		groupId = "main",
 	) {
-		if (!this.isTtsEnabled() || messages.length === 0) return;
+		if (!this.isTtsEnabled(groupId) || messages.length === 0) return;
 
 		this.stop();
 		this.isSequentialActive = true;
+		this.sequentialGroupId = groupId;
 		this.sequentialMessages = messages.filter((m) => {
 			const text = m.structured?.position || m.content;
 			return Boolean(this.cleanTextForSpeech(text));
@@ -763,18 +947,31 @@ class TTSService {
 			return;
 		}
 
+		if (this.isGroupMuted(this.sequentialGroupId) || !this.isTtsEnabled(this.sequentialGroupId)) {
+			this.isSequentialActive = false;
+			this.notifySequential();
+			this.stop();
+			return;
+		}
+
 		const current = this.sequentialMessages[this.sequentialIndex];
 		const text = current.structured?.position || current.content;
 
 		this.notifySequential();
 
-		this.speak(text, current.fromSeat, current.id, () => {
-			if (!this.isSequentialActive) return;
-			this.sequentialIndex += 1;
-			setTimeout(() => {
-				this.playNextSequentialMessage();
-			}, 350);
-		});
+		this.speak(
+			text,
+			current.fromSeat,
+			current.id,
+			() => {
+				if (!this.isSequentialActive || this.isGroupMuted(this.sequentialGroupId)) return;
+				this.sequentialIndex += 1;
+				setTimeout(() => {
+					this.playNextSequentialMessage();
+				}, 350);
+			},
+			this.sequentialGroupId,
+		);
 	}
 
 	public isSequentialPlaying(): boolean {
@@ -789,19 +986,21 @@ class TTSService {
 		const phrase =
 			customPhrase ||
 			`Hello! I'm ${profile.displayName}, serving as ${profile.role} on the GovernMindz council.`;
-		await this.speak(phrase, seatId, `preview-${seatId}`);
+		await this.speak(phrase, seatId, `preview-${seatId}`, undefined, "main");
 	}
 
 	/**
-	 * Speaks an utterance in the agent's assigned personality voice
+	 * Speaks an utterance in the agent's assigned personality voice.
+	 * Enforces generation token guards and group mute status so async results never leak.
 	 */
 	public async speak(
 		text: string,
 		seatId = "Synthesizer",
 		messageId?: string,
 		onComplete?: () => void,
+		groupId = "main",
 	) {
-		if (!this.isTtsEnabled() || !text) {
+		if (!this.isTtsEnabled(groupId) || !text) {
 			onComplete?.();
 			return;
 		}
@@ -818,14 +1017,17 @@ class TTSService {
 			return;
 		}
 
+		const currentGenToken = this.generationToken;
+
 		this.currentSpeakingSeat = seatId;
 		this.currentSpeakingMessageId = messageId || null;
+		this.currentSpeakingGroupId = groupId;
 		this.notify();
 
 		// 1. Try local Piper daemon if available
 		try {
-			const controller = new AbortController();
-			const timeout = setTimeout(() => controller.abort(), 1000);
+			this.inFlightController = new AbortController();
+			const timeout = setTimeout(() => this.inFlightController?.abort(), 1000);
 
 			const resp = await fetch(this.piperEndpoint, {
 				method: "POST",
@@ -834,41 +1036,84 @@ class TTSService {
 					text: cleanText,
 					model: profile.piperModel,
 				}),
-				signal: controller.signal,
+				signal: this.inFlightController.signal,
 			});
 			clearTimeout(timeout);
+			this.inFlightController = null;
+
+			// Check generation token and mute boundary before audio playback
+			if (currentGenToken !== this.generationToken || this.isGroupMuted(groupId) || !this.isTtsEnabled(groupId)) {
+				this.currentSpeakingSeat = null;
+				this.currentSpeakingMessageId = null;
+				this.currentSpeakingGroupId = null;
+				this.notify();
+				onComplete?.();
+				return;
+			}
 
 			if (resp.ok) {
 				const blob = await resp.blob();
 				const audio = new Audio(URL.createObjectURL(blob));
+				this.activeAudioElement = audio;
+
 				audio.onended = () => {
+					this.activeAudioElement = null;
 					this.currentSpeakingSeat = null;
 					this.currentSpeakingMessageId = null;
+					this.currentSpeakingGroupId = null;
 					this.notify();
 					onComplete?.();
 				};
 				audio.onerror = () => {
-					this.fallbackSpeechSynthesis(cleanText, profile, onComplete);
+					this.activeAudioElement = null;
+					if (currentGenToken === this.generationToken && !this.isGroupMuted(groupId)) {
+						this.fallbackSpeechSynthesis(cleanText, profile, onComplete, groupId, currentGenToken);
+					} else {
+						onComplete?.();
+					}
 				};
 				await audio.play();
 				return;
 			}
 		} catch {
-			// fallback
+			this.inFlightController = null;
+		}
+
+		// Check token and group mute status before fallback
+		if (currentGenToken !== this.generationToken || this.isGroupMuted(groupId) || !this.isTtsEnabled(groupId)) {
+			this.currentSpeakingSeat = null;
+			this.currentSpeakingMessageId = null;
+			this.currentSpeakingGroupId = null;
+			this.notify();
+			onComplete?.();
+			return;
 		}
 
 		// 2. High-performance Browser Speech Synthesis fallback with custom pitch and rate
-		this.fallbackSpeechSynthesis(cleanText, profile, onComplete);
+		this.fallbackSpeechSynthesis(cleanText, profile, onComplete, groupId, currentGenToken);
 	}
 
 	private fallbackSpeechSynthesis(
 		cleanText: string,
 		profile: AgentVoiceRegistryEntry,
 		onComplete?: () => void,
+		groupId = "main",
+		token?: number,
 	) {
+		const targetToken = token ?? this.generationToken;
 		if (typeof window === "undefined" || !("speechSynthesis" in window)) {
 			this.currentSpeakingSeat = null;
 			this.currentSpeakingMessageId = null;
+			this.currentSpeakingGroupId = null;
+			this.notify();
+			onComplete?.();
+			return;
+		}
+
+		if (targetToken !== this.generationToken || this.isGroupMuted(groupId) || !this.isTtsEnabled(groupId)) {
+			this.currentSpeakingSeat = null;
+			this.currentSpeakingMessageId = null;
+			this.currentSpeakingGroupId = null;
 			this.notify();
 			onComplete?.();
 			return;
@@ -883,7 +1128,6 @@ class TTSService {
 
 		const voices = window.speechSynthesis.getVoices();
 		if (voices.length > 0) {
-			// Find appropriate voice by gender/lang hints
 			const isFemale =
 				profile.displayName === "Priya" ||
 				profile.displayName === "Lucy" ||
@@ -909,6 +1153,7 @@ class TTSService {
 		utter.onend = () => {
 			this.currentSpeakingSeat = null;
 			this.currentSpeakingMessageId = null;
+			this.currentSpeakingGroupId = null;
 			this.notify();
 			onComplete?.();
 		};
@@ -916,6 +1161,7 @@ class TTSService {
 		utter.onerror = () => {
 			this.currentSpeakingSeat = null;
 			this.currentSpeakingMessageId = null;
+			this.currentSpeakingGroupId = null;
 			this.notify();
 			onComplete?.();
 		};

@@ -434,6 +434,7 @@ async function handleRun(req: http.IncomingMessage, res: http.ServerResponse) {
 					searchModes: params.searchModes,
 					model: params.model,
 					attachments: params.attachments,
+					conversationId: params.conversationId,
 				});
 				run.result = out;
 				run.done = true;

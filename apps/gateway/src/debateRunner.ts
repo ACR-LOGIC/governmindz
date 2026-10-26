@@ -52,6 +52,7 @@ export interface RunParams {
 		content?: Buffer | string;
 		filePath?: string;
 	}>;
+	conversationId?: string;
 }
 
 export interface RunOutput {
@@ -225,8 +226,9 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 		timestamp: Date.now(),
 	});
 
+	const crewExecutionRunId = randomUUID();
 	const dataCrew = new DataCrew({
-		runId: randomUUID(),
+		runId: crewExecutionRunId,
 		topic,
 		mode: isSample ? "sample" : "live",
 		scenarioPath: params.scenarioPath,
@@ -234,7 +236,7 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 	});
 
 	const webCrew = new WebSearchCrew({
-		runId: randomUUID(),
+		runId: crewExecutionRunId,
 		topic,
 		eventSink,
 	});
@@ -243,6 +245,19 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 		dataCrew.run(),
 		webCrew.run(),
 	]);
+
+	// Emit initial pre-cue: inform FactChecker that research results are compiling
+	eventSink?.({
+		type: "agent_pre_cue",
+		cueId: `cue_${randomUUID()}`,
+		runId: crewExecutionRunId,
+		conversationId: params.conversationId,
+		targetAgent: "FactChecker",
+		taskType: "prepare_schema_validation",
+		hint: "Research crews completed; prepare schema validation against Zetaris virtual fabric.",
+		sequence: 1,
+		timestamp: Date.now(),
+	});
 
 	eventSink?.({
 		type: "crew:ready",
@@ -256,6 +271,30 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 		roundId: crewRoundId,
 		crewId: "web-crew",
 		payload: { summary: webCrewReport.summary },
+		timestamp: Date.now(),
+	});
+
+	// Emit downstream pre-cues to RivalChallenger and Synthesizer before formal challenges
+	eventSink?.({
+		type: "agent_pre_cue",
+		cueId: `cue_${randomUUID()}`,
+		runId: crewExecutionRunId,
+		conversationId: params.conversationId,
+		targetAgent: "RivalChallenger",
+		taskType: "prepare_adversarial_challenge",
+		hint: "Cross-silo findings ready; prepare adversarial review for unsupported assumptions.",
+		sequence: 2,
+		timestamp: Date.now(),
+	});
+	eventSink?.({
+		type: "agent_pre_cue",
+		cueId: `cue_${randomUUID()}`,
+		runId: crewExecutionRunId,
+		conversationId: params.conversationId,
+		targetAgent: "Synthesizer",
+		taskType: "prepare_consensus_synthesis",
+		hint: "Evidence collected; initialize multi-agent consensus alignment rubric.",
+		sequence: 3,
 		timestamp: Date.now(),
 	});
 

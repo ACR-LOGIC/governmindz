@@ -76,8 +76,74 @@ This log documents the incremental implementation of the parallel-crew visualiza
 
 ---
 
+# GOVERNMINDZ WORKING LOG — INDEPENDENT TEXT/AUDIO STREAMS, GROUP CONTROLS, HOLDING MESSAGES, AGENT PRE-CUES & DEMO PACING
+
+## Overview of Enhancements
+Implemented architectural decoupling of text generation from audio playback, independent group-level audio toggles, current-point unmute boundaries, non-blocking holding status messages, backend agent pre-cues, and a presentation-layer queue for natural demo conversation pacing.
+
+### Step 0: Reconnaissance Only
+- **Status**: Completed.
+- **Findings**:
+  - Existing conversation groups: "Main" Council Stream and Parallel Research Crews. No "Remote" group exists.
+  - Prior TTS was global without per-group mute granularity, generation tokens, or unmute boundaries.
+  - Demo mode previously dumped SSE stream directly into the conversation UI without reading time or speaker transition delays.
+
+### Step 1: Group-Level Audio Toggle UI
+- **Status**: Completed.
+- **Changes**:
+  - Added icon-only `Volume2` (solid/active) and `VolumeX` (muted) toggle button beside the "Council Stream:" label in `apps/web/src/components/chat/GroupConversation.tsx`.
+  - Added corresponding icon-only toggle button beside "Parallel Research Crews" in `apps/web/src/components/chat/ParallelCrewStack.tsx`.
+  - Preserved keyboard accessibility with visible focus styling (`focus-visible:ring-2 focus-visible:ring-amber-400`).
+  - Provided accessible ARIA labels: "Mute Main audio" / "Unmute Main audio" and "Mute Research Crews audio" / "Unmute Research Crews audio".
+  - Maintained independent group mute state in `ttsService` and React state.
+
+### Step 2: Text/Audio Stream Decoupling
+- **Status**: Completed.
+- **Changes**:
+  - Ensured text state updates immediately upon SSE arrival in `App.tsx` regardless of TTS generation speed, buffering, or failure.
+  - Audio generation (`ttsService.queueSpeak`) operates strictly asynchronously with group assignment (`main`, `crews`).
+  - Added unit test in `tests/audio_stream_controls.test.ts` verifying that slow, failing, or muted audio never alters or blocks text delivery.
+
+### Step 3: Mute and Unmute Boundaries
+- **Status**: Completed.
+- **Changes**:
+  - Implemented `generationToken` in `TTSService` to invalidate in-flight async Piper/browser synthesis chunks upon mute.
+  - Muting drops queued utterances for that group immediately and stops active playback without buffering for later.
+  - Unmuting establishes a new timestamp eligibility boundary (`groupEligibilityToken`). Only newly generated content produced after unmute is eligible for playback.
+  - Verified no backlog replay in `tests/audio_stream_controls.test.ts`.
+
+### Step 4: Non-Blocking Holding Messages
+- **Status**: Completed.
+- **Changes**:
+  - Added a non-blocking watchdog timer in `App.tsx` (2600ms) that displays a short professional status ("I’m still checking the evidence across federated databases and external sources.") if processing continues without substantive answers.
+  - Fast responses bypass the holding message entirely.
+  - Automatically cleared upon arrival of substantive message, error, or completion.
+  - Rendered distinctly in `GroupConversation.tsx` and never stored in authoritative messages, transcript, or audit trail.
+  - Verified lifecycle in `tests/holding_messages_and_precues.test.ts`.
+
+### Step 5: Backend Agent Pre-Cues
+- **Status**: Completed.
+- **Changes**:
+  - Introduced `agent_pre_cue` backend event emission in `apps/gateway/src/debateRunner.ts` with correlation IDs (`runId`, `conversationId`, `targetAgent`, `taskType`, `sequence`, `hint`).
+  - Passed `conversationId` through `server.ts` to runner.
+  - Downstream agents (`FactChecker`, `RivalChallenger`, `Synthesizer`, `Supervisor`) receive early scheduling signals to prepare verification rubrics concurrently before spoken audio finishes.
+  - Pre-cues update internal reasoning scratchpads without entering the final answer or bypassing orchestration controls.
+  - Verified in `tests/holding_messages_and_precues.test.ts`.
+
+### Step 6: Demo Playback Presentation Pacing (Section 11)
+- **Status**: Completed.
+- **Changes**:
+  - Created `apps/web/src/services/demoPresentationQueue.ts` providing presentation-layer FIFO queueing for Demo Mode.
+  - Configurable reading time (1400–4000ms based on word count) and speaker transition delay (400–700ms).
+  - Audio-aware coordination: coordinates speaker focus with TTS playback while guaranteeing progression if audio fails or stalls.
+  - Play, Pause, Resume, and Reset controls with complete queue clearing.
+  - Live mode bypasses queue and reveals immediately with 0ms delay.
+  - Verified in `tests/demo_presentation_pacing.test.ts`.
+
+---
+
 ## Final Verification Summary
 - **Type Checking**: `npm run typecheck` (`tsc --noEmit`) returned **0 errors**.
-- **Unit & Integration Tests**: `npm test` passed all **138 tests** across all 13 test suites.
-- **Production Build**: `npm run build` compiled 44 client modules into `apps/web/dist` successfully.
-- **No Unrelated Code Refactored**: Kept all existing GovernMindz governance, deliberation, and audit mechanisms intact.
+- **Unit & Integration Tests**: `npm test` passed all **149 tests** across all 16 test suites (0 failures).
+- **Production Build**: `npm run build` compiled 45 client modules into `apps/web/dist` successfully.
+- **Zero Architectural Pollution**: Preserved all existing GovernMindz governance, deliberation, and audit mechanisms without breaking changes.

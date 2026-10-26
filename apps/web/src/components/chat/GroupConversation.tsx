@@ -6,8 +6,9 @@ import type { ChatMessage, AgentProfile, ScenarioItem, Conversation } from "../.
 import type { CrewRound } from "../../types/crew";
 import { AGENT_REGISTRY, getAgentProfile } from "../../services/agentRegistry";
 import { AgentAvatar } from "../common/AgentAvatar";
-import { ArrowDown, Bot, ShieldCheck, Sparkles, AlertCircle, Database, Play, ArrowRight, Layers, Volume2, VolumeX } from "lucide-react";
+import { ArrowDown, Bot, ShieldCheck, Sparkles, AlertCircle, Database, Play, Pause, RotateCcw, ArrowRight, Layers, Volume2, VolumeX } from "lucide-react";
 import { ttsService } from "../../services/ttsService";
+import type { DemoQueueState } from "../../services/demoPresentationQueue";
 
 interface GroupConversationProps {
 	conversation?: Conversation | null;
@@ -29,6 +30,11 @@ interface GroupConversationProps {
 	mode?: "live" | "demo" | "sample";
 	activeCrewRound?: CrewRound | null;
 	isCrewClosing?: boolean;
+	holdingMessage?: string | null;
+	demoQueueState?: DemoQueueState;
+	onPauseDemo?: () => void;
+	onResumeDemo?: () => void;
+	onResetDemo?: () => void;
 }
 
 export const GroupConversation: React.FC<GroupConversationProps> = ({
@@ -50,6 +56,11 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 	mode = "sample",
 	activeCrewRound = null,
 	isCrewClosing = false,
+	holdingMessage = null,
+	demoQueueState = "idle",
+	onPauseDemo,
+	onResumeDemo,
+	onResetDemo,
 }) => {
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -57,6 +68,7 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 	const [filterMode, setFilterMode] = useState<"all" | "consensus">("all");
 	const [isAudioPlaying, setIsAudioPlaying] = useState(false);
 	const [audioProgress, setAudioProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
+	const [isMainMuted, setIsMainMuted] = useState(() => ttsService.isGroupMuted("main"));
 
 	useEffect(() => {
 		const unsub = ttsService.subscribeSequential((isPlaying, current, total) => {
@@ -64,6 +76,15 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 			setAudioProgress({ current: current + 1, total });
 		});
 		return unsub;
+	}, []);
+
+	useEffect(() => {
+		const unsubMute = ttsService.subscribeGroupMute((groupId, muted) => {
+			if (groupId === "main") {
+				setIsMainMuted(muted);
+			}
+		});
+		return unsubMute;
 	}, []);
 
 	const scrollToBottom = () => {
@@ -298,13 +319,32 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 							<span className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
 								Council Stream:
 							</span>
+							{/* Minimal Icon-Only Group Audio Toggle (Main Council Audio) */}
+							<button
+								type="button"
+								onClick={() => ttsService.toggleGroupMute("main")}
+								aria-label={isMainMuted ? "Unmute Main audio" : "Mute Main audio"}
+								title={isMainMuted ? "Unmute Main audio" : "Mute Main audio"}
+								className={`p-1.5 rounded-lg transition-all border focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none ${
+									isMainMuted
+										? "bg-[#16161c] hover:bg-[#202028] text-slate-500 hover:text-slate-300 border-[#262630]"
+										: "bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 hover:text-amber-300 border-amber-500/40 shadow-sm shadow-amber-950/30"
+								}`}
+							>
+								{isMainMuted ? (
+									<VolumeX className="w-3.5 h-3.5 text-slate-400" />
+								) : (
+									<Volume2 className="w-3.5 h-3.5 text-amber-400" />
+								)}
+							</button>
+
 							<button
 								type="button"
 								onClick={() => {
 									if (isAudioPlaying) {
 										ttsService.stop();
 									} else {
-										ttsService.playSequential(visibleMessages);
+										ttsService.playSequential(visibleMessages, "main");
 									}
 								}}
 								className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold transition-all border ${
@@ -326,6 +366,44 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 									</>
 								)}
 							</button>
+
+							{/* Demo Presentation Pacing Controls */}
+							{mode !== "live" && (demoQueueState === "playing" || demoQueueState === "paused") && (
+								<div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[#12182b] border border-[#232f50] text-xs">
+									<span className="text-[10px] font-mono uppercase text-amber-400 font-bold">
+										Demo:
+									</span>
+									{demoQueueState === "playing" ? (
+										<button
+											type="button"
+											onClick={onPauseDemo}
+											className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#1a233c] hover:bg-[#222e4f] text-amber-300 font-medium text-[11px] transition-colors"
+											title="Pause demo presentation"
+										>
+											<Pause className="w-3 h-3" />
+											<span>Pause</span>
+										</button>
+									) : (
+										<button
+											type="button"
+											onClick={onResumeDemo}
+											className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] transition-colors"
+											title="Resume demo presentation"
+										>
+											<Play className="w-3 h-3 fill-current" />
+											<span>Resume</span>
+										</button>
+									)}
+									<button
+										type="button"
+										onClick={onResetDemo}
+										className="p-1 rounded-md text-slate-400 hover:text-rose-300 hover:bg-[#1a233c] transition-colors"
+										title="Reset demo presentation"
+									>
+										<RotateCcw className="w-3 h-3" />
+									</button>
+								</div>
+							)}
 						</div>
 
 						<div className="flex items-center gap-1 bg-[#16161c] p-1 rounded-xl border border-[#262630]">
@@ -401,6 +479,17 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 						round={activeCrewRound}
 						isClosing={isCrewClosing}
 					/>
+				)}
+
+				{/* Non-Blocking Holding Message Indicator (Transient status; never added to transcript or audit logs) */}
+				{holdingMessage && (
+					<div
+						data-testid="holding-status-indicator"
+						className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-[#101728]/90 border border-teal-500/40 text-xs text-teal-300 max-w-md animate-fadeIn shadow-lg shadow-black/30"
+					>
+						<span className="w-2 h-2 rounded-full bg-teal-400 animate-ping shrink-0" />
+						<span className="font-medium text-slate-200">{holdingMessage}</span>
+					</div>
 				)}
 
 				{/* Active Agent Thinking Indicator */}

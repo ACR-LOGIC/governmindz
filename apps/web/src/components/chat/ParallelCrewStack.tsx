@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import type { CrewRound } from "../../types/crew";
 import { CrewBubble } from "./CrewBubble";
-import { Lock, Unlock, Users2, Sparkles, CheckCheck } from "lucide-react";
+import { Lock, Unlock, Users2, Sparkles, CheckCheck, Volume2, VolumeX } from "lucide-react";
+import { ttsService } from "../../services/ttsService";
 
 interface ParallelCrewStackProps {
 	round: CrewRound | null;
@@ -14,6 +15,17 @@ export const ParallelCrewStack: React.FC<ParallelCrewStackProps> = ({
 	isClosing = false,
 	className = "",
 }) => {
+	const [isCrewsMuted, setIsCrewsMuted] = useState(() => ttsService.isGroupMuted("crews"));
+
+	useEffect(() => {
+		const unsub = ttsService.subscribeGroupMute((groupId, muted) => {
+			if (groupId === "crews") {
+				setIsCrewsMuted(muted);
+			}
+		});
+		return unsub;
+	}, []);
+
 	if (!round || !round.crewIds || round.crewIds.length === 0) {
 		return null;
 	}
@@ -38,8 +50,26 @@ export const ParallelCrewStack: React.FC<ParallelCrewStackProps> = ({
 						<Users2 className="w-3.5 h-3.5" />
 					</div>
 					<div>
-						<div className="font-bold text-slate-200 flex items-center gap-1.5">
+						<div className="font-bold text-slate-200 flex items-center gap-2">
 							<span>Parallel Research Crews</span>
+							{/* Minimal Icon-Only Group Audio Toggle (Crews Group) */}
+							<button
+								type="button"
+								onClick={() => ttsService.toggleGroupMute("crews")}
+								aria-label={isCrewsMuted ? "Unmute Research Crews audio" : "Mute Research Crews audio"}
+								title={isCrewsMuted ? "Unmute Research Crews audio" : "Mute Research Crews audio"}
+								className={`p-1 rounded-lg transition-all border focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:outline-none ${
+									isCrewsMuted
+										? "bg-[#141b2c] hover:bg-[#1a233c] text-slate-500 hover:text-slate-300 border-[#232f4e]"
+										: "bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 hover:text-indigo-200 border-indigo-500/40 shadow-sm"
+								}`}
+							>
+								{isCrewsMuted ? (
+									<VolumeX className="w-3.5 h-3.5 text-slate-400" />
+								) : (
+									<Volume2 className="w-3.5 h-3.5 text-indigo-400" />
+								)}
+							</button>
 							<span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-950/80 border border-indigo-800 text-indigo-300">
 								Round #{round.roundId.slice(0, 8)}
 							</span>

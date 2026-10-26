@@ -23,6 +23,9 @@ const testFiles = [
 	"libs/core/test/supervisor_multi_agent_workflow.test.ts",
 	"tests/crew_barrier_types.test.ts",
 	"tests/crew_barrier.test.ts",
+	"tests/audio_stream_controls.test.ts",
+	"tests/holding_messages_and_precues.test.ts",
+	"tests/demo_presentation_pacing.test.ts",
 ];
 
 const result = spawnSync(
