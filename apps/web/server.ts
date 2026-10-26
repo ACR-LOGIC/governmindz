@@ -568,15 +568,6 @@ function handleResult(req: http.IncomingMessage, res: http.ServerResponse, runId
 }
 
 async function handleHealth(_req: http.IncomingMessage, res: http.ServerResponse) {
-loadLocalEnvIfPresent();
-
-function getEffectiveAuditSecret(secretOverride?: string): string {
-	const secret = (secretOverride ?? process.env.AUDIT_TRAIL_SECRET ?? "").trim();
-	if (!secret || secret.length < 16) {
-		throw new Error("AUDIT_TRAIL_SECRET is missing or too short; audit verification is disabled.");
-	}
-	return secret;
-}
 	const provider = new MeterlessProvider();
 	const hasMeterless = Boolean((process.env.METERLESS_BASE_URL || process.env.METERLESS_ENDPOINT)?.trim());
 	const hasZetaris = Boolean(
