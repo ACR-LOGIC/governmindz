@@ -103,6 +103,20 @@ flowchart TD
 
 GovernMindz supports **Windows**, **Linux**, and **macOS** with Node.js v22+ and npm v10+.
 
+### 🚀 Universal 1-Command Local Startup (All Platforms)
+
+After cloning the repository, simply install dependencies and start:
+
+```bash
+git clone https://github.com/ACR-LOGIC/governmindz.git
+cd governmindz
+npm install
+npm start
+```
+`npm start` automatically runs setup, configures your environment variables, generates cryptographic audit signing keys, and launches the web application at **`http://127.0.0.1:8787`**.
+
+---
+
 ### System Prerequisites
 
 | Requirement | Minimum Version | Notes |

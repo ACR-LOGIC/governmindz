@@ -5,6 +5,8 @@
 	"description": "GOVERNMINDZ — role-based multi-agent debate with Zetaris Lightning and Meterless Runtime integrations.",
 	"type": "module",
 	"scripts": {
+		"setup": "node scripts/setup.mjs",
+		"start": "node scripts/setup.mjs && node --env-file=.env.local --import tsx apps/web/server.ts",
 		"typecheck": "tsc --noEmit",
 		"build": "vite build",
 		"dev": "vite",
