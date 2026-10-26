@@ -1,3 +1,15 @@
+function isConversationalInquiry(topic: string): boolean {
+	const trimmed = topic.trim().toLowerCase();
+	const greetings = /^(hi|hello|hey|good morning|good afternoon|good evening|greetings)\b/i;
+	const basicQuestions = /^(who are you|what can you do|what is governmindz|help)\b/i;
+	if (trimmed.length < 50 && (greetings.test(trimmed) || basicQuestions.test(trimmed))) {
+		if (!/zetaris|sec|fda|gleif|compliance|risk|database|query|data|governance|audit|catalog|standard/i.test(trimmed)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 import { randomUUID } from "node:crypto";
 import { AgentSeat, type SeatConfig } from "@governmindz/core/debate/AgentSeat";
 import { buildMessageContractEnvelope } from "@governmindz/core/debate/AgentMessage";
@@ -24,6 +36,7 @@ import {
 import { DataCrew, type DataCrewReport } from "@governmindz/core/agents/DataCrew";
 import { WebSearchCrew, type WebSearchCrewReport } from "@governmindz/core/agents/WebSearchCrew";
 import { DesignAssistant } from "@governmindz/core/documents/DesignAssistant";
+import { runCrewSafely, emptyDataCrewReport, emptyWebCrewReport } from "./crewResilience.js";
 
 interface ZetarisToolResult {
 	columns: string[];
@@ -154,6 +167,19 @@ function buildTask(topic: string, context: string): string {
 	].join("\n");
 }
 
+function collectDissentSources(transcript: DebateResult["transcript"]): string[] {
+	const sources = new Set<string>();
+	for (const message of transcript) {
+		for (const source of [
+			...(message.structured?.dissents_from || []),
+			...(message.structured?.dissentsFrom || []),
+		]) {
+			if (source) sources.add(source);
+		}
+	}
+	return [...sources].sort();
+}
+
 export async function runDebate(params: RunParams): Promise<RunOutput> {
 	const eventSink = params.eventSink;
 	const isSample = params.mode === "sample";
@@ -209,6 +235,122 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 	const contract = classifyDeliverable(topic);
 	eventSink?.({ type: "deliverable_contract", contract });
 
+	// For simple greetings or basic conversations, do not unnecessarily activate every crew or force a full debate
+	if (isConversationalInquiry(topic)) {
+		const greetingResponse =
+			"Hello! I am GovernMindz Mission Control, coordinating an autonomous multi-agent council for federated data governance, compliance risk analysis, and adversarial verification. What compliance or data governance inquiry would you like the council to assess today?";
+
+		const orchMsg = {
+			id: `supervisor-greeting-${Date.now()}`,
+			fromSeat: "Supervisor",
+			toSeat: "all",
+			type: "summary" as const,
+			content: greetingResponse,
+			timestamp: Date.now(),
+		};
+
+		eventSink?.({ type: "message", message: orchMsg });
+		eventSink?.({
+			type: "complete",
+			result: {
+				session_id: randomUUID(),
+				query_hash: "greeting",
+				transcript: [orchMsg],
+				rounds: 0,
+				consensusReached: true,
+				finalConfidence: 1.0,
+				consensus_method: "synthesizer",
+				quarantined_seats: [],
+				seat_votes: {},
+				timestamp: Date.now(),
+				halted: false,
+				transportMode: "in_process",
+			},
+			auditEvents: auditTrail.getLog(),
+			auditIntegrity: true,
+			contract,
+			supervisorDecision: "APPROVED",
+			supervisorResponse: greetingResponse,
+		});
+
+		return {
+			mode: isSample ? "sample" : "live",
+			topic,
+			scenarioId,
+			zetaris: {
+				query: "NONE",
+				columns: [],
+				rows: [],
+				total: 0,
+			},
+			result: {
+				session_id: randomUUID(),
+				query_hash: "greeting",
+				transcript: [orchMsg] as unknown as DebateResult["transcript"],
+				rounds: 0,
+				consensusReached: true,
+				finalConfidence: 1.0,
+				consensus_method: "synthesizer",
+				quarantined_seats: [],
+				seat_votes: {},
+				timestamp: Date.now(),
+				halted: false,
+				transportMode: "in_process",
+			},
+			auditEvents: auditTrail.getLog(),
+			auditIntegrity: true,
+			contract,
+			supervisorDecision: "APPROVED",
+			supervisorResponse: greetingResponse,
+		};
+	}
+
+	// Emit Council Member task assignments & role acknowledgments
+	const councilAssignments = [
+		{
+			agentId: "FactChecker",
+			role: "Fact Checker",
+			task: "Inspect database schemas, primary keys, and catalog definitions across Zetaris.",
+			acknowledgment: "On it. Let me check the database schemas and records.",
+		},
+		{
+			agentId: "CloudArchitect",
+			role: "Cloud Architect",
+			task: "Evaluate zero-trust architecture, statement limits, and least-privilege cloud safety.",
+			acknowledgment: "Got it. Reviewing zero-trust safety and boundaries.",
+		},
+		{
+			agentId: "Synthesizer",
+			role: "Synthesizer",
+			task: "Reconcile claims, balance evidence uncertainty, and build unified consensus.",
+			acknowledgment: "Understood. Standing by to reconcile findings and evaluate consensus.",
+		},
+		{
+			agentId: "RivalChallenger",
+			role: "Rival Challenger",
+			task: "Subject findings to independent adversarial scrutiny and challenge unsupported claims.",
+			acknowledgment: "I’ll take a look. Checking for unverified assumptions.",
+		},
+		{
+			agentId: "Thinker",
+			role: "Thinker Agent",
+			task: "Probe operational contingency angles and boundary conditions.",
+			acknowledgment: "On it. Exploring hidden governance angles and edge cases.",
+		},
+	];
+
+	for (const a of councilAssignments) {
+		eventSink?.({
+			type: "agent_task_assigned",
+			agentId: a.agentId,
+			role: a.role,
+			taskId: `task_${a.agentId}_${randomUUID()}`,
+			task: a.task,
+			acknowledgment: a.acknowledgment,
+			timestamp: Date.now(),
+		});
+	}
+
 	// 2. Parallel research: Launch Data Crew (4) and Web Search Crew (4) concurrently
 	const crewRoundId = `round_${randomUUID()}`;
 	eventSink?.({
@@ -241,10 +383,33 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 		eventSink,
 	});
 
-	const [dataCrewReport, webCrewReport] = await Promise.all([
-		dataCrew.run(),
-		webCrew.run(),
+	const configuredCrewTimeout = Number(process.env.CREW_TIMEOUT_MS);
+	const crewTimeoutMs =
+		Number.isFinite(configuredCrewTimeout) && configuredCrewTimeout > 0
+			? configuredCrewTimeout
+			: isSample
+				? 45000
+				: 120000;
+	const [dataOutcome, webOutcome] = await Promise.all([
+		runCrewSafely(
+			"DataCrew",
+			() => dataCrew.run(),
+			(e) => emptyDataCrewReport(crewExecutionRunId, isSample ? "sample" : "live", e),
+			eventSink,
+			crewExecutionRunId,
+			crewTimeoutMs,
+		),
+		runCrewSafely(
+			"WebSearchCrew",
+			() => webCrew.run(),
+			(e) => emptyWebCrewReport(crewExecutionRunId, topic, e),
+			eventSink,
+			crewExecutionRunId,
+			crewTimeoutMs,
+		),
 	]);
+	const dataCrewReport = dataOutcome.report;
+	const webCrewReport = webOutcome.report;
 
 	// Emit initial pre-cue: inform FactChecker that research results are compiling
 	eventSink?.({
@@ -259,20 +424,40 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 		timestamp: Date.now(),
 	});
 
-	eventSink?.({
-		type: "crew:ready",
-		roundId: crewRoundId,
-		crewId: "data-crew",
-		payload: { summary: dataCrewReport.summary },
-		timestamp: Date.now(),
-	});
-	eventSink?.({
-		type: "crew:ready",
-		roundId: crewRoundId,
-		crewId: "web-crew",
-		payload: { summary: webCrewReport.summary },
-		timestamp: Date.now(),
-	});
+	eventSink?.(
+		dataOutcome.failed
+			? {
+					type: "crew:failed",
+					roundId: crewRoundId,
+					crewId: "data-crew",
+					payload: { error: dataOutcome.error, timedOut: dataOutcome.timedOut },
+					timestamp: Date.now(),
+				}
+			: {
+					type: "crew:ready",
+					roundId: crewRoundId,
+					crewId: "data-crew",
+					payload: { summary: dataCrewReport.summary },
+					timestamp: Date.now(),
+				},
+	);
+	eventSink?.(
+		webOutcome.failed
+			? {
+					type: "crew:failed",
+					roundId: crewRoundId,
+					crewId: "web-crew",
+					payload: { error: webOutcome.error, timedOut: webOutcome.timedOut },
+					timestamp: Date.now(),
+				}
+			: {
+					type: "crew:ready",
+					roundId: crewRoundId,
+					crewId: "web-crew",
+					payload: { summary: webCrewReport.summary },
+					timestamp: Date.now(),
+				},
+	);
 
 	// Emit downstream pre-cues to RivalChallenger and Synthesizer before formal challenges
 	eventSink?.({
@@ -481,6 +666,10 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 		dataCrewReport,
 		webCrewReport,
 		eventSink,
+		unavailableCrews: [
+			...(dataOutcome.failed ? (["DataCrew"] as const) : []),
+			...(webOutcome.failed ? (["WebSearchCrew"] as const) : []),
+		],
 	});
 
 	// Inquiry score heuristic (1-10): based on topic complexity + evidence size.
@@ -512,6 +701,23 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 		resultDebate.transcript[resultDebate.transcript.length - 1]?.content ||
 		"";
 
+	const dissentSources = collectDissentSources(resultDebate.transcript);
+	const crewFailureSummary = [
+		dataOutcome.failed ? `Data Crew did not complete (${dataOutcome.error})` : "",
+		webOutcome.failed ? `Web Search Crew did not complete (${webOutcome.error})` : "",
+	]
+		.filter(Boolean)
+		.join("; ");
+	const partialEvidence = Boolean(crewFailureSummary);
+	const crewChallengeCount =
+		crewChallenges.dataCrewChallenges.length + crewChallenges.webCrewChallenges.length;
+	const unresolvedGaps = [
+		...dataCrewReport.findings.flatMap((finding) => finding.limitations || []),
+		...webCrewReport.unresolvedGaps,
+		...(dataOutcome.failed ? [`Data Crew evidence unavailable: ${dataOutcome.error}`] : []),
+		...(webOutcome.failed ? [`Web Search Crew evidence unavailable: ${webOutcome.error}`] : []),
+	];
+
 	const auditEvents = auditTrail.getLog();
 
 	// 4. Design Assistant generates the requested authoritative deliverable(s)
@@ -529,8 +735,12 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 						body: synthPosition,
 						bulletPoints: [
 							`Calibrated consensus confidence: ${((resultDebate.finalConfidence || 0.88) * 100).toFixed(1)}%`,
-							`Data Crew examined ${dataCrewReport.catalogDatabases.length} federated databases across Zetaris fabric.`,
-							`Web Search Crew verified ${webCrewReport.totalCitationsFound} external regulatory citations.`,
+							dataOutcome.failed
+								? "Data Crew did not complete; database evidence is excluded from this deliverable."
+								: `Data Crew examined ${dataCrewReport.catalogDatabases.length} federated databases across Zetaris fabric.`,
+							webOutcome.failed
+								? "Web Search Crew did not complete; external citation evidence is excluded from this deliverable."
+								: `Web Search Crew verified ${webCrewReport.totalCitationsFound} external regulatory citations.`,
 						],
 					},
 					{
@@ -545,10 +755,15 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 					},
 					{
 						heading: "Adversarial Review & Dispute Reconciliation",
-						body: "Hater raised independent challenges against both Data Crew and Web Search Crew outputs. Both crews successfully defended and reconciled claims.",
+						body: partialEvidence
+							? `Adversarial review covered the available evidence only. ${crewChallengeCount} independent crew challenge${crewChallengeCount === 1 ? "" : "s"} were raised. ${crewFailureSummary}. No defense is attributed to a crew that did not complete.`
+							: `Hater raised ${crewChallengeCount} independent crew challenge${crewChallengeCount === 1 ? "" : "s"}. Crews submitted formal responses; unresolved dissent and caveats remain explicitly recorded rather than being presented as unanimous consensus.`,
 						bulletPoints: [
-							crewChallenges.dataCrewResponse.defenseStatement,
-							crewChallenges.webCrewResponse.defenseStatement,
+							...(dataOutcome.failed ? [] : [crewChallenges.dataCrewResponse.defenseStatement]),
+							...(webOutcome.failed ? [] : [crewChallenges.webCrewResponse.defenseStatement]),
+							...(dissentSources.length > 0
+								? [`Recorded dissent sources: ${dissentSources.join(", ")}.`]
+								: []),
 						],
 					},
 					{
@@ -561,8 +776,10 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 					...webCrewReport.findings.map((f) => `[Citation] ${f.title}: ${f.claim}`),
 				],
 				caveats: [
-					...dataCrewReport.findings.flatMap((f) => f.limitations),
-					"Calibrated confidence is a statistical multi-agent consensus score, not an external guarantee.",
+					...new Set([
+						...unresolvedGaps,
+						"Calibrated confidence is a statistical multi-agent consensus score, not an external guarantee.",
+					]),
 				],
 				confidence: resultDebate.finalConfidence || 0.9,
 				consensusMethod: resultDebate.consensus_method || "synthesizer",
@@ -602,14 +819,33 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 		"",
 		`The ${contract.primaryOutputType} covers:`,
 		`- **Key findings and conclusions:** ${synthPosition.slice(0, 220)}...`,
-		`- **Supporting evidence:** Reconciled ${dataCrewReport.findings.length} database findings across Zetaris Lightning and verified ${webCrewReport.totalCitationsFound} authoritative external citations.`,
-		`- **Adversarial & multi-agent verification:** Independent review by Hater, Fact Checker, and Thinker passed with ${(resultDebate.finalConfidence * 100).toFixed(1)}% calibrated confidence.`,
+		`- **Supporting evidence:** ${
+			partialEvidence
+				? `${dataCrewReport.findings.length} available database findings and ${webCrewReport.totalCitationsFound} external citations were reviewed; failed crew evidence is excluded.`
+				: `Reconciled ${dataCrewReport.findings.length} database findings across Zetaris Lightning and verified ${webCrewReport.totalCitationsFound} authoritative external citations.`
+		}`,
+		`- **Adversarial & multi-agent verification:** ${crewChallengeCount} independent crew challenge${
+			crewChallengeCount === 1 ? "" : "s"
+		} raised. ${
+			dissentSources.length > 0
+				? `Recorded dissent from ${dissentSources.join(", ")} remains visible rather than being presented as unanimous consensus.`
+				: "No unresolved seat dissent was recorded in the final transcript."
+		} Calibrated confidence: ${(resultDebate.finalConfidence * 100).toFixed(1)}%.`,
 		`- **Recommendations & next steps:** Documented actionable governance safeguards with tamper-evident audit lineage.`,
 		"",
 		`**${primaryLinkMarkdown}**`,
 		additionalLinks,
 		"",
-		`Optional: **${evidenceLinkMarkdown}** — Supplementary research data and cryptographic proof (kept separate from primary deliverable).`,
+		...(partialEvidence
+			? [
+					"",
+					`**Limitation:** ${crewFailureSummary}. This answer excludes that evidence and cannot claim complete multi-crew verification.`,
+				]
+			: []),
+		...(dissentSources.length > 0
+			? ["", `**Recorded dissent:** ${dissentSources.join(", ")}.`]
+			: []),
+		`Optional: **${evidenceLinkMarkdown}** - Supplementary research data and cryptographic proof (kept separate from primary deliverable).`,
 	].filter(Boolean).join("\n");
 
 	const orchestratorMsg = {
@@ -625,14 +861,32 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 			confidenceExpertAgreement: resultDebate.finalConfidence,
 			confidence_expert_agreement: resultDebate.finalConfidence,
 			evidence: [
-				"All council positions reconciled",
+				partialEvidence
+					? `Partial evidence: ${crewFailureSummary}`
+					: "All required research crews completed",
+				dissentSources.length > 0
+					? `Recorded dissent from: ${dissentSources.join(", ")}`
+					: "No unresolved seat dissent recorded",
 				"Cryptographic audit trail verified",
 				"Deliverable Contract satisfied",
 				`Primary artifact validated: ${validatedPrimary.filename}`,
 			],
-			caveats: [] as string[],
-			supports: Object.keys(resultDebate.seat_votes || {}),
-			dissents_from: [] as string[],
+			caveats: [
+				...new Set([
+					...unresolvedGaps,
+					...crewChallenges.dataCrewChallenges.flatMap((challenge) => challenge.unsupportedPoints),
+					...crewChallenges.webCrewChallenges.flatMap((challenge) => challenge.unsupportedPoints),
+					...(partialEvidence ? [crewFailureSummary] : []),
+					...(dissentSources.length > 0
+						? [`Recorded dissent from ${dissentSources.join(", ")}.`]
+						: []),
+				]),
+			],
+			supports: Object.entries(resultDebate.seat_votes || {})
+				.filter(([, vote]) => !vote.dissented)
+				.map(([seatId]) => seatId),
+			dissentsFrom: dissentSources,
+			dissents_from: dissentSources,
 		},
 		confidence: resultDebate.finalConfidence,
 		round: resultDebate.rounds,

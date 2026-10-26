@@ -24,10 +24,12 @@ import {
 	savePreferences,
 	submitFeedback,
 } from "./services/api";
-import { AGENT_REGISTRY, getAgentProfile, getAllAgentProfiles } from "./services/agentRegistry";
+import { getAgentProfile } from "./services/agentRegistry";
 import { assignHumanCouncil, generateTaskDelegationAnnouncement } from "./services/nameRotation";
 import { ttsService } from "./services/ttsService";
 import { CrewBarrierManager } from "./services/crewBarrier";
+import { AgentArrivalManager } from "./services/agentArrivalManager";
+import { SynchronizedExitCoordinator } from "./services/synchronizedExitCoordinator";
 import { DemoPresentationQueue, type DemoQueueState } from "./services/demoPresentationQueue";
 import type { CrewRound } from "./types/crew";
 import type {
@@ -41,6 +43,21 @@ import type {
 	ZetarisData,
 	WorkflowTimelineEvent,
 } from "./types";
+
+
+function getParticipatingAgentProfiles(conv: Conversation | null): AgentProfile[] {
+	if (!conv || !conv.messages || conv.messages.length === 0) return [];
+	const participatingSeats = Array.from(
+		new Set(
+			conv.messages
+				.map((m) => m.fromSeat)
+				.filter((seat) => seat && seat !== "user" && seat !== "Orchestrator")
+		)
+	);
+	return participatingSeats.map((seatId) =>
+		getAgentProfile(seatId, conv.agentAssignments?.[seatId])
+	);
+}
 
 export const App: React.FC = () => {
 	const [activeTab, setActiveTab] = useState<ActiveTab>("chat");
@@ -59,6 +76,11 @@ export const App: React.FC = () => {
 
 	const [conversations, setConversations] = useState<Conversation[]>([]);
 	const [activeId, setActiveId] = useState<string | null>(null);
+	const activeIdRef = useRef<string | null>(null);
+	const setActiveConversationId = useCallback((id: string | null) => {
+		activeIdRef.current = id;
+		setActiveId(id);
+	}, []);
 	const [isBusy, setIsBusy] = useState(false);
 	const [activeAgentThinking, setActiveAgentThinking] = useState<string | null>(null);
 	const [activeCrewRound, setActiveCrewRound] = useState<CrewRound | null>(null);
@@ -73,8 +95,37 @@ export const App: React.FC = () => {
 	const demoQueueRef = useRef<DemoPresentationQueue | null>(null);
 	const [demoQueueState, setDemoQueueState] = useState<DemoQueueState>("idle");
 
+	// Parallel crew lifecycle timers
+	const barrierReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const [exitCoordinator] = useState(
+		() =>
+			new SynchronizedExitCoordinator({
+				isVoicePlaying: () => ttsService.isPlaying(),
+				isPresentationPlaying: () => demoQueueRef.current?.getState() === "playing",
+				onStartClosing: () => setIsCrewClosing(true),
+				onFinalizeExit: () => {
+					if (barrierReleaseTimerRef.current) {
+						clearTimeout(barrierReleaseTimerRef.current);
+						barrierReleaseTimerRef.current = null;
+					}
+					setIsCrewClosing(false);
+					setActiveCrewRound(null);
+				},
+			}),
+	);
+
 	// Agent roster state
-	const [agentRoster, setAgentRoster] = useState<AgentProfile[]>(getAllAgentProfiles());
+	const [agentRoster, setAgentRoster] = useState<AgentProfile[]>([]);
+	const [arrivalManager] = useState(() => new AgentArrivalManager({}, (roster) => setAgentRoster(roster)));
+	const arrivalConversationRef = useRef<string | null>(null);
+	const acknowledgedAgentsRef = useRef<Set<string>>(new Set());
+
+	useEffect(() => {
+		return () => {
+			arrivalManager.clearTimers();
+			exitCoordinator.destroy();
+		};
+	}, [arrivalManager, exitCoordinator]);
 
 	// Confidence chart points
 	const [chartData, setChartData] = useState<Record<string, Array<{ round: number; conf: number }>>>({
@@ -103,7 +154,8 @@ export const App: React.FC = () => {
 	// Barrier Release & Combined Summary Posting
 	const triggerBarrierRelease = useCallback(
 		(round: CrewRound) => {
-			if (!activeId || round.barrierReleased) return;
+			const conversationId = activeIdRef.current;
+			if (!conversationId || round.barrierReleased) return;
 
 			try {
 				const summaryResult = CrewBarrierManager.generateCombinedSummary(round);
@@ -116,7 +168,7 @@ export const App: React.FC = () => {
 				};
 
 				setConversations((prev) => {
-					const curr = prev.find((c) => c.id === activeId);
+					const curr = prev.find((c) => c.id === conversationId);
 					if (!curr) return prev;
 					if (
 						curr.messages.some(
@@ -135,20 +187,13 @@ export const App: React.FC = () => {
 						updatedAt: Date.now(),
 					};
 					saveConversation(updated);
-					return prev.map((c) => (c.id === activeId ? updated : c));
+					return prev.map((c) => (c.id === conversationId ? updated : c));
 				});
 
 				setActiveCrewRound((curr) => {
 					if (!curr) return null;
 					return CrewBarrierManager.markSummaryPosted(curr, summaryResult.summaryText);
 				});
-
-				// Coordinated exit animation
-				setIsCrewClosing(true);
-				setTimeout(() => {
-					setActiveCrewRound(null);
-					setIsCrewClosing(false);
-				}, 250);
 			} catch (err: any) {
 				console.error("Barrier summary posting error:", err);
 				setActiveCrewRound((curr) => {
@@ -161,7 +206,7 @@ export const App: React.FC = () => {
 				showToast("Failed to post combined crew summary. Crew state preserved for retry.");
 			}
 		},
-		[activeId, showToast],
+		[showToast],
 	);
 
 	// Active conversation lookup
@@ -198,16 +243,7 @@ export const App: React.FC = () => {
 					}
 					return convs;
 				});
-				setActiveId((curr) => curr || convs[0].id);
-				if (convs[0].agentAssignments) {
-					const assigns = convs[0].agentAssignments;
-					setAgentRoster((prev) =>
-						prev.map((a) => {
-							const m = assigns[a.id];
-							return m ? { ...a, humanName: m.humanName, jobTask: m.jobTask, avatarId: m.avatarId } : a;
-						}),
-					);
-				}
+				setActiveConversationId(activeIdRef.current || convs[0].id);
 			} else {
 				// Create initial default conversation with rotated human council
 				const defaultAssigns = assignHumanCouncil();
@@ -227,13 +263,7 @@ export const App: React.FC = () => {
 					agentAssignments: defaultAssigns,
 				};
 				setConversations([defaultConv]);
-				setActiveId(defaultConv.id);
-				setAgentRoster((prev) =>
-					prev.map((a) => {
-						const m = defaultAssigns[a.id];
-						return m ? { ...a, humanName: m.humanName, jobTask: m.jobTask } : a;
-					}),
-				);
+				setActiveConversationId(defaultConv.id);
 			}
 		} catch (e) {
 			console.warn("Conversation load error:", e);
@@ -263,18 +293,13 @@ export const App: React.FC = () => {
 		loadInitData();
 	}, [loadInitData]);
 
-	// Sync active conversation's assigned council whenever active conversation changes
+	// Synchronize the visible roster with the active conversation's existing participants.
 	useEffect(() => {
-		if (activeConv?.agentAssignments) {
-			const assigns = activeConv.agentAssignments;
-			setAgentRoster((prev) =>
-				prev.map((a) => {
-					const m = assigns[a.id];
-					return m ? { ...a, humanName: m.humanName, jobTask: m.jobTask } : a;
-				}),
-			);
-		}
-	}, [activeConv?.id]);
+		const conversationId = activeConv?.id ?? null;
+		if (arrivalConversationRef.current === conversationId) return;
+		arrivalConversationRef.current = conversationId;
+		arrivalManager.setConversation(conversationId, getParticipatingAgentProfiles(activeConv));
+	}, [activeConv, arrivalManager]);
 
 	// Refresh Health
 	const handleRefreshHealth = async () => {
@@ -344,7 +369,7 @@ export const App: React.FC = () => {
 				agentAssignments: councilAssignments,
 			};
 			setConversations((prev) => [newConv, ...prev]);
-			setActiveId(newConv.id);
+			setActiveConversationId(newConv.id);
 			saveConversation(newConv);
 			await handleSendMessageWithConv(newConv, question, scenarioFile);
 			return;
@@ -355,6 +380,7 @@ export const App: React.FC = () => {
 
 	// Start Over in Demo mode
 	const handleStartOver = () => {
+		exitCoordinator.forceExit();
 		demoQueueRef.current?.reset();
 		if (holdingTimerRef.current) {
 			clearTimeout(holdingTimerRef.current);
@@ -375,6 +401,7 @@ export const App: React.FC = () => {
 
 	// Create New Conversation
 	const handleNewConversation = () => {
+		exitCoordinator.forceExit();
 		const councilAssignments = assignHumanCouncil();
 
 		const newConv: Conversation = {
@@ -392,25 +419,9 @@ export const App: React.FC = () => {
 			agentAssignments: councilAssignments,
 		};
 
-		// Update active roster with the assigned human names and tasks
-		setAgentRoster((prev) =>
-			prev.map((a) => {
-				const match = councilAssignments[a.id];
-				if (match) {
-					return {
-						...a,
-						humanName: match.humanName,
-						jobTask: match.jobTask,
-						avatarId: match.avatarId,
-					};
-				}
-				return a;
-			}),
-		);
-
 		const updated = [newConv, ...conversations];
 		setConversations(updated);
-		setActiveId(newConv.id);
+		setActiveConversationId(newConv.id);
 		saveConversation(newConv);
 		setChartData({ FactChecker: [], CloudArchitect: [], Synthesizer: [] });
 		setActiveTab("chat");
@@ -429,44 +440,31 @@ export const App: React.FC = () => {
 		setConversations(updated);
 		deleteConversation(id);
 		if (activeId === id) {
-			setActiveId(updated[0]?.id || null);
+			setActiveConversationId(updated[0]?.id || null);
 		}
 	};
 
 	// Update Agent Roster Status
-	const updateAgentStatus = useCallback((seatId: string, status: AgentProfile["status"], confidence?: number | null) => {
-		setAgentRoster((prev) =>
-			prev.map((a) => {
-				if (a.id === seatId) {
-					return {
-						...a,
-						status,
-						confidence: confidence !== undefined ? confidence : a.confidence,
-						lastActiveTime: Date.now(),
-					};
-				}
-				return a;
-			}),
-		);
-	}, []);
+	const updateAgentStatus = useCallback(
+		(seatId: string, status: AgentProfile["status"], confidence?: number | null) => {
+			arrivalManager.updateWorkflowStatus(
+				seatId,
+				status,
+				confidence,
+				undefined,
+				activeIdRef.current ?? undefined,
+			);
+		},
+		[arrivalManager],
+	);
 
 	// Append Live Reasoning & Hypothesis Scratchpad steps
-	const appendAgentReasoning = useCallback((seatId: string, reasoningChunk: string) => {
-		setAgentRoster((prev) =>
-			prev.map((a) => {
-				if (a.id === seatId) {
-					const existing = a.liveReasoning || [];
-					return {
-						...a,
-						status: "analyzing",
-						liveReasoning: [...existing, reasoningChunk],
-						lastActiveTime: Date.now(),
-					};
-				}
-				return a;
-			}),
-		);
-	}, []);
+	const appendAgentReasoning = useCallback(
+		(seatId: string, reasoningChunk: string) => {
+			arrivalManager.appendReasoning(seatId, reasoningChunk, activeIdRef.current ?? undefined);
+		},
+		[arrivalManager],
+	);
 
 	// Handle thumbs up / down message ratings
 	const handleRateMessage = (messageId: string, rating: "up" | "down" | null, seatId?: string) => {
@@ -529,7 +527,7 @@ export const App: React.FC = () => {
 				agentAssignments: councilAssignments,
 			};
 			setConversations((prev) => [convToUse!, ...prev]);
-			setActiveId(convToUse.id);
+			setActiveConversationId(convToUse.id);
 			saveConversation(convToUse);
 		}
 
@@ -550,21 +548,10 @@ export const App: React.FC = () => {
 		// Assign / rotate friendly human names & job tasks for this deliberation
 		const councilAssignments = targetConv.agentAssignments || assignHumanCouncil();
 
-		// Update active roster with the assigned human names and tasks
-		setAgentRoster((prev) =>
-			prev.map((a) => {
-				const match = councilAssignments[a.id];
-				if (match) {
-					return {
-						...a,
-						humanName: match.humanName,
-						jobTask: match.jobTask,
-						avatarId: match.avatarId,
-					};
-				}
-				return a;
-			}),
-		);
+		if (arrivalConversationRef.current !== targetConv.id) {
+			arrivalConversationRef.current = targetConv.id;
+			arrivalManager.setConversation(targetConv.id, getParticipatingAgentProfiles(targetConv));
+		}
 
 		// Format user message content if files or sources are attached
 		let formattedContent = topicToRun;
@@ -620,6 +607,7 @@ export const App: React.FC = () => {
 		setIsBusy(true);
 		setActiveCrewRound(null);
 		setIsCrewClosing(false);
+		exitCoordinator.cancel();
 
 		// Non-blocking holding message timer: triggers after meaningful 2.6s processing pause
 		if (holdingTimerRef.current) clearTimeout(holdingTimerRef.current);
@@ -685,7 +673,8 @@ export const App: React.FC = () => {
 	// Apply individual SSE stream event to React conversation state
 	const applyStreamEvent = useCallback(
 		(ev: any) => {
-			if (!activeId) return;
+			const conversationId = activeIdRef.current;
+			if (!conversationId) return;
 
 			// Handle Parallel Crew & Barrier State Synchronization
 			if (
@@ -693,6 +682,7 @@ export const App: React.FC = () => {
 				ev.type === "agent_task_assigned" ||
 				ev.type === "research_finding" ||
 				ev.type === "crew_complete" ||
+				ev.type === "crew_failed" ||
 				(typeof ev.type === "string" && ev.type.startsWith("crew:"))
 			) {
 				setActiveCrewRound((prev) => {
@@ -701,14 +691,15 @@ export const App: React.FC = () => {
 						CrewBarrierManager.createRound(
 							String(ev.roundId || `round_${Date.now()}`),
 							["data-crew", "web-crew"],
-							activeId,
+							conversationId,
 							{ softDeadlineMs: 25000 },
 						);
 
 					const updatedRound = CrewBarrierManager.processEvent(round, ev);
 
-					if (CrewBarrierManager.canRelease(updatedRound)) {
-						setTimeout(() => {
+					if (CrewBarrierManager.canRelease(updatedRound) && !barrierReleaseTimerRef.current) {
+						barrierReleaseTimerRef.current = setTimeout(() => {
+							barrierReleaseTimerRef.current = null;
 							triggerBarrierRelease(updatedRound);
 						}, 300);
 					}
@@ -718,7 +709,7 @@ export const App: React.FC = () => {
 			}
 
 			setConversations((prev) => {
-				const curr = prev.find((c) => c.id === activeId);
+				const curr = prev.find((c) => c.id === conversationId);
 				if (!curr) return prev;
 
 				let updated = { ...curr };
@@ -726,6 +717,10 @@ export const App: React.FC = () => {
 				if (ev.type === "run_start") {
 					// Announce the active agent roster with friendly human names and assigned job tasks
 					const assignments = updated.agentAssignments || assignHumanCouncil();
+					for (const [seatId, assignment] of Object.entries(assignments)) {
+						if (seatId === "user" || seatId === "Orchestrator") continue;
+						arrivalManager.activateAgent(seatId, assignment, assignment.jobTask, updated.id);
+					}
 					const rosterAnnouncement = generateTaskDelegationAnnouncement(assignments, ev.mode);
 
 					const orchMsg: ChatMessage = {
@@ -859,13 +854,27 @@ export const App: React.FC = () => {
 				} else if (ev.type === "crew_start") {
 					appendAgentReasoning("Supervisor", `Launched parallel ${ev.crew} with ${ev.agentCount} independent agents.`);
 				} else if (ev.type === "agent_task_assigned") {
+					arrivalManager.activateAgent(
+						ev.agentId,
+						updated.agentAssignments?.[ev.agentId],
+						ev.task,
+						updated.id,
+					);
 					updateAgentStatus(ev.agentId, "analyzing");
 					appendAgentReasoning(ev.agentId, `[Task] ${ev.task}`);
 				} else if (ev.type === "research_finding") {
 					updateAgentStatus(ev.agentId, "completed");
 					appendAgentReasoning(ev.agentId, `[Finding: ${ev.finding?.title || "Evidence"}] ${ev.finding?.claim || ""}`);
 				} else if (ev.type === "crew_complete") {
-					appendAgentReasoning("Supervisor", `[${ev.crew} Completed] ${ev.summary || "Findings verified"}`);
+					appendAgentReasoning(
+						"Supervisor",
+						`[${ev.crew} ${ev.failed ? "Failed" : "Completed"}] ${ev.summary || (ev.failed ? "Did not complete" : "Findings verified")}`,
+					);
+				} else if (ev.type === "crew_failed") {
+					appendAgentReasoning(
+						"Supervisor",
+						`[${ev.crew} Failed] ${ev.error || "Did not complete. Evidence excluded."}`,
+					);
 				} else if (ev.type === "hater_crew_challenge") {
 					updateAgentStatus("RivalChallenger", "challenging");
 					appendAgentReasoning("RivalChallenger", `[Independent Challenge to ${ev.targetAgent}] ${ev.challenge}`);
@@ -907,11 +916,15 @@ export const App: React.FC = () => {
 					showToast(`Run failed: ${ev.message || "Deliberation error"}`);
 				}
 
+				if (ev.type === "complete" || ev.type === "done" || ev.type === "error") {
+					exitCoordinator.requestExit();
+				}
+
 				saveConversation(updated);
-				return prev.map((c) => (c.id === activeId ? updated : c));
+				return prev.map((c) => (c.id === conversationId ? updated : c));
 			});
 		},
-		[activeId, updateAgentStatus, showToast, triggerBarrierRelease],
+		[arrivalManager, updateAgentStatus, appendAgentReasoning, showToast, triggerBarrierRelease],
 	);
 
 	// Initialize Demo presentation queue
@@ -944,7 +957,7 @@ export const App: React.FC = () => {
 				setHoldingMessage(null);
 			}
 
-			if (mode === "live" || !demoQueueRef.current) {
+			if (mode === "live" || !demoQueueRef.current || ev.type === "run_start") {
 				applyStreamEvent(ev);
 			} else {
 				const textLength =
@@ -1031,7 +1044,7 @@ export const App: React.FC = () => {
 				<LeftSidebar
 					conversations={conversations}
 					activeConversationId={activeId}
-					onSelectConversation={(id) => setActiveId(id)}
+					onSelectConversation={(id) => setActiveConversationId(id)}
 					onNewConversation={handleNewConversation}
 					onRenameConversation={handleRenameConversation}
 					onDeleteConversation={handleDeleteConversation}
@@ -1135,7 +1148,7 @@ export const App: React.FC = () => {
 				activeConversation={activeConv}
 				onClearAll={() => {
 					setConversations([]);
-					setActiveId(null);
+					setActiveConversationId(null);
 					setSettingsModalOpen(false);
 					showToast("Active session cleared");
 				}}

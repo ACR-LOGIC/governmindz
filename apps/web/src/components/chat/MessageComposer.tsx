@@ -32,6 +32,7 @@ export interface DemoScenarioOption {
 	file: string;
 	title: string;
 	category: string;
+	promptLabel?: string;
 	icon: "research" | "decision" | "claims";
 	question: string;
 	description: string;
@@ -43,6 +44,7 @@ export const DEMO_SCENARIOS: DemoScenarioOption[] = [
 		file: "01-regulatory-risk.json",
 		title: "1. Regulatory Risk Analysis",
 		category: "Flagship · SEC + GLEIF + DNS Join",
+		promptLabel: "Research & Evidence",
 		icon: "research",
 		question: "Our organization received acquisition offers from 7 Fortune 500 companies (Apple, IBM, Oracle, Walmart, Target, Ford, Tesla). Before we accept any partnership, we need to assess regulatory compliance risk. Use Zetaris to cross-reference: (1) SEC financial data (revenue volatility, reporting consistency), (2) GLEIF legal entity status (LEI active/inactive), (3) COMPANY_DNS industry classification. Which company poses the HIGHEST compliance risk, and why? Rank all 7 companies by governance risk.",
 		description: "Cross-references 7 Fortune 500 candidate partners joining SEC_DATA, GLEIF_REST, and COMPANY_DNS to isolate anomalies and unverified LEIs.",
@@ -52,6 +54,7 @@ export const DEMO_SCENARIOS: DemoScenarioOption[] = [
 		file: "02-pii-exposure.json",
 		title: "2. PII Re-identification & Privacy",
 		category: "Flagship · NY_TAXI Multi-Table Privacy Gate",
+		promptLabel: "Conflicting Claims",
 		icon: "claims",
 		question: "We want to share NY_TAXI operational data with a research team to study transportation patterns. However, we have serious concerns about PII exposure. Zetaris, cross-reference taxi_trips with drivers table to calculate: (1) how many trips does each driver have? (2) which zones do they work? (3) what's their estimated earnings? Create a 'PII exposure score' for each driver (how easily can they be re-identified?) and recommend which drivers' data is safe to share, and which requires de-identification or blocking. What governance policy should we implement?",
 		description: "Calculates driver re-identification risks across trip frequencies and trajectory clusters to enforce k-anonymity and quarantine gates.",
@@ -61,6 +64,7 @@ export const DEMO_SCENARIOS: DemoScenarioOption[] = [
 		file: "03-clinical-safety.json",
 		title: "3. Clinical Trials & Drug Safety",
 		category: "Flagship · FDA + ClinicalTrials Federation",
+		promptLabel: "Technical Decision",
 		icon: "decision",
 		question: "We're evaluating whether to partner with pharmaceutical companies conducting clinical trials. Before we grant them access to our data, we need to ensure trial integrity. Zetaris, join CLINICALTRIALS_REST (ibuprofen studies) with OPENFDA_REST (FDA drug approval + adverse reactions). Analysis: (1) What ibuprofen trials are currently active? (2) Do they match FDA labeling for indications and warnings? (3) Are there known adverse reactions in FDA data that trials aren't monitoring? (4) What governance risk does data inconsistency create? Which trials can we trust, and which need additional review?",
 		description: "Cross-checks active clinical study endpoints against FDA blackbox adverse reaction registries to enforce medical safety covenants.",
@@ -321,6 +325,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 	}, [text]);
 
 	const currentModel = AVAILABLE_MODELS.find((m) => m.id === selectedModel) || AVAILABLE_MODELS[0];
+	const activeScenario = DEMO_SCENARIOS.find((s) => s.file === activeDemoScenario) || DEMO_SCENARIOS[0];
 
 	// Search button label text
 	const getSearchButtonLabel = () => {
@@ -400,6 +405,11 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 										}`}
 									>
 										<div>
+											{sc.promptLabel && (
+												<div className="text-[9px] font-mono font-bold uppercase tracking-wider text-amber-400 mb-1">
+													{sc.promptLabel}
+												</div>
+											)}
 											<div className="flex items-center justify-between gap-1 mb-1">
 												<div className="flex items-center gap-1.5">
 													{sc.icon === "research" && <FileSearch className="w-3.5 h-3.5 text-teal-400" />}
@@ -460,16 +470,25 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 					)}
 
 					{/* Prompt Textarea */}
-					<textarea
-						ref={textareaRef}
-						rows={1}
-						value={text}
-						onChange={(e) => setText(e.target.value)}
-						onKeyDown={handleKeyDown}
-						placeholder={isDemoMode ? "Ask or modify deliberation topic, or click Start Demo below…" : "Ask anything…"}
-						disabled={isBusy || disabled}
-						className="w-full bg-transparent border-0 resize-none text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none px-2 py-1 max-h-36 overflow-y-auto leading-relaxed"
-					/>
+					{isDemoMode ? (
+						<div className="px-2 py-1 min-h-8 text-xs sm:text-sm text-slate-200 leading-relaxed">
+							<span className="text-[10px] font-mono uppercase tracking-wider text-teal-400 block mb-1">
+								Selected prompt
+							</span>
+							{text.trim() || activeScenario.question}
+						</div>
+					) : (
+						<textarea
+							ref={textareaRef}
+							rows={1}
+							value={text}
+							onChange={(e) => setText(e.target.value)}
+							onKeyDown={handleKeyDown}
+							placeholder="Ask anything."
+							disabled={isBusy || disabled}
+							className="w-full bg-transparent border-0 resize-none text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none px-2 py-1 max-h-36 overflow-y-auto leading-relaxed"
+						/>
+					)}
 
 					{/* Bottom Actions Row */}
 					<div className="flex items-center justify-between gap-2 pt-2 mt-1 border-t border-[#1a2136]">
@@ -672,7 +691,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 							</button>
 
 							{/* Demo quick run or Submit Button */}
-							{isDemoMode && !text.trim() && attachedFiles.length === 0 ? (
+							{isDemoMode ? (
 								<button
 									type="button"
 									onClick={handleExecuteDemo}

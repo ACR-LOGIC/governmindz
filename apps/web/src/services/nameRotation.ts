@@ -138,7 +138,7 @@ export function generateTaskDelegationAnnouncement(
 ): string {
 	const lines: string[] = [];
 	lines.push(
-		`🏛️ Council Convened: Deliberation initiated in ${mode.toUpperCase()} mode.`,
+		`🏛️ Inquiry initiated in ${mode.toUpperCase()} mode. Council convening for deliberation.`,
 	);
 	lines.push("");
 	lines.push("Coworker Assignments & Focus Areas for this deliberation:");

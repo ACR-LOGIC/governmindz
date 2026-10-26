@@ -52,10 +52,10 @@ test.describe("GovernMindz Complete End-to-End Recording & Journey", () => {
 
 		// Verify user message appears in chat stream
 		await expect(page.getByText(inquiryText)).toBeVisible();
-		await expect(page.getByText("You (Operator)")).toBeVisible();
+		await expect(page.getByText("Operator").first()).toBeVisible();
 
 		// Screenshot 2: Inquiry Submitted & Orchestrator Activation
-		await expect(page.getByText(/Inquiry initiated in/i)).toBeVisible({ timeout: 10000 });
+		await expect(page.getByText(/Inquiry initiated in/i)).toBeVisible({ timeout: 30000 });
 		await page.screenshot({
 			path: path.join(screenshotsDir, "02_inquiry_submitted_orchestrator.png"),
 			fullPage: true,

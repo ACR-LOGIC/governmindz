@@ -82,59 +82,82 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 					<span>Click any agent to watch live reasoning</span>
 				</div>
 
-				<div className="space-y-2">
-					{agents.map((agent) => {
-						const isWorking = agent.status !== "idle" && agent.status !== "completed";
-						return (
-							<button
-								type="button"
-								key={agent.id}
-								onClick={() => onSelectAgent(agent)}
-								className="w-full flex items-center justify-between p-2.5 rounded-xl bg-[#12182b] hover:bg-[#18203a] border border-[#1e2842] hover:border-[#2c385c] transition-all text-left group"
-								title={`Click to watch ${agent.name}'s live reasoning scratchpad & epistemic hypotheses`}
-							>
-								<div className="flex items-center gap-2.5 truncate flex-1 min-w-0">
-									{/* Character Avatar with status pip */}
-									<AgentAvatar
-										seatId={agent.id}
-										avatarId={agent.avatarId}
-										humanName={agent.humanName}
-										size="sm"
-										showStatusPip={true}
-										status={isWorking ? "analyzing" : agent.status}
-									/>
+				{agents.length === 0 ? (
+					<div className="p-4 rounded-xl border border-dashed border-[#1e2842] text-center text-xs text-slate-400 animate-fadeIn">
+						<Users className="w-5 h-5 mx-auto mb-2 text-slate-500 opacity-60" />
+						<p className="font-medium text-slate-300">Roster Empty</p>
+						<p className="text-[11px] text-slate-400 mt-1">
+							Agents assemble dynamically when an assignment begins.
+						</p>
+					</div>
+				) : (
+					<div className="space-y-2">
+						{agents.map((agent) => {
+							const isWorking = agent.status !== "idle" && agent.status !== "completed";
+							const isArriving = agent.arrivalStage && agent.arrivalStage !== "working";
+							return (
+								<button
+									type="button"
+									key={agent.id}
+									onClick={() => onSelectAgent(agent)}
+									className={`w-full flex items-center justify-between p-2.5 rounded-xl bg-[#12182b] hover:bg-[#18203a] border border-[#1e2842] hover:border-[#2c385c] transition-all text-left group motion-safe:animate-scaleIn ${
+										isArriving ? "ring-1 ring-amber-500/40" : ""
+									}`}
+									title={`Click to watch ${agent.name}'s live reasoning scratchpad & epistemic hypotheses`}
+								>
+									<div className="flex items-center gap-2.5 truncate flex-1 min-w-0">
+										{/* Character Avatar with status pip */}
+										<AgentAvatar
+											seatId={agent.id}
+											avatarId={agent.avatarId}
+											humanName={agent.humanName}
+											size="sm"
+											showStatusPip={true}
+											status={isArriving ? "queued" : isWorking ? "analyzing" : agent.status}
+										/>
 
-									<div className="truncate flex-1 min-w-0">
-										<div className="text-xs font-semibold text-slate-200 group-hover:text-white truncate flex items-center gap-1">
-											<span>{agent.humanName ? `${agent.humanName} · ${agent.role}` : agent.name}</span>
-										</div>
-										<div className="text-[10px] text-amber-300/80 truncate font-mono">
-											{agent.jobTask ? agent.jobTask : agent.domainExpertise || agent.role}
+										<div className="truncate flex-1 min-w-0">
+											<div className="text-xs font-semibold text-slate-200 group-hover:text-white truncate flex items-center gap-1">
+												<span>{agent.humanName ? `${agent.humanName} · ${agent.role}` : agent.name}</span>
+											</div>
+											<div className="text-[10px] text-amber-300/80 truncate font-mono">
+												{agent.arrivalMessage
+													? `“${agent.arrivalMessage}”`
+													: agent.jobTask ? agent.jobTask : agent.domainExpertise || agent.role}
+											</div>
 										</div>
 									</div>
-								</div>
 
-								{/* Live Watch indicator or confidence */}
-								<div className="ml-2 shrink-0 flex items-center gap-1">
-									{isWorking ? (
-										<span className="flex items-center gap-1 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-950/70 border border-emerald-700/60 text-emerald-300 animate-pulse">
-											<Radio className="w-2.5 h-2.5 text-emerald-400" />
-											<span>WATCH</span>
-										</span>
-									) : agent.confidence != null ? (
-										<span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#18203a] text-teal-300">
-											{(agent.confidence * 100).toFixed(0)}%
-										</span>
-									) : (
-										<span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-[#18203a] text-slate-400">
-											{agent.status}
-										</span>
-									)}
-								</div>
-							</button>
-						);
-					})}
-				</div>
+									{/* Live Watch indicator, arrival badge, or confidence */}
+									<div className="ml-2 shrink-0 flex items-center gap-1">
+										{agent.arrivalStage === "holding" ? (
+											<span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-700/60 animate-pulse">
+												HOLDING
+											</span>
+										) : agent.arrivalStage === "greeting" ? (
+											<span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-sky-950/80 text-sky-300 border border-sky-700/60 animate-fadeIn">
+												GREETING
+											</span>
+										) : isWorking ? (
+											<span className="flex items-center gap-1 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-950/70 border border-emerald-700/60 text-emerald-300 animate-pulse">
+												<Radio className="w-2.5 h-2.5 text-emerald-400" />
+												<span>WATCH</span>
+											</span>
+										) : agent.confidence != null ? (
+											<span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#18203a] text-teal-300">
+												{(agent.confidence * 100).toFixed(0)}%
+											</span>
+										) : (
+											<span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-[#18203a] text-slate-400">
+												{agent.status}
+											</span>
+										)}
+									</div>
+								</button>
+							);
+						})}
+					</div>
+				)}
 			</div>
 
 			{/* Section 2: Confidence Trajectory Chart */}

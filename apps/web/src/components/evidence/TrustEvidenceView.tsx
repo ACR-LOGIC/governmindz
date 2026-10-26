@@ -342,13 +342,13 @@ export const TrustEvidenceView: React.FC<TrustEvidenceViewProps> = ({ conversati
 							</div>
 							<div>
 								<h2 className="font-display font-bold text-base text-slate-100 flex items-center gap-2">
-									<span>Interactive Cryptographic Audit Chain Verifier</span>
+									<span>Tamper-Evident SHA-256 Cryptographic Ledger</span>
 									<span className="text-[10px] font-mono font-normal px-2 py-0.5 rounded bg-teal-950/80 border border-teal-700/60 text-teal-300">
 										RFC-6962 / NIST SP 800-92
 									</span>
 								</h2>
 								<p className="text-xs text-slate-400">
-									Block-level hash recomputation, HMAC verification, and compliance proof export
+									Interactive cryptographic audit chain verifier with block-level hash recomputation, HMAC verification, and compliance proof export
 								</p>
 							</div>
 						</div>

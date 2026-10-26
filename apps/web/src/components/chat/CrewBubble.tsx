@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { ActiveCrew } from "../../types/crew";
-import { Database, Globe, CheckCircle2, AlertTriangle, Loader2, ArrowDown, ShieldCheck } from "lucide-react";
+import { Database, Globe, CheckCircle2, AlertTriangle, Loader2, ArrowDown, ShieldCheck, XCircle, Clock } from "lucide-react";
 
 interface CrewBubbleProps {
 	crew: ActiveCrew;
@@ -13,6 +13,9 @@ export const CrewBubble: React.FC<CrewBubbleProps> = ({ crew, className = "" }) 
 
 	const isData = crew.type === "data";
 	const isWeb = crew.type === "web";
+	const isFailed = crew.status === "failed";
+	const isTimedOut = crew.status === "timed_out";
+	const isTerminalFailure = isFailed || isTimedOut;
 
 	// Auto-scroll on new message unless user has scrolled up
 	useEffect(() => {
@@ -45,7 +48,11 @@ export const CrewBubble: React.FC<CrewBubbleProps> = ({ crew, className = "" }) 
 					? "border-emerald-500/50 shadow-emerald-950/20"
 					: crew.status === "wrapping_up"
 						? "border-amber-500/50 shadow-amber-950/20"
-						: "border-[#2b354f] shadow-black/40"
+						: isFailed
+							? "border-rose-500/50 shadow-rose-950/20"
+							: isTimedOut
+								? "border-orange-500/50 shadow-orange-950/20"
+								: "border-[#2b354f] shadow-black/40"
 			} ${className}`}
 		>
 			{/* Crew Header */}
@@ -90,6 +97,18 @@ export const CrewBubble: React.FC<CrewBubbleProps> = ({ crew, className = "" }) 
 							<span>Active Research</span>
 						</span>
 					)}
+					{isFailed && (
+						<span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[11px] font-medium font-mono">
+							<XCircle className="w-3.5 h-3.5 text-rose-400" />
+							<span>Failed</span>
+						</span>
+					)}
+					{isTimedOut && (
+						<span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-500/20 text-orange-300 border border-orange-500/40 text-[11px] font-medium font-mono">
+							<Clock className="w-3.5 h-3.5 text-orange-400" />
+							<span>Timed Out</span>
+						</span>
+					)}
 				</div>
 			</div>
 
@@ -101,7 +120,7 @@ export const CrewBubble: React.FC<CrewBubbleProps> = ({ crew, className = "" }) 
 			>
 				{crew.messages.length === 0 ? (
 					<div className="h-full flex items-center justify-center text-slate-500 italic text-[11px] py-6">
-						Waiting for crew queries...
+						{isTerminalFailure ? "No evidence was returned by this crew." : "Waiting for crew queries..."}
 					</div>
 				) : (
 					crew.messages.map((msg) => {
@@ -155,12 +174,23 @@ export const CrewBubble: React.FC<CrewBubbleProps> = ({ crew, className = "" }) 
 			<div className="px-3.5 py-2 bg-[#121622] border-t border-[#1e2538] flex items-center justify-between text-[10px] text-slate-400">
 				<div className="truncate pr-2">
 					{crew.summary ? (
-						<span className="text-emerald-400 font-mono flex items-center gap-1 truncate">
-							<ShieldCheck className="w-3 h-3 shrink-0" />
+						<span
+							className={`font-mono flex items-center gap-1 truncate ${
+								isTerminalFailure ? "text-rose-300" : "text-emerald-400"
+							}`}
+							title={crew.failureReason || crew.summary}
+						>
+							{isTerminalFailure ? (
+								<AlertTriangle className="w-3 h-3 shrink-0" />
+							) : (
+								<ShieldCheck className="w-3 h-3 shrink-0" />
+							)}
 							<span className="truncate">{crew.summary}</span>
 						</span>
 					) : (
-						<span className="italic">Autonomous observational crew channel</span>
+						<span className="italic">
+							{isTerminalFailure ? "Evidence excluded from verified record" : "Autonomous observational crew channel"}
+						</span>
 					)}
 				</div>
 				<span className="font-mono text-slate-500 uppercase tracking-wider shrink-0">

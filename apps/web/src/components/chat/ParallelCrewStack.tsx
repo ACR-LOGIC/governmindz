@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import type { CrewRound } from "../../types/crew";
 import { CrewBubble } from "./CrewBubble";
-import { Lock, Unlock, Users2, Sparkles, CheckCheck, Volume2, VolumeX } from "lucide-react";
+import { Lock, Unlock, Users2, Sparkles, CheckCheck, Volume2, VolumeX, AlertTriangle } from "lucide-react";
 import { ttsService } from "../../services/ttsService";
 
 interface ParallelCrewStackProps {
@@ -32,8 +32,12 @@ export const ParallelCrewStack: React.FC<ParallelCrewStackProps> = ({
 
 	const crews = round.crewIds.map((id) => round.crews[id]).filter(Boolean);
 	const readyCount = crews.filter((c) => c.status === "ready").length;
+	const failedCount = crews.filter((c) => c.status === "failed").length;
+	const timedOutCount = crews.filter((c) => c.status === "timed_out").length;
+	const settledCount = readyCount + failedCount + timedOutCount;
 	const totalCount = crews.length;
 	const allReady = readyCount === totalCount && totalCount > 0;
+	const partialSettled = settledCount === totalCount && totalCount > 0 && !allReady;
 
 	return (
 		<div
@@ -87,10 +91,15 @@ export const ParallelCrewStack: React.FC<ParallelCrewStackProps> = ({
 							<Unlock className="w-3.5 h-3.5 text-emerald-400" />
 							<span>Barrier Ready ({readyCount}/{totalCount})</span>
 						</div>
+					) : partialSettled ? (
+						<div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[11px] font-mono font-semibold">
+							<AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+							<span>Partial Evidence ({readyCount}/{totalCount} Ready)</span>
+						</div>
 					) : (
 						<div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[11px] font-mono">
 							<Lock className="w-3.5 h-3.5 text-amber-400" />
-							<span>Barrier Locked ({readyCount}/{totalCount} Ready)</span>
+							<span>Barrier Locked ({settledCount}/{totalCount} Settled)</span>
 						</div>
 					)}
 				</div>
@@ -111,6 +120,16 @@ export const ParallelCrewStack: React.FC<ParallelCrewStackProps> = ({
 						<span>All required research crews have reached ready state. Synchronizing findings...</span>
 					</div>
 					<Sparkles className="w-4 h-4 text-emerald-400 animate-spin" />
+				</div>
+			)}
+			{partialSettled && (
+				<div className="p-2.5 rounded-xl bg-rose-950/40 border border-rose-700/50 flex items-center gap-2 text-xs text-rose-200 animate-fadeIn">
+					<AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+					<span className="font-mono text-[11px]">
+						Barrier released with incomplete evidence. {failedCount + timedOutCount} crew
+						{failedCount + timedOutCount === 1 ? "" : "s"} failed or timed out; their findings are excluded
+						and disclosed in the summary.
+					</span>
 				</div>
 			)}
 		</div>

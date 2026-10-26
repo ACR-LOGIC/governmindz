@@ -114,6 +114,8 @@ export interface AgentProfile {
 	confidence?: number | null;
 	lastActiveTime?: number;
 	liveReasoning?: string[];
+	arrivalStage?: "pop_in" | "holding" | "greeting" | "assigned" | "working";
+	arrivalMessage?: string;
 }
 
 export interface StructuredOutput {
@@ -140,6 +142,7 @@ export type MessageType =
 	| "escalation"
 	| "summary"
 	| "intervention"
+	| "acknowledgment"
 	| "final";
 
 export interface MessageContractMessage {

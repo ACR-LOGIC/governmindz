@@ -978,6 +978,10 @@ class TTSService {
 		return this.isSequentialActive;
 	}
 
+	public isPlaying(): boolean {
+		return this.isSequentialActive || this.currentSpeakingSeat !== null || this.activeAudioElement !== null;
+	}
+
 	/**
 	 * Speaks a test phrase in the specified agent's voice for settings preview
 	 */

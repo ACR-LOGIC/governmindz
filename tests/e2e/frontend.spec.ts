@@ -46,9 +46,9 @@ test.describe("GovernMindz Mission Control Frontend", () => {
 		await expect(page.locator("header")).toContainText("Mission Control");
 
 		// Verify View Navigation
-		await expect(page.getByRole("button", { name: "Conversation" })).toBeVisible();
-		await expect(page.getByRole("button", { name: "Execution" })).toBeVisible();
-		await expect(page.getByRole("button", { name: "Trust & Evidence" })).toBeVisible();
+		await expect(page.locator("#tour-explorer").getByRole("button", { name: "Conversation", exact: true })).toBeVisible();
+		await expect(page.locator("#tour-explorer").getByRole("button", { name: "Execution", exact: true })).toBeVisible();
+		await expect(page.locator("#tour-explorer").getByRole("button", { name: "Trust & Evidence", exact: true })).toBeVisible();
 
 		// Verify Left Sidebar & New Debate button
 		await expect(page.getByRole("button", { name: /New AI Debate/i })).toBeVisible();
@@ -56,9 +56,9 @@ test.describe("GovernMindz Mission Control Frontend", () => {
 		// Verify Right Sidebar Agent Roster
 		const rightAside = page.locator("aside").filter({ hasText: "Agent Roster" });
 		await expect(rightAside).toBeVisible();
-		await expect(rightAside).toContainText("Fact Checker");
-		await expect(rightAside).toContainText("Cloud Architect");
-		await expect(rightAside).toContainText("Synthesizer");
+		// Roster starts visually empty: no pre-populated agents before an assignment begins
+		await expect(rightAside).toContainText("Roster Empty");
+		await expect(page.locator("#tour-roster button")).toHaveCount(0);
 
 		// Verify Mode pill
 		await expect(page.locator("#tour-mode")).toBeVisible();
@@ -69,29 +69,33 @@ test.describe("GovernMindz Mission Control Frontend", () => {
 		await page.waitForLoadState("networkidle");
 
 		// View A: Conversation (default)
-		await expect(page.getByRole("button", { name: "Conversation" })).toBeVisible();
+		await expect(page.locator("#tour-explorer").getByRole("button", { name: "Conversation", exact: true })).toBeVisible();
 
 		// Switch to View B: Execution Explorer
-		await page.getByRole("button", { name: "Execution" }).click();
+		await page.locator("#tour-explorer").getByRole("button", { name: "Execution", exact: true }).click();
 		await expect(page.getByText("Deterministic Workflow Execution Explorer")).toBeVisible();
 		await expect(page.getByText("Chronological Transition Log")).toBeVisible();
 		await expect(page.getByText("RECEIVED").first()).toBeVisible();
 
 		// Switch to View C: Trust & Evidence
-		await page.getByRole("button", { name: "Trust & Evidence" }).click();
+		await page.locator("#tour-explorer").getByRole("button", { name: "Trust & Evidence", exact: true }).click();
 		await expect(page.getByText("Zetaris Lightning Federated Data Catalog")).toBeVisible();
 		await expect(page.getByText("SHOW LIGHTNING DATABASES")).toBeVisible();
 		await expect(page.getByText("Tamper-Evident SHA-256 Cryptographic Ledger")).toBeVisible();
 		await expect(page.getByText("c910699e010057fee5424ddcb6751ac88b20169be78af84a4741e0754e5d8b59")).toBeVisible();
 
 		// Switch back to View A
-		await page.getByRole("button", { name: "Conversation" }).click();
+		await page.locator("#tour-explorer").getByRole("button", { name: "Conversation", exact: true }).click();
 		await expect(page.getByRole("button", { name: /New AI Debate/i })).toBeVisible();
 	});
 
 	test("Agent inspection drawer opens and closes cleanly", async ({ page }) => {
 		await page.goto("/");
 		await page.waitForLoadState("networkidle");
+
+		// Agents join the roster only once a demo assignment starts
+		await page.getByRole("button", { name: /Start Demo/i }).click();
+		await expect(page.locator("#tour-roster button").first()).toBeVisible({ timeout: 15000 });
 
 		// Click on Fact Checker in roster specifically
 		const factCheckerItem = page.locator("#tour-roster button").filter({ hasText: /Fact Checker/i }).first();
