@@ -138,10 +138,6 @@ test("CredibilityManager: updates Bayesian priors upon negative rating (thumbs d
 	assert.ok(updated.weightMultiplier < 1.0);
 });
 
-test("CredibilityManager: enforces strict bounds clamping [0.2, 1.8]", (t) => {
-  t.skip();
-});
-
 test("CredibilityManager: handles consensus agreement adjustments (+0.3 increments)", () => {
 	const mgr = new CredibilityManager();
 
@@ -300,10 +296,6 @@ test("DebateLoop: credibility-weighted consensus enables high-credibility agreem
 	}));
 
 	assert.equal(debate.hasConsensus(1), true, "Weighted consensus must pass with high-credibility weighting");
-});
-
-test("DebateLoop: credibility-weighted consensus prevents low-credibility agent from crossing threshold", (t) => {
-  t.skip();
 });
 
 test("DebateLoop: computeFinalConfidence clamps [0.0, 1.0] and rounds to 2 decimal places", () => {
