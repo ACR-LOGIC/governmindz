@@ -968,3 +968,50 @@ function handleAuditCertificate(req: http.IncomingMessage, res: http.ServerRespo
 		sendJson(res, 500, { error: err.message || "Failed to generate audit certificate" });
 	}
 }
+
+const server = http.createServer((req, res) => {
+	const parsedUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+	const pathname = parsedUrl.pathname;
+
+	if (pathname === "/api/health") {
+		handleHealth(req, res);
+	} else if (pathname === "/api/scenarios") {
+		handleScenarios(req, res);
+	} else if (pathname === "/api/models") {
+		handleModels(req, res);
+	} else if (pathname === "/api/conversations") {
+		handleConversations(req, res);
+	} else if (pathname.startsWith("/api/conversations/")) {
+		const id = pathname.slice("/api/conversations/".length);
+		handleSingleConversation(req, res, id);
+	} else if (pathname === "/api/run") {
+		handleRun(req, res);
+	} else if (pathname.startsWith("/api/run/") && pathname.endsWith("/sse")) {
+		const parts = pathname.split("/");
+		const runId = parts[3];
+		handleSSE(req, res, runId);
+	} else if (pathname.startsWith("/api/run/") && pathname.endsWith("/result")) {
+		const parts = pathname.split("/");
+		const runId = parts[3];
+		handleResult(req, res, runId);
+	} else if (pathname === "/api/web-search") {
+		handleWebSearch(req, res);
+	} else if (pathname === "/api/preferences") {
+		handlePreferences(req, res);
+	} else if (pathname === "/api/config") {
+		handleConfig(req, res);
+	} else if (pathname === "/api/feedback") {
+		handleFeedback(req, res);
+	} else if (pathname === "/api/audit/verify") {
+		handleAuditVerify(req, res);
+	} else if (pathname.startsWith("/api/audit/certificate/")) {
+		const id = pathname.slice("/api/audit/certificate/".length);
+		handleAuditCertificate(req, res, id);
+	} else {
+		serveStatic(req, res);
+	}
+});
+
+server.listen(PORT, "127.0.0.1", () => {
+	console.log(`[GovernMindz Web] Server running at http://127.0.0.1:${PORT}`);
+});
