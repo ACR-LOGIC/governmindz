@@ -2,8 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { runDebate } from "../apps/gateway/src/debateRunner.js";
 
-// @ts-ignore
-test.skip("Conversational Bypass: simple greeting does not launch research crews or forced multi-round debate", async () => {
+(test as any)("Conversational Bypass: simple greeting does not launch research crews or forced multi-round debate", { skip: true }, async () => {
 	const emittedEvents: any[] = [];
 	const sink = (ev: any) => {
 		emittedEvents.push(ev);
@@ -30,8 +29,7 @@ test.skip("Conversational Bypass: simple greeting does not launch research crews
 	assert.equal(out.result.rounds, 0, "No debate rounds forced for basic greeting");
 });
 
-// @ts-ignore
-test.skip("Research Inquiry: governance question activates research crews and agent assignments", async () => {
+(test as any)("Research Inquiry: governance question activates research crews and agent assignments", { skip: true }, async () => {
 	const emittedEvents: any[] = [];
 	const sink = (ev: any) => {
 		emittedEvents.push(ev);

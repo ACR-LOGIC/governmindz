@@ -170,8 +170,7 @@ test("WorkflowStateMachine: valid transitions for each state", () => {
 
 // ─── InquiryScorer tests ───
 
-// @ts-ignore
-test.skip("InquiryScorer: simple question scores 1-2", () => {
+(test as any)("InquiryScorer: simple question scores 1-2", { skip: true }, () => {
 	const result = inquiryScorer.scoreInitial({
 		question: "What is 2+2?",
 		conversationHistory: [],

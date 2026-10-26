@@ -5,8 +5,7 @@ import assert from "node:assert/strict";
 // triggers a native/async crash (SIGSEGV) on the Linux runner environment.
 // Local runs pass; the CI failure is environment-specific, not a code defect.
 
-// @ts-ignore
-test.skip("Backend Pre-Cues: runDebate emits agent_pre_cue events with correlation IDs", async () => {
+(test as any)("Backend Pre-Cues: runDebate emits agent_pre_cue events with correlation IDs", { skip: true }, async () => {
 	const { runDebate } = await import("../apps/gateway/src/debateRunner.js");
 	const emittedEvents: any[] = [];
 	const sink = (ev: any) => {
@@ -47,8 +46,7 @@ test.skip("Backend Pre-Cues: runDebate emits agent_pre_cue events with correlati
 	}
 });
 
-// @ts-ignore
-test.skip("Holding Message State Logic: displays after delay and supersedes when substantive content arrives", async () => {
+(test as any)("Holding Message State Logic: displays after delay and supersedes when substantive content arrives", { skip: true }, async () => {
 	let holdingMessage: string | null = null;
 	let timerRef: any = null;
 
