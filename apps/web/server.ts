@@ -595,12 +595,51 @@ function handleScenarios(_req: http.IncomingMessage, res: http.ServerResponse) {
 	} catch {
 		files = [];
 	}
-	const out = files.map((f: string) => {
+
+	const PREFERRED_ORDER = [
+		"01-regulatory-risk.json",
+		"02-pii-exposure.json",
+		"03-clinical-safety.json",
+		"01-fragmented-intelligence.json",
+		"02-explain-why.json",
+		"03-reasoning-architecture.json",
+	];
+
+	const titleMap: Record<string, string> = {
+		"01-regulatory-risk.json": "1. Regulatory Risk Analysis (SEC + GLEIF + DNS)",
+		"02-pii-exposure.json": "2. PII Re-identification & Privacy (NY Taxi)",
+		"03-clinical-safety.json": "3. Clinical Trials & Drug Safety (FDA + Trials)",
+		"01-fragmented-intelligence.json": "4. Supply Chain Intelligence (Cross-Silo ERP)",
+		"02-explain-why.json": "5. Why SMB Churn Rose in Q3 (Telemetry)",
+		"03-reasoning-architecture.json": "6. Reasoning Architecture & Policy Gates",
+	};
+
+	// Exclude outdated legacy stubs from UI presentation
+	const activeFiles = files.filter(
+		(f) => !["01-governance-readiness.json", "02-federated-evidence.json", "03-audit-explainability.json"].includes(f)
+	);
+
+	activeFiles.sort((a, b) => {
+		const idxA = PREFERRED_ORDER.indexOf(a);
+		const idxB = PREFERRED_ORDER.indexOf(b);
+		if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+		if (idxA !== -1) return -1;
+		if (idxB !== -1) return 1;
+		return a.localeCompare(b);
+	});
+
+	const out = activeFiles.map((f: string) => {
 		try {
 			const raw = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
-			return { file: f, id: raw.id, topic: raw.topic, rows: raw.zetaris && raw.zetaris.rows ? raw.zetaris.rows.length : 0 };
+			return {
+				file: f,
+				id: raw.id,
+				title: titleMap[f] || raw.title || raw.id,
+				topic: raw.topic,
+				rows: raw.zetaris && raw.zetaris.rows ? raw.zetaris.rows.length : 0,
+			};
 		} catch {
-			return { file: f };
+			return { file: f, title: f };
 		}
 	});
 	sendJson(res, 200, out);

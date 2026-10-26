@@ -191,7 +191,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
 						>
 							{scenarios.map((s) => (
 								<option key={s.file} value={s.file}>
-									{s.id || s.file.replace(".json", "")} ({s.rows || 3} rows)
+									{s.title || s.id || s.file.replace(".json", "")} ({s.rows || 3} rows)
 								</option>
 							))}
 						</select>

@@ -147,3 +147,42 @@ Implemented architectural decoupling of text generation from audio playback, ind
 - **Unit & Integration Tests**: `npm test` passed all **149 tests** across all 16 test suites (0 failures).
 - **Production Build**: `npm run build` compiled 45 client modules into `apps/web/dist` successfully.
 - **Zero Architectural Pollution**: Preserved all existing GovernMindz governance, deliberation, and audit mechanisms without breaking changes.
+
+---
+
+## Modern Flagship Demo Suite Integration (October 26, 2026)
+
+### 1. Problem Addressed
+- Legacy placeholder demo scenarios (`01-governance-readiness`, `02-federated-evidence`, `03-audit-explainability`) used static 3-row stubs of `SHOW LIGHTNING DATABASES`, leaving the UI and gateway without rich, multi-source Zetaris showcases.
+
+### 2. Flagship Demo Scenarios Created in `input_examples/`
+1. **`01-regulatory-risk.json` (Regulatory Risk Analysis):**
+   - Multi-source join across `SEC_DATA`, `GLEIF_REST`, and `COMPANY_DNS` evaluating 7 Fortune 500 candidate partners.
+   - Identifies Tesla revenue volatility anomaly (+42.4%) and Oracle missing LEI registration.
+   - Enforces a 3-tier governance policy gate (RESTRICTED, CONDITIONAL, FULL_ACCESS).
+2. **`02-pii-exposure.json` (PII Re-identification & Privacy):**
+   - Multi-table join across `NY_TAXI` (trips, drivers, zones, surge pricing).
+   - Computes empirical PII exposure scores (0-100) and trajectory correlation risks against airport corridors.
+   - Deploys differential privacy with k-anonymity (k=5) and export blocking gates.
+3. **`03-clinical-safety.json` (Clinical Trials & Drug Safety):**
+   - Cross-domain federation joining `CLINICALTRIALS_REST` with `OPENFDA_REST`.
+   - Uncovers unmonitored cardiovascular and renal blackbox warnings across active Phase 2/3 trials.
+   - Enforces institutional review board (IRB) trust covenants before data access.
+
+### 3. Application & UI Modernization
+- **Web Composer (`apps/web/src/components/chat/MessageComposer.tsx`):**
+  - Registered all 6 production scenarios in `DEMO_SCENARIOS` with dedicated category badges, descriptive titles, and icons.
+  - Set default scenario to `01-regulatory-risk.json`.
+- **Sidebar & Backend API (`apps/web/server.ts` & `apps/web/src/components/layout/LeftSidebar.tsx`):**
+  - Updated `/api/scenarios` to prioritize and cleanly label the 6 showcase scenarios with human-readable titles.
+  - Filtered out legacy boilerplate stubs from UI presentation while preserving backward compatibility on disk.
+- **Gateway Default (`apps/gateway/src/sampleScenario.ts`):**
+  - Updated `DEFAULT_SAMPLE_SCENARIO` to `input_examples/01-regulatory-risk.json`.
+- **Artifacts & Traces:**
+  - Regenerated all sample outputs (`output_examples/*.json`) and trace logs (`logs/*.jsonl`) via `npm run samples`.
+
+### 4. Verification
+- **TypeScript Typecheck:** 0 errors (`npm run typecheck`).
+- **Core Unit Tests:** 149/149 tests passing (`npm test`).
+- **Vite Production Build:** Successfully built (`npm run build`).
+- **Backend API Server:** Online and actively serving updated `/api/scenarios`.

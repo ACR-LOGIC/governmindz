@@ -227,6 +227,7 @@ export interface WorkflowTimelineEvent {
 export interface ScenarioItem {
 	file: string;
 	id: string;
+	title?: string;
 	topic: string;
 	rows?: number;
 }
