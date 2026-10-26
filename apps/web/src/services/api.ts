@@ -9,15 +9,39 @@ import type {
 } from "../types";
 
 const BASE_URL = "";
+const DEFAULT_TIMEOUT_MS = 15000;
+
+async function fetchWithTimeout(url: string, init?: RequestInit, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<Response> {
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), timeoutMs);
+	try {
+		return await fetch(url, { ...init, signal: controller.signal });
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+async function fetchWithRetry(url: string, init?: RequestInit, retries = 1, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<Response> {
+	let lastErr: unknown;
+	for (let i = 0; i <= retries; i++) {
+		try {
+			return await fetchWithTimeout(url, init, timeoutMs);
+		} catch (e) {
+			lastErr = e;
+			if (i < retries) await new Promise((r) => setTimeout(r, 250 * (i + 1)));
+		}
+	}
+	throw lastErr;
+}
 
 export async function fetchHealth(): Promise<HealthStatus> {
-	const res = await fetch(`${BASE_URL}/api/health`);
+	const res = await fetchWithRetry(`${BASE_URL}/api/health`);
 	if (!res.ok) throw new Error("Health check failed");
 	return res.json();
 }
 
 export async function fetchScenarios(): Promise<ScenarioItem[]> {
-	const res = await fetch(`${BASE_URL}/api/scenarios`);
+	const res = await fetchWithRetry(`${BASE_URL}/api/scenarios`);
 	if (!res.ok) throw new Error("Failed to load scenarios");
 	return res.json();
 }

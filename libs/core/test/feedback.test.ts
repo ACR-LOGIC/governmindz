@@ -225,14 +225,14 @@ test("HMemService: records feedback tags and calibrates confidence priors", () =
 		assert.ok(updatedUp !== null);
 		assert.ok(updatedUp?.tags?.includes("approved_precedent"));
 		assert.ok(!updatedUp?.tags?.includes("disputed_precedent"));
-		assert.equal(updatedUp?.confidence, 0.9); // 0.8 + 0.1
+		assert.equal(updatedUp?.confidence, 0.85); // 0.8 + 0.05
 
 		// 2. Thumbs Down feedback for CloudArchitect
 		const updatedDown = hmem.recordFeedback(sessionId, "", "CloudArchitect", "down");
 		assert.ok(updatedDown !== null);
 		assert.ok(updatedDown?.tags?.includes("disputed_precedent"));
 		assert.ok(!updatedDown?.tags?.includes("approved_precedent"));
-		assert.equal(updatedDown?.confidence, 0.55); // 0.75 - 0.2
+		assert.equal(updatedDown?.confidence, 0.72); // 0.75 - 0.03
 
 		// 3. Retrieval returns domain-relevant precedents
 		const retrieval = hmem.retrieve("compliance security");

@@ -203,3 +203,5 @@ export const ExecutionExplorer: React.FC<ExecutionExplorerProps> = ({ conversati
 		</div>
 	);
 };
+
+export default ExecutionExplorer;

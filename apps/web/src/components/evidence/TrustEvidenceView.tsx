@@ -782,3 +782,5 @@ export const TrustEvidenceView: React.FC<TrustEvidenceViewProps> = ({ conversati
 		</div>
 	);
 };
+
+export default TrustEvidenceView;

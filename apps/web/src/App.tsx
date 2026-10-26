@@ -4,11 +4,12 @@ import { LeftSidebar } from "./components/layout/LeftSidebar";
 import { RightSidebar } from "./components/layout/RightSidebar";
 import { GroupConversation } from "./components/chat/GroupConversation";
 import { MessageComposer, DEMO_SCENARIOS } from "./components/chat/MessageComposer";
-import { ExecutionExplorer } from "./components/explorer/ExecutionExplorer";
-import { TrustEvidenceView } from "./components/evidence/TrustEvidenceView";
+const ExecutionExplorer = React.lazy(() => import("./components/explorer/ExecutionExplorer"));
+const TrustEvidenceView = React.lazy(() => import("./components/evidence/TrustEvidenceView"));
 import { AgentDetailDrawer } from "./components/modals/AgentDetailDrawer";
 import { SettingsModal } from "./components/modals/SettingsModal";
 import { TourGuide } from "./components/common/TourGuide";
+import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import { LiveModeConfirmModal } from "./components/modals/LiveModeConfirmModal";
 import { LiveConfigModal } from "./components/modals/LiveConfigModal";
 import {
@@ -1019,6 +1020,7 @@ export const App: React.FC = () => {
 	};
 
 	return (
+		<ErrorBoundary>
 		<div className="h-screen w-screen flex flex-col bg-[#0a0e1a] text-[#e8ecf7] overflow-hidden select-none">
 			{/* Top Bar Header */}
 			<Header
@@ -1106,9 +1108,9 @@ export const App: React.FC = () => {
 								</>
 							)}
 
-							{activeTab === "explorer" && <ExecutionExplorer conversation={activeConv} />}
+							{activeTab === "explorer" && <React.Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Loading…</div>}><ExecutionExplorer conversation={activeConv} /></React.Suspense>}
 
-							{activeTab === "evidence" && <TrustEvidenceView conversation={activeConv} />}
+							{activeTab === "evidence" && <React.Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Loading…</div>}><TrustEvidenceView conversation={activeConv} /></React.Suspense>}
 						</>
 					) : (
 						<div className="flex-1 flex items-center justify-center text-xs text-slate-400">
@@ -1187,5 +1189,6 @@ export const App: React.FC = () => {
 				</div>
 			)}
 		</div>
+		</ErrorBoundary>
 	);
 };
