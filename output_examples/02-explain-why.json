@@ -1,6 +1,6 @@
 {
   "mode": "sample",
-  "generated_at": "2026-10-25T23:52:22.171Z",
+  "generated_at": "2026-10-26T05:40:23.653Z",
   "scenario_id": "explain-why",
   "scenario_file": "02-explain-why.json",
   "topic": "Why did SMB churn rise in Q3 across enterprise accounts, and what evidence-backed recommendations explain the underlying driver?",
@@ -51,11 +51,11 @@
     "total": 4
   },
   "result": {
-    "session_id": "3e1b1b38-9985-42c6-b5ee-e7f3e9eb757a",
-    "query_hash": "qh_mvohftdm",
+    "session_id": "6bf4812d-fe16-4c7c-87e7-73c2d3f8b6f3",
+    "query_hash": "qh_mvotvdht",
     "transcript": [
       {
-        "id": "bbdf055f-95d5-4f3e-bc8d-bc1d461fbd84",
+        "id": "cb38643a-8663-4b8d-a820-a7c5980e1bab",
         "fromSeat": "FactChecker",
         "toSeat": "all",
         "type": "proposal",
@@ -81,8 +81,8 @@
           "supports": []
         },
         "round": 0,
-        "timestamp": 1792972335088,
-        "latency_ms": 2009,
+        "timestamp": 1792993216434,
+        "latency_ms": 2001,
         "token_count": 163,
         "envelope": {
           "schemaVersion": "1.0",
@@ -103,16 +103,16 @@
             ]
           },
           "execution": {
-            "taskId": "bbdf055f-95d5-4f3e-bc8d-bc1d461fbd84",
+            "taskId": "cb38643a-8663-4b8d-a820-a7c5980e1bab",
             "status": "completed",
             "round": 0,
-            "latency_ms": 2009,
-            "auditRef": "bbdf055f-95d5-4f3e-bc8d-bc1d461fbd84"
+            "latency_ms": 2001,
+            "auditRef": "cb38643a-8663-4b8d-a820-a7c5980e1bab"
           }
         }
       },
       {
-        "id": "a14da621-9c27-4d1d-9681-f8f06969dce9",
+        "id": "d7de7b1d-5b60-4b4a-8117-86135e7e7b0a",
         "fromSeat": "CloudArchitect",
         "toSeat": "all",
         "type": "proposal",
@@ -139,8 +139,8 @@
           ]
         },
         "round": 0,
-        "timestamp": 1792972335089,
-        "latency_ms": 2009,
+        "timestamp": 1792993216435,
+        "latency_ms": 2002,
         "token_count": 113,
         "envelope": {
           "schemaVersion": "1.0",
@@ -160,16 +160,16 @@
             ]
           },
           "execution": {
-            "taskId": "a14da621-9c27-4d1d-9681-f8f06969dce9",
+            "taskId": "d7de7b1d-5b60-4b4a-8117-86135e7e7b0a",
             "status": "completed",
             "round": 0,
-            "latency_ms": 2009,
-            "auditRef": "a14da621-9c27-4d1d-9681-f8f06969dce9"
+            "latency_ms": 2002,
+            "auditRef": "d7de7b1d-5b60-4b4a-8117-86135e7e7b0a"
           }
         }
       },
       {
-        "id": "f4f3e60a-e92c-4c41-b38b-8690187452b6",
+        "id": "a973ed87-9173-41bf-a4c1-2009e357b979",
         "fromSeat": "Synthesizer",
         "toSeat": "all",
         "type": "proposal",
@@ -197,8 +197,8 @@
           ]
         },
         "round": 0,
-        "timestamp": 1792972335089,
-        "latency_ms": 2009,
+        "timestamp": 1792993216435,
+        "latency_ms": 2001,
         "token_count": 97,
         "envelope": {
           "schemaVersion": "1.0",
@@ -218,16 +218,16 @@
             ]
           },
           "execution": {
-            "taskId": "f4f3e60a-e92c-4c41-b38b-8690187452b6",
+            "taskId": "a973ed87-9173-41bf-a4c1-2009e357b979",
             "status": "completed",
             "round": 0,
-            "latency_ms": 2009,
-            "auditRef": "f4f3e60a-e92c-4c41-b38b-8690187452b6"
+            "latency_ms": 2001,
+            "auditRef": "a973ed87-9173-41bf-a4c1-2009e357b979"
           }
         }
       },
       {
-        "id": "thinker-q-0-1792972335603",
+        "id": "thinker-q-0-1792993216937",
         "fromSeat": "Thinker",
         "toSeat": "all",
         "type": "action_items",
@@ -250,7 +250,7 @@
         },
         "confidence": 0.7,
         "round": 0,
-        "timestamp": 1792972335603,
+        "timestamp": 1792993216937,
         "envelope": {
           "schemaVersion": "1.0",
           "message": {
@@ -264,15 +264,15 @@
             "unresolvedQuestions": []
           },
           "execution": {
-            "taskId": "thinker-q-0-1792972335603",
+            "taskId": "thinker-q-0-1792993216937",
             "status": "completed",
             "round": 0,
-            "auditRef": "thinker-q-0-1792972335603"
+            "auditRef": "thinker-q-0-1792993216937"
           }
         }
       },
       {
-        "id": "8775d142-e3d3-4088-a06c-287040767a75",
+        "id": "11ca600e-f252-454a-ad55-ef0c1ad826c9",
         "fromSeat": "FactChecker",
         "toSeat": "all",
         "type": "consensus",
@@ -300,8 +300,8 @@
           ]
         },
         "round": 1,
-        "timestamp": 1792972337605,
-        "latency_ms": 2001,
+        "timestamp": 1792993218938,
+        "latency_ms": 2000,
         "token_count": 120,
         "envelope": {
           "schemaVersion": "1.0",
@@ -322,16 +322,16 @@
             ]
           },
           "execution": {
-            "taskId": "8775d142-e3d3-4088-a06c-287040767a75",
+            "taskId": "11ca600e-f252-454a-ad55-ef0c1ad826c9",
             "status": "completed",
             "round": 1,
-            "latency_ms": 2001,
-            "auditRef": "8775d142-e3d3-4088-a06c-287040767a75"
+            "latency_ms": 2000,
+            "auditRef": "11ca600e-f252-454a-ad55-ef0c1ad826c9"
           }
         }
       },
       {
-        "id": "c0cdcc70-4af3-4153-8f5a-01e4c61cd82b",
+        "id": "0ed448c9-b85d-4b9d-83b7-c3b6b74b1474",
         "fromSeat": "CloudArchitect",
         "toSeat": "all",
         "type": "consensus",
@@ -358,8 +358,8 @@
           ]
         },
         "round": 1,
-        "timestamp": 1792972339616,
-        "latency_ms": 2011,
+        "timestamp": 1792993220939,
+        "latency_ms": 2001,
         "token_count": 112,
         "envelope": {
           "schemaVersion": "1.0",
@@ -379,16 +379,16 @@
             ]
           },
           "execution": {
-            "taskId": "c0cdcc70-4af3-4153-8f5a-01e4c61cd82b",
+            "taskId": "0ed448c9-b85d-4b9d-83b7-c3b6b74b1474",
             "status": "completed",
             "round": 1,
-            "latency_ms": 2011,
-            "auditRef": "c0cdcc70-4af3-4153-8f5a-01e4c61cd82b"
+            "latency_ms": 2001,
+            "auditRef": "0ed448c9-b85d-4b9d-83b7-c3b6b74b1474"
           }
         }
       },
       {
-        "id": "e9c5dea0-2b03-494c-b767-0b9f2477fcb6",
+        "id": "5b683fdc-8df3-4ab8-9732-df76a56f07ae",
         "fromSeat": "Synthesizer",
         "toSeat": "all",
         "type": "consensus",
@@ -417,8 +417,8 @@
           ]
         },
         "round": 1,
-        "timestamp": 1792972341624,
-        "latency_ms": 2008,
+        "timestamp": 1792993222940,
+        "latency_ms": 2001,
         "token_count": 147,
         "envelope": {
           "schemaVersion": "1.0",
@@ -439,16 +439,16 @@
             ]
           },
           "execution": {
-            "taskId": "e9c5dea0-2b03-494c-b767-0b9f2477fcb6",
+            "taskId": "5b683fdc-8df3-4ab8-9732-df76a56f07ae",
             "status": "completed",
             "round": 1,
-            "latency_ms": 2008,
-            "auditRef": "e9c5dea0-2b03-494c-b767-0b9f2477fcb6"
+            "latency_ms": 2001,
+            "auditRef": "5b683fdc-8df3-4ab8-9732-df76a56f07ae"
           }
         }
       },
       {
-        "id": "uncertainty-report-1792972342138",
+        "id": "uncertainty-report-1792993223441",
         "fromSeat": "RivalChallenger",
         "toSeat": "all",
         "type": "escalation",
@@ -468,7 +468,7 @@
         },
         "confidence": 0.5,
         "round": 1,
-        "timestamp": 1792972342138,
+        "timestamp": 1792993223441,
         "envelope": {
           "schemaVersion": "1.0",
           "message": {
@@ -482,15 +482,15 @@
             "unresolvedQuestions": []
           },
           "execution": {
-            "taskId": "uncertainty-report-1792972342138",
+            "taskId": "uncertainty-report-1792993223441",
             "status": "completed",
             "round": 1,
-            "auditRef": "uncertainty-report-1792972342138"
+            "auditRef": "uncertainty-report-1792993223441"
           }
         }
       },
       {
-        "id": "supervisor-final-1792972342164",
+        "id": "supervisor-final-1792993223613",
         "fromSeat": "Supervisor",
         "toSeat": "all",
         "type": "summary",
@@ -517,7 +517,7 @@
         },
         "confidence": 0.84,
         "round": 1,
-        "timestamp": 1792972342164,
+        "timestamp": 1792993223614,
         "envelope": {
           "schemaVersion": "1.0",
           "message": {
@@ -531,10 +531,10 @@
             "unresolvedQuestions": []
           },
           "execution": {
-            "taskId": "supervisor-final-1792972342165",
+            "taskId": "supervisor-final-1792993223614",
             "status": "completed",
             "round": 1,
-            "auditRef": "supervisor-final-1792972342165"
+            "auditRef": "supervisor-final-1792993223614"
           }
         }
       }
@@ -561,7 +561,7 @@
         "dissented": false
       }
     },
-    "timestamp": 1792972342138,
+    "timestamp": 1792993223441,
     "halted": false,
     "transportMode": "in_process",
     "compression": {
@@ -576,123 +576,123 @@
       {
         "event_type": "scheduler_start",
         "session_id": "scheduler",
-        "timestamp": 1792972333077,
+        "timestamp": 1792993214430,
         "payload": {
           "total_tasks": 3,
           "max_concurrency": 4
         },
-        "id": "audit_1792972333077_ww7av",
+        "id": "audit_1792993214430_ecfoj",
         "previous_hash": "c910699e010057fee5424ddcb6751ac88b20169be78af84a4741e0754e5d8b59",
-        "hash": "7e3905e0f9daee34f799605d51173e42ede04ea1e3f9bdc694fbb00976bd135d",
-        "signature": "a9519c0d83f88f962e74ca0263e7c35304be50ed40fa15a962720124c9476a85"
+        "hash": "b20261469cf0f4d25e158d41e7eb175bf7781f8a8fcff9b1c7a970fa45b314de",
+        "signature": "d8bcc4751b6f9816832e7ef4729f520a4fa6618cc71ee8263232c94e310e77e8"
       },
       {
         "event_type": "agent_start",
         "session_id": "scheduler",
-        "timestamp": 1792972333078,
+        "timestamp": 1792993214431,
         "payload": {
           "seat_id": "FactChecker",
           "round": 0
         },
-        "id": "audit_1792972333078_obww6",
-        "previous_hash": "7e3905e0f9daee34f799605d51173e42ede04ea1e3f9bdc694fbb00976bd135d",
-        "hash": "03719c83f1ac576364d9548f029f8bc3c9ab2993d8d546a7955aa710e5704a27",
-        "signature": "61ff0bbd245d45a8468b0ef52c5209b2b7bdf62b5b4bf5bd42aba975fcf2d4d1"
+        "id": "audit_1792993214431_67eu3",
+        "previous_hash": "b20261469cf0f4d25e158d41e7eb175bf7781f8a8fcff9b1c7a970fa45b314de",
+        "hash": "93e9c52dbe7a96f8e9728803cf74fe53a025e262805424960573bb14a4d040b9",
+        "signature": "7618ad6095bff367c1a96a960d7c4e87f36889d5a39e2dae49a97fd0e76b5318"
       },
       {
         "event_type": "agent_start",
         "session_id": "scheduler",
-        "timestamp": 1792972333078,
+        "timestamp": 1792993214431,
         "payload": {
           "seat_id": "CloudArchitect",
           "round": 0
         },
-        "id": "audit_1792972333078_akt08",
-        "previous_hash": "03719c83f1ac576364d9548f029f8bc3c9ab2993d8d546a7955aa710e5704a27",
-        "hash": "e33a4a229b3de52080645ca36e248d4a0de335acd89e51785124458ce8adbccf",
-        "signature": "ab95533ce9194856beb8478a58b8663f9cbf3e3711e582feafce42883449be86"
+        "id": "audit_1792993214431_p84ru",
+        "previous_hash": "93e9c52dbe7a96f8e9728803cf74fe53a025e262805424960573bb14a4d040b9",
+        "hash": "bc4bddd3fed460f6bc4192e7d5e0503d031b03e70f4ad2ba90fd32f3f6d66acb",
+        "signature": "cacc23524cbfbf863112689e811fccc078e70e99865ec1f2b68070433c5da540"
       },
       {
         "event_type": "agent_start",
         "session_id": "scheduler",
-        "timestamp": 1792972333078,
+        "timestamp": 1792993214432,
         "payload": {
           "seat_id": "Synthesizer",
           "round": 0
         },
-        "id": "audit_1792972333078_r6iey",
-        "previous_hash": "e33a4a229b3de52080645ca36e248d4a0de335acd89e51785124458ce8adbccf",
-        "hash": "4c6e9e21140c6e6b0697fd78e02694dc53b124ff52a28789caddac9abecc4abc",
-        "signature": "c348c48e803e7b7c5e059c0a142bc7b2881dc39a9ded35c108e945410252c1f4"
+        "id": "audit_1792993214432_nt6i0",
+        "previous_hash": "bc4bddd3fed460f6bc4192e7d5e0503d031b03e70f4ad2ba90fd32f3f6d66acb",
+        "hash": "fc664018e21077ea258b5712003a3c8e4c2eb74f3428586e3a55b66e3207c357",
+        "signature": "f110d0dea469189ffac9a81f4d29aa9ddb9ab51633d1c002828d6bb39b428bea"
       },
       {
         "event_type": "agent_complete",
         "session_id": "scheduler",
-        "timestamp": 1792972335088,
+        "timestamp": 1792993216434,
         "payload": {
           "seat_id": "FactChecker",
-          "duration_ms": 2010
+          "duration_ms": 2003
         },
-        "id": "audit_1792972335088_ijf3l",
-        "previous_hash": "4c6e9e21140c6e6b0697fd78e02694dc53b124ff52a28789caddac9abecc4abc",
-        "hash": "12a0a891ad2d27188dd1e1647162191284e77312ae8eee5c05c4df7f20da4543",
-        "signature": "641f9d1b1aa72bed97c47405d17a94fdfd8056a458ee6db942a063a3b212cdf8"
+        "id": "audit_1792993216434_k7ilj",
+        "previous_hash": "fc664018e21077ea258b5712003a3c8e4c2eb74f3428586e3a55b66e3207c357",
+        "hash": "f462509112c6558c4d28a3e33155dbac3b429a3c7821fb53f5713c71281999fd",
+        "signature": "af735aab0c63962d8cdd301936e9526cf858b94cf4b8ec738fc0a47252039f7a"
       },
       {
         "event_type": "agent_complete",
         "session_id": "scheduler",
-        "timestamp": 1792972335089,
+        "timestamp": 1792993216435,
         "payload": {
           "seat_id": "CloudArchitect",
-          "duration_ms": 2011
+          "duration_ms": 2004
         },
-        "id": "audit_1792972335089_nc6qw",
-        "previous_hash": "12a0a891ad2d27188dd1e1647162191284e77312ae8eee5c05c4df7f20da4543",
-        "hash": "9fd1c6e433f6491365a2444ccee89dec0a18b0805af7210a3c299fbef5b777d9",
-        "signature": "80a32fa367a67d55ee9832cf3dcde44c7afe2b2e027d800d49606c6a01d8a8b5"
+        "id": "audit_1792993216435_dtxww",
+        "previous_hash": "f462509112c6558c4d28a3e33155dbac3b429a3c7821fb53f5713c71281999fd",
+        "hash": "b8f626855983525372cd1ce8cf9fcd82ca35a88c9eec03d445eedf5cf7ee9c42",
+        "signature": "22a364e8304ece7cec5c2a370136ce05f446c9852087494d890e02385ca83508"
       },
       {
         "event_type": "agent_complete",
         "session_id": "scheduler",
-        "timestamp": 1792972335089,
+        "timestamp": 1792993216435,
         "payload": {
           "seat_id": "Synthesizer",
-          "duration_ms": 2011
+          "duration_ms": 2003
         },
-        "id": "audit_1792972335089_5h3ca",
-        "previous_hash": "9fd1c6e433f6491365a2444ccee89dec0a18b0805af7210a3c299fbef5b777d9",
-        "hash": "e30b0bcc308f100083201dd10145a80b6a4dbcb5b76f27e5fced6eb71b5e7897",
-        "signature": "cd27ad85051f459a1125e26decd66e5fd09ca55173ad0fbb867c1f3c1c34137e"
+        "id": "audit_1792993216435_9rt7z",
+        "previous_hash": "b8f626855983525372cd1ce8cf9fcd82ca35a88c9eec03d445eedf5cf7ee9c42",
+        "hash": "f602d477380a914fa38fd8d7c38a969175856bae809abc9ec0a76ac687e8dff7",
+        "signature": "ff60a4ff247e14315d211b597a8a94bbb3bcb22a4da3b806ff8a2a5edbafd4f4"
       },
       {
         "event_type": "scheduler_complete",
         "session_id": "scheduler",
-        "timestamp": 1792972335090,
+        "timestamp": 1792993216436,
         "payload": {
           "total_tasks": 3,
           "completed": 3,
           "timed_out": 0,
           "failed": 0
         },
-        "id": "audit_1792972335090_tg2he",
-        "previous_hash": "e30b0bcc308f100083201dd10145a80b6a4dbcb5b76f27e5fced6eb71b5e7897",
-        "hash": "c02184aaf55bd89b217f84d53c2a1fbfb6f0ab16e7c6394528621be6a78525ee",
-        "signature": "695d1614a43f82d56092af76437eaab5ff29064bb775f16b0218de6bc52d5cc6"
+        "id": "audit_1792993216436_5jvqz",
+        "previous_hash": "f602d477380a914fa38fd8d7c38a969175856bae809abc9ec0a76ac687e8dff7",
+        "hash": "f53c283970a1506c6b734d068fb19687da0e6f836d9007cbdd2ef065b5879cbd",
+        "signature": "1a5935130d29d0438d8f2d2d2b0f2050f4bbb8fee827da199b65bcc919570773"
       },
       {
         "event_type": "session_complete",
-        "session_id": "3e1b1b38-9985-42c6-b5ee-e7f3e9eb757a",
-        "timestamp": 1792972342138,
+        "session_id": "6bf4812d-fe16-4c7c-87e7-73c2d3f8b6f3",
+        "timestamp": 1792993223441,
         "payload": {
           "rounds": 1,
           "consensus_reached": true,
           "final_confidence": 0.84,
           "seat_vote_count": 3
         },
-        "id": "audit_1792972342138_o7f7g",
-        "previous_hash": "c02184aaf55bd89b217f84d53c2a1fbfb6f0ab16e7c6394528621be6a78525ee",
-        "hash": "a301043769ae3f5e659b7925b8b748ef7b7e129a08683ca94dbb553eaf1b2616",
-        "signature": "3d6f88c599e5825f1c5aa1392eb0d4d4143dfc9a685e8f80e8288830ca4ed880"
+        "id": "audit_1792993223442_yvmr4",
+        "previous_hash": "f53c283970a1506c6b734d068fb19687da0e6f836d9007cbdd2ef065b5879cbd",
+        "hash": "630f561d1852c38c22d33014ca2611c9aaf630bf7727b3c3f87b2d4912af8d35",
+        "signature": "0ab7986332bb63c7dcea52c5b2b9a46c535afa9463f1f4a88553d7d877b404cc"
       }
     ]
   }

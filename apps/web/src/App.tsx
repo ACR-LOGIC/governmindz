@@ -51,7 +51,7 @@ export const App: React.FC = () => {
 
 	const [health, setHealth] = useState<HealthStatus | null>(null);
 	const [scenarios, setScenarios] = useState<ScenarioItem[]>([]);
-	const [selectedScenario, setSelectedScenario] = useState<string>("01-fragmented-intelligence.json");
+	const [selectedScenario, setSelectedScenario] = useState<string>("01-regulatory-risk.json");
 	const [mode, setMode] = useState<"live" | "sample">("sample");
 	const [tourOpen, setTourOpen] = useState(false);
 	const [liveConfirmModalOpen, setLiveConfirmModalOpen] = useState(false);
@@ -213,13 +213,13 @@ export const App: React.FC = () => {
 				const defaultAssigns = assignHumanCouncil();
 				const defaultConv: Conversation = {
 					id: `conv_${Date.now()}`,
-					title: "Zetaris Data Access Readiness",
+					title: "Regulatory Compliance & Risk Ranking",
 					createdAt: Date.now(),
 					updatedAt: Date.now(),
 					topic:
-						"Which governance controls should a data team verify before exposing Zetaris federated data to an external agent, and what evidence supports the recommendation?",
+						"Our organization received acquisition offers from 7 Fortune 500 companies (Apple, IBM, Oracle, Walmart, Target, Ford, Tesla). Before we accept any partnership, we need to assess regulatory compliance risk. Use Zetaris to cross-reference: (1) SEC financial data (revenue volatility, reporting consistency), (2) GLEIF legal entity status (LEI active/inactive), (3) COMPANY_DNS industry classification. Which company poses the HIGHEST compliance risk, and why? Rank all 7 companies by governance risk.",
 					mode: "sample",
-					scenarioId: "01-governance-readiness",
+					scenarioId: "01-regulatory-risk",
 					messages: [],
 					auditEvents: [],
 					status: "idle",

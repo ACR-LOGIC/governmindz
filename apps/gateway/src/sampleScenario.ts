@@ -26,7 +26,7 @@ export interface SampleScenario {
 }
 
 export const DEFAULT_SAMPLE_SCENARIO =
-	"input_examples/01-governance-readiness.json";
+	"input_examples/01-regulatory-risk.json";
 
 export function loadSampleScenario(
 	file = process.env.SAMPLE_SCENARIO?.trim() || DEFAULT_SAMPLE_SCENARIO,
