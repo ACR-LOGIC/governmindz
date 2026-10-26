@@ -1,3 +1,4 @@
+
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
@@ -567,7 +568,15 @@ function handleResult(req: http.IncomingMessage, res: http.ServerResponse, runId
 }
 
 async function handleHealth(_req: http.IncomingMessage, res: http.ServerResponse) {
-	loadLocalEnvIfPresent();
+loadLocalEnvIfPresent();
+
+function getEffectiveAuditSecret(secretOverride?: string): string {
+	const secret = (secretOverride ?? process.env.AUDIT_TRAIL_SECRET ?? "").trim();
+	if (!secret || secret.length < 16) {
+		throw new Error("AUDIT_TRAIL_SECRET is missing or too short; audit verification is disabled.");
+	}
+	return secret;
+}
 	const provider = new MeterlessProvider();
 	const hasMeterless = Boolean((process.env.METERLESS_BASE_URL || process.env.METERLESS_ENDPOINT)?.trim());
 	const hasZetaris = Boolean(
@@ -849,8 +858,8 @@ function handleFeedback(req: http.IncomingMessage, res: http.ServerResponse) {
 				sendJson(res, 400, { error: "Missing required fields: conversationId, messageId, seatId, rating" });
 				return;
 			}
-			if (rating !== "up" && rating !== "down") {
-				sendJson(res, 400, { error: "rating must be 'up' or 'down'" });
+			if (rating !== "up" && rating !== "down" && rating !== "wrong") {
+				sendJson(res, 400, { error: "rating must be 'up', 'down', or 'wrong'" });
 				return;
 			}
 
@@ -910,21 +919,6 @@ function handleFeedback(req: http.IncomingMessage, res: http.ServerResponse) {
 	});
 }
 
-function handleAgentCredibility(req: http.IncomingMessage, res: http.ServerResponse) {
-	if (req.method !== "GET") {
-		res.writeHead(405);
-		res.end();
-		return;
-	}
-
-	try {
-		const creds = credibilityManager.getAllCredibilities();
-		sendJson(res, 200, { success: true, credibilities: creds });
-	} catch (err: any) {
-		sendJson(res, 500, { error: err.message || "Failed to retrieve credibilities" });
-	}
-}
-
 function handleAuditVerify(req: http.IncomingMessage, res: http.ServerResponse) {
 	if (req.method !== "POST") {
 		res.writeHead(405);
@@ -940,8 +934,6 @@ function handleAuditVerify(req: http.IncomingMessage, res: http.ServerResponse) 
 			const { conversationId, secret } = payload;
 			let events = payload.auditEvents;
 
-			// If client explicitly passed auditEvents (e.g. from Tamper Lab or external upload), prioritize them.
-			// Only fall back to database if client did not supply auditEvents.
 			if (!Array.isArray(events) && conversationId) {
 				const conv = getConversationById(conversationId);
 				if (conv && Array.isArray(conv.auditEvents)) {
@@ -953,7 +945,7 @@ function handleAuditVerify(req: http.IncomingMessage, res: http.ServerResponse) 
 				events = [];
 			}
 
-			const effectiveSecret = secret || process.env.AUDIT_TRAIL_SECRET || "governmindz-audit-secret-v1";
+			const effectiveSecret = getEffectiveAuditSecret(secret);
 			const report = AuditChainVerifier.verify(events, effectiveSecret);
 			sendJson(res, 200, report);
 		} catch (err: any) {
@@ -977,7 +969,7 @@ function handleAuditCertificate(req: http.IncomingMessage, res: http.ServerRespo
 		}
 
 		const events = Array.isArray(conv.auditEvents) ? conv.auditEvents : [];
-		const effectiveSecret = process.env.AUDIT_TRAIL_SECRET || "governmindz-audit-secret-v1";
+		const effectiveSecret = getEffectiveAuditSecret();
 		const report = AuditChainVerifier.verify(events, effectiveSecret);
 		const certificate = AuditChainVerifier.generateProofCertificate(report, id, effectiveSecret);
 		sendJson(res, 200, certificate);
@@ -985,91 +977,3 @@ function handleAuditCertificate(req: http.IncomingMessage, res: http.ServerRespo
 		sendJson(res, 500, { error: err.message || "Failed to generate audit certificate" });
 	}
 }
-
-function handleArtifact(req: http.IncomingMessage, res: http.ServerResponse, rawFilename: string) {
-	if (req.method !== "GET") {
-		res.writeHead(405);
-		res.end();
-		return;
-	}
-
-	const safeFilename = path.basename(decodeURIComponent(rawFilename));
-	const artifactsDir = path.resolve(process.cwd(), "data", "artifacts");
-	const filePath = path.join(artifactsDir, safeFilename);
-
-	if (!filePath.startsWith(artifactsDir) || !fs.existsSync(filePath)) {
-		sendJson(res, 404, { error: `Artifact '${safeFilename}' not found.` });
-		return;
-	}
-
-	try {
-		const stat = fs.statSync(filePath);
-		const ext = path.extname(safeFilename).toLowerCase();
-		const mimeTypes: Record<string, string> = {
-			".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-			".pdf": "application/pdf",
-			".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-			".csv": "text/csv; charset=utf-8",
-			".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-			".svg": "image/svg+xml",
-			".png": "image/png",
-			".json": "application/json; charset=utf-8",
-		};
-
-		const contentType = mimeTypes[ext] || "application/octet-stream";
-		const isDownload = (req.url || "").includes("download=true");
-		const disposition = isDownload ? `attachment; filename="${safeFilename}"` : `inline; filename="${safeFilename}"`;
-
-		res.writeHead(200, {
-			"Content-Type": contentType,
-			"Content-Length": stat.size,
-			"Content-Disposition": disposition,
-			"Cache-Control": "public, max-age=3600",
-		});
-
-		const stream = fs.createReadStream(filePath);
-		stream.pipe(res);
-	} catch (err: any) {
-		sendJson(res, 500, { error: err.message || "Failed to serve artifact" });
-	}
-}
-
-const server = http.createServer((req: http.IncomingMessage, res: http.ServerResponse) => {
-	const url = (req.url || "/").split("?")[0];
-	if (req.method === "GET" && url === "/api/health") return handleHealth(req, res);
-	if (url === "/api/preferences") return handlePreferences(req, res);
-	if (url === "/api/config") return handleConfig(req, res);
-	if (url === "/api/search") return handleWebSearch(req, res);
-	if (req.method === "GET" && url === "/api/scenarios") return handleScenarios(req, res);
-	if (req.method === "GET" && url === "/api/models") return handleModels(req, res);
-	if (req.method === "POST" && url === "/api/feedback") return handleFeedback(req, res);
-	if (req.method === "GET" && url === "/api/agents/credibility") return handleAgentCredibility(req, res);
-	if (req.method === "POST" && url === "/api/audit/verify") return handleAuditVerify(req, res);
-
-	const artMatch = url.match(/^\/api\/artifacts\/([^/]+)$/);
-	if (artMatch) return handleArtifact(req, res, artMatch[1]);
-
-	const certMatch = url.match(/^\/api\/conversations\/([^/]+)\/audit-certificate$/);
-	if (certMatch) return handleAuditCertificate(req, res, decodeURIComponent(certMatch[1]));
-
-	if (url === "/api/conversations") return handleConversations(req, res);
-
-	const convMatch = url.match(/^\/api\/conversations\/([^/]+)$/);
-	if (convMatch) return handleSingleConversation(req, res, decodeURIComponent(convMatch[1]));
-
-	if (req.method === "POST" && url === "/api/run") return handleRun(req, res);
-
-	const m = url.match(/^\/api\/run\/([^/]+)\/events$/);
-	if (req.method === "GET" && m) return handleSSE(req, res, m[1] as string);
-
-	const m2 = url.match(/^\/api\/run\/([^/]+)\/result$/);
-	if (req.method === "GET" && m2) return handleResult(req, res, m2[1] as string);
-
-	if (req.method === "GET") return serveStatic(req, res);
-	res.writeHead(405);
-	res.end();
-});
-
-server.listen(PORT, () => {
-	console.log("GOVERNMINDZ web UI: http://127.0.0.1:" + PORT);
-});
