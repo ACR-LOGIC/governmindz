@@ -12,13 +12,15 @@ import type {
 	CrewStatus,
 	CrewType,
 } from "../types/crew";
-import { appendCrewMessage, isCrewRoundReady } from "../types/crew";
+import { appendCrewMessage, isCrewRoundSettled } from "../types/crew";
 
 export interface BarrierSummaryResult {
 	summaryText: string;
 	hasConflict: boolean;
 	dataFindingsCount: number;
 	webFindingsCount: number;
+	partial: boolean;
+	failedCrewIds: string[];
 }
 
 export class CrewBarrierManager {
@@ -164,11 +166,60 @@ export class CrewBarrierManager {
 			};
 		}
 
-		if (eventType === "crew_complete") {
+		if (eventType === "crew_failed" || eventType === "crew_complete") {
 			const crewName = String(rawEvent.crew || "");
 			const crewId = crewName.toLowerCase().includes("data") ? "data-crew" : "web-crew";
 			const existing = round.crews[crewId];
 			if (!existing) return round;
+
+			const failed = eventType === "crew_failed" || Boolean(rawEvent.failed);
+			const errorText = String(rawEvent.error || rawEvent.summary || "").trim();
+			const timedOut =
+				Boolean(rawEvent.timedOut) ||
+				existing.status === "timed_out" ||
+				/timed out|timeout/i.test(errorText);
+
+			if (failed) {
+				const summaryText =
+					errorText ||
+					`${crewName} did not complete. No verified evidence was submitted for this crew.`;
+				const failureMsg: CrewMessage = {
+					id: `failed_${crewId}_${Date.now()}`,
+					crewId,
+					author: "Supervisor",
+					text: `Checkpoint: Research did not complete. Evidence from this crew is excluded.`,
+					ts: Number(rawEvent.timestamp) || Date.now(),
+					kind: "checkpoint",
+				};
+				const alreadyFailed = existing.status === "failed" || existing.status === "timed_out";
+				const updatedCrew = alreadyFailed
+					? {
+							...existing,
+							status: timedOut ? ("timed_out" as CrewStatus) : existing.status,
+							summary: summaryText,
+							failureReason: errorText || existing.failureReason,
+							timedOut: timedOut || existing.timedOut,
+						}
+					: {
+							...appendCrewMessage(existing, failureMsg),
+							status: timedOut ? ("timed_out" as CrewStatus) : ("failed" as CrewStatus),
+							summary: summaryText,
+							failureReason: errorText || `${crewName} did not complete.`,
+							timedOut,
+						};
+
+				return {
+					...round,
+					crews: {
+						...round.crews,
+						[crewId]: updatedCrew,
+					},
+				};
+			}
+
+			if (existing.status === "failed" || existing.status === "timed_out") {
+				return round;
+			}
 
 			const summaryText =
 				String(rawEvent.summary || "") ||
@@ -179,11 +230,11 @@ export class CrewBarrierManager {
 				crewId,
 				author: crewName,
 				text: `Checkpoint: Research completed. Final findings submitted.`,
-				ts: Date.now(),
+				ts: Number(rawEvent.timestamp) || Date.now(),
 				kind: "checkpoint",
 			};
 
-			// CRITICAL: Marks this crew as 'ready', but DOES NOT close bubbles or release barrier!
+			// Marks this crew as ready, but does not close bubbles or release the barrier.
 			return {
 				...round,
 				crews: {
@@ -192,6 +243,8 @@ export class CrewBarrierManager {
 						...appendCrewMessage(existing, readyMsg),
 						status: "ready",
 						summary: summaryText,
+						failureReason: undefined,
+						timedOut: false,
 					},
 				},
 			};
@@ -289,7 +342,36 @@ export class CrewBarrierManager {
 				return round;
 			}
 
+			case "crew:failed": {
+				const errorText = String(payload?.error || payload?.summary || "Crew did not complete.");
+				const timedOut = Boolean(payload?.timedOut) || /timed out|timeout/i.test(errorText);
+				const failureMsg: CrewMessage = {
+					id: `failed_${crewId}_${Date.now()}`,
+					crewId,
+					author: "Supervisor",
+					text: `Checkpoint: Research did not complete. Evidence from this crew is excluded.`,
+					ts: timestamp || Date.now(),
+					kind: "checkpoint",
+				};
+				return {
+					...round,
+					crews: {
+						...round.crews,
+						[crewId]: {
+							...appendCrewMessage(existing, failureMsg),
+							status: timedOut ? "timed_out" : "failed",
+							summary: errorText,
+							failureReason: errorText,
+							timedOut,
+						},
+					},
+				};
+			}
+
 			case "crew:ready": {
+				if (existing.status === "failed" || existing.status === "timed_out") {
+					return round;
+				}
 				const summary = String(payload?.summary || "Research completed successfully.");
 				const readyMsg: CrewMessage = {
 					id: `ready_${crewId}_${Date.now()}`,
@@ -355,12 +437,12 @@ export class CrewBarrierManager {
 	}
 
 	/**
-	 * Checks whether the barrier synchronization conditions are fully met:
-	 * 1. Every authoritative crew ID in round.crewIds is 'ready'.
-	 * 2. Barrier has not yet been released.
+	 * Checks whether every authoritative crew has reached a terminal state.
+	 * Failed and timed-out crews must not hold the barrier forever; their
+	 * evidence is excluded and disclosed in the combined summary.
 	 */
 	static canRelease(round: CrewRound): boolean {
-		return isCrewRoundReady(round) && !round.barrierReleased;
+		return isCrewRoundSettled(round) && !round.barrierReleased;
 	}
 
 	/**
@@ -377,11 +459,39 @@ export class CrewBarrierManager {
 		const dataCheckpoints = dataMessages.filter((m) => m.kind === "checkpoint");
 		const webCheckpoints = webMessages.filter((m) => m.kind === "checkpoint");
 
-		const dataSummary = dataCrew?.summary || (dataCheckpoints.length > 0 ? dataCheckpoints[dataCheckpoints.length - 1].text : "Zetaris queries verified.");
-		const webSummary = webCrew?.summary || (webCheckpoints.length > 0 ? webCheckpoints[webCheckpoints.length - 1].text : "External citations verified.");
+		const crews = round.crewIds.map((id) => round.crews[id]).filter(Boolean);
+		const failedCrews = crews.filter((crew) => crew.status === "failed" || crew.status === "timed_out");
+		const readyCrews = crews.filter((crew) => crew.status === "ready");
+		const partial = failedCrews.length > 0;
+		const failedCrewIds = failedCrews.map((crew) => crew.id);
 
-		// Inspect messages for conflict keywords
-		const allTexts = [...dataMessages, ...webMessages].map((m) => m.text.toLowerCase());
+		const dataAvailable = dataCrew?.status === "ready";
+		const webAvailable = webCrew?.status === "ready";
+
+		const dataSummary = dataAvailable
+			? dataCrew?.summary ||
+				(dataCheckpoints.length > 0
+					? dataCheckpoints[dataCheckpoints.length - 1].text
+					: "Zetaris queries verified.")
+			: `Data Crew did not complete. No database evidence from this crew is included.${
+					dataCrew?.failureReason ? ` Reason: ${dataCrew.failureReason}` : ""
+				}`;
+
+		const webSummary = webAvailable
+			? webCrew?.summary ||
+				(webCheckpoints.length > 0
+					? webCheckpoints[webCheckpoints.length - 1].text
+					: "External citations verified.")
+			: `Web Search Crew did not complete. No external citations from this crew are included.${
+					webCrew?.failureReason ? ` Reason: ${webCrew.failureReason}` : ""
+				}`;
+
+		// Inspect available evidence for conflict keywords. Failure notices are
+		// limitations, not evidence conflicts.
+		const allTexts = [
+			...dataMessages.filter(() => dataAvailable),
+			...webMessages.filter(() => webAvailable),
+		].map((m) => m.text.toLowerCase());
 		const hasConflict = allTexts.some(
 			(t) =>
 				t.includes("dispute") ||
@@ -392,14 +502,28 @@ export class CrewBarrierManager {
 				t.includes("outlier"),
 		);
 
-		let summary = `### 🤝 Harmonized Research Crew Briefing\n\n`;
-		summary += `Both parallel research crews have synchronized and submitted verified findings.\n\n`;
+		let summary = partial
+			? `### Research Crew Briefing (Partial Evidence)\n\n`
+			: `### Harmonized Research Crew Briefing\n\n`;
+
+		if (partial) {
+			const names = failedCrews.map((crew) => crew.label).join(", ");
+			summary += `${readyCrews.length} of ${crews.length} research crews returned verified findings. ${names} did not complete; their evidence is excluded from the verified record and must not be treated as consensus.\n\n`;
+		} else {
+			summary += `Both parallel research crews have synchronized and submitted verified findings.\n\n`;
+		}
+
 		summary += `**1. Zetaris Federated Data Crew Findings:**\n`;
 		summary += `> ${dataSummary}\n\n`;
 		summary += `**2. External Standards & Web Search Crew Findings:**\n`;
 		summary += `> ${webSummary}\n\n`;
 
-		if (hasConflict) {
+		if (partial) {
+			summary += `> [!CAUTION] **Incomplete Research Evidence**\n`;
+			summary += `> ${failedCrews
+				.map((crew) => `${crew.label} is unavailable${crew.timedOut ? " after timing out" : ""}`)
+				.join("; ")}. The final answer will disclose this limitation and cannot claim complete multi-crew verification.\n\n`;
+		} else if (hasConflict) {
 			summary += `> [!WARNING] **Evidence Divergence / Discrepancy Detected**\n`;
 			summary += `> Data Crew records and external web citations note active operational differences or timing variances. Downstream Fact Checker and Thinker review will evaluate these discrepancies explicitly.\n\n`;
 		} else {
@@ -407,13 +531,17 @@ export class CrewBarrierManager {
 			summary += `> Primary database catalog attributes and external regulatory standards demonstrate consistent baseline governance alignment.\n\n`;
 		}
 
-		summary += `*Barrier synchronized: Releasing parallel research bubbles to main deliberation.*`;
+		summary += partial
+			? `*Barrier released with partial evidence: research bubbles now pass to main deliberation with the limitation above.*`
+			: `*Barrier synchronized: Releasing parallel research bubbles to main deliberation.*`;
 
 		return {
 			summaryText: summary,
 			hasConflict,
 			dataFindingsCount: dataCheckpoints.length,
 			webFindingsCount: webCheckpoints.length,
+			partial,
+			failedCrewIds,
 		};
 	}
 
@@ -422,12 +550,18 @@ export class CrewBarrierManager {
 	 * Returns the updated round with barrierReleased: true and summaryPosted: true.
 	 */
 	static markSummaryPosted(round: CrewRound, summaryText: string): CrewRound {
+		const failedCrewIds = round.crewIds.filter((id) => {
+			const status = round.crews[id]?.status;
+			return status === "failed" || status === "timed_out";
+		});
 		return {
 			...round,
 			barrierReleased: true,
 			summaryPosted: true,
 			summaryText,
 			error: undefined,
+			partial: failedCrewIds.length > 0,
+			failedCrewIds,
 		};
 	}
 

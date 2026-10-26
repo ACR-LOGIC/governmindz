@@ -114,6 +114,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 	// Message type metadata helper
 	const getTypeBadge = (type: string) => {
 		switch (type) {
+			case "acknowledgment":
+				return { label: "Assignment Accepted", bg: "bg-teal-950/70 text-teal-300 border-teal-700/60", icon: CheckCircle2 };
 			case "proposal":
 				return { label: "Initial Proposal", bg: "bg-sky-950/70 text-sky-300 border-sky-700/60", icon: Search };
 			case "challenge":

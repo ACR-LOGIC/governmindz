@@ -479,6 +479,7 @@ export class RivalChallenger {
 			}>;
 		};
 		eventSink?: (event: Record<string, unknown>) => void;
+		unavailableCrews?: Array<"DataCrew" | "WebSearchCrew">;
 	}): Promise<{
 		dataCrewChallenges: Array<{
 			id: string;
@@ -508,6 +509,8 @@ export class RivalChallenger {
 		};
 	}> {
 		const { dataCrewReport, webCrewReport, eventSink } = params;
+		const dataUnavailable = params.unavailableCrews?.includes("DataCrew") ?? false;
+		const webUnavailable = params.unavailableCrews?.includes("WebSearchCrew") ?? false;
 
 		// 1. Independently review Data Crew findings
 		const dataCrewChallenges: Array<{
@@ -519,7 +522,7 @@ export class RivalChallenger {
 			requiresCorrection: boolean;
 		}> = [];
 
-		for (const f of dataCrewReport.findings) {
+		for (const f of dataUnavailable ? [] : dataCrewReport.findings) {
 			const hasLimitations = Boolean(f.limitations && f.limitations.length > 0);
 			const hasUncertainty = Boolean(f.uncertainty);
 			const isFallback = Boolean(dataCrewReport.isSyntheticFallback);
@@ -566,11 +569,12 @@ export class RivalChallenger {
 		const dataCrewResponse = {
 			defendedClaims: defendedDataClaims,
 			correctedClaims: correctedDataClaims,
-			defenseStatement:
-				"Data Crew confirms query provenance is cryptographically authenticated. Boundaries and row limits are explicitly noted.",
+			defenseStatement: dataUnavailable
+				? "Data Crew did not complete; no defense was submitted."
+				: "Data Crew confirms query provenance is cryptographically authenticated. Boundaries and row limits are explicitly noted.",
 		};
 
-		eventSink?.({
+		if (!dataUnavailable) eventSink?.({
 			type: "crew_challenge_response",
 			crew: "DataCrew",
 			defendedCount: defendedDataClaims.length,
@@ -589,7 +593,7 @@ export class RivalChallenger {
 			requiresCorrection: boolean;
 		}> = [];
 
-		for (const f of webCrewReport.findings) {
+		for (const f of webUnavailable ? [] : webCrewReport.findings) {
 			const hasContradictions = Boolean(f.contradictoryEvidence && f.contradictoryEvidence.length > 0);
 			const hasGaps = Boolean(f.gapsIdentified && f.gapsIdentified.length > 0);
 
@@ -633,11 +637,12 @@ export class RivalChallenger {
 		const webCrewResponse = {
 			defendedClaims: defendedWebClaims,
 			correctedClaims: correctedWebClaims,
-			defenseStatement:
-				"Web Search Crew reconciled citations: NIST SP 800-92 and ISO/IEC 42001 provide authoritative governance precedence over disputed blogs.",
+			defenseStatement: webUnavailable
+				? "Web Search Crew did not complete; no defense was submitted."
+				: "Web Search Crew reconciled citations: NIST SP 800-92 and ISO/IEC 42001 provide authoritative governance precedence over disputed blogs.",
 		};
 
-		eventSink?.({
+		if (!webUnavailable) eventSink?.({
 			type: "crew_challenge_response",
 			crew: "WebSearchCrew",
 			defendedCount: defendedWebClaims.length,

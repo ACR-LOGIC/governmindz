@@ -5,7 +5,7 @@
 
 export type CrewType = "data" | "web" | "pair";
 
-export type CrewStatus = "talking" | "ready" | "wrapping_up";
+export type CrewStatus = "talking" | "ready" | "wrapping_up" | "failed" | "timed_out";
 
 export type CrewMessageKind = "chat" | "checkpoint";
 
@@ -26,6 +26,8 @@ export interface ActiveCrew {
 	messages: CrewMessage[];
 	softDeadlineAt: number;
 	summary?: string;
+	failureReason?: string;
+	timedOut?: boolean;
 }
 
 export interface CrewRound {
@@ -37,6 +39,8 @@ export interface CrewRound {
 	summaryPosted: boolean;
 	summaryText?: string;
 	error?: string;
+	partial?: boolean;
+	failedCrewIds?: string[];
 }
 
 export type CrewEventType =
@@ -44,6 +48,7 @@ export type CrewEventType =
 	| "crew:message"
 	| "crew:checkpoint"
 	| "crew:ready"
+	| "crew:failed"
 	| "crew:timeout_soft";
 
 export interface CrewEvent {
@@ -65,12 +70,34 @@ export function isCrewRoundReady(round: CrewRound): boolean {
 	return round.crewIds.every((id) => round.crews[id]?.status === "ready");
 }
 
+export function isCrewTerminal(status: CrewStatus): boolean {
+	return status === "ready" || status === "failed" || status === "timed_out";
+}
+
+export function isCrewRoundSettled(round: CrewRound): boolean {
+	if (!round || !round.crewIds || round.crewIds.length === 0) {
+		return false;
+	}
+	return round.crewIds.every((id) => {
+		const crew = round.crews[id];
+		return Boolean(crew && isCrewTerminal(crew.status));
+	});
+}
+
 /**
  * Barrier release condition:
  * All required crews must be ready, and the barrier has not yet been released.
  */
 export function canReleaseBarrier(round: CrewRound): boolean {
 	return isCrewRoundReady(round) && !round.barrierReleased;
+}
+
+/**
+ * Barrier release condition for completed rounds that may include failed or
+ * timed-out crews. A terminal failure must not hold the whole run forever.
+ */
+export function canReleaseSettledBarrier(round: CrewRound): boolean {
+	return isCrewRoundSettled(round) && !round.barrierReleased;
 }
 
 /**
