@@ -22,6 +22,8 @@ blob-report/
 coverage/
 *.tsbuildinfo
 logs/hmem.json
+logs/hmem*.json
+logs/hmem*.db
 .idea/
 .vscode/
 .agents/

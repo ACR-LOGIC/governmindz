@@ -119,12 +119,29 @@ const TOPIC_KNOWLEDGE_BASE: Record<string, WebSearchResultItem[]> = {
 /**
  * Searches the live web using public endpoints (with timeout) or matches against authoritative knowledge.
  */
+const SEARCH_RATE_WINDOW_MS = 60_000;
+const searchRateWindows = new Map<string, number[]>();
+
+function isSearchAllowed(caller: string, maxPerMin = 30): boolean {
+	const now = Date.now();
+	const window = (searchRateWindows.get(caller) ?? []).filter((t) => now - t < SEARCH_RATE_WINDOW_MS);
+	window.push(now);
+	searchRateWindows.set(caller, window);
+	return window.length <= maxPerMin;
+}
+
 export async function executeWebSearch(
 	query: string,
 	limit: number = 3,
+	callerRole: string = "agent",
 ): Promise<WebSearchResponse> {
+	if (!callerRole?.trim()) throw new Error("executeWebSearch requires callerRole");
+	if (!isSearchAllowed(callerRole, 30)) {
+		throw new Error(`executeWebSearch exceeds rate limit for role '${callerRole}'`);
+	}
 	const cleanQuery = (query || "").trim();
 	const lower = cleanQuery.toLowerCase();
+	console.info(JSON.stringify({ event: "tool.invoke", tool: "web_search", callerRole, query: cleanQuery, ts: Date.now() }));
 
 	// 1. Try DuckDuckGo Instant Answer API for live definition / facts
 	if (typeof fetch === "function") {

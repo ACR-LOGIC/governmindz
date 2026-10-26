@@ -88,6 +88,7 @@ const handler: ToolHandler = async (rawInput, context: ToolContext) => {
 	}
 
 	const input = parseInput(rawInput);
+	console.info(JSON.stringify({ event: "tool.invoke", tool: "zetaris_query", callerRole: context.callerRole, query: input.query, ts: Date.now() }));
 	const client = sharedResilientZetarisClient;
 	const result = await client.query(input.query, { limit: input.limit });
 

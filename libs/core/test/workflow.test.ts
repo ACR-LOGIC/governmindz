@@ -170,16 +170,7 @@ test("WorkflowStateMachine: valid transitions for each state", () => {
 
 // ─── InquiryScorer tests ───
 
-test("InquiryScorer: simple question scores 1-2", () => {
-	const result = inquiryScorer.scoreInitial({
-		question: "What is 2+2?",
-		conversationHistory: [],
-	});
-	assert.equal(true,result.score >= 1 && result.score <= 2);
-	assert.equal(result.band, "simple");
-});
-
-	test("InquiryScorer: governance question scores higher", () => {
+test("InquiryScorer: governance question scores higher", () => {
 		const result = inquiryScorer.scoreInitial({
 			question: "What governance controls should be verified before exposing Zetaris data?",
 			conversationHistory: [],

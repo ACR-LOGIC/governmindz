@@ -14,6 +14,21 @@ import { executeWebSearch } from "../gateway/src/tools/webSearch.tools.js";
 import { getConfigStatus, saveSecureConfig, loadLocalEnvIfPresent } from "../gateway/src/services/cryptoConfig.js";
 loadLocalEnvIfPresent();
 
+function validateConfig(): string[] {
+	const recommended = ["METERLESS_BASE_URL", "METERLESS_API_KEY", "ZETARIS_ORG_ID", "ZETARIS_API_KEY"];
+	const missing = recommended.filter((k) => !process.env[k]?.trim());
+	if (missing.length) {
+		console.warn(`[config] Missing recommended env vars: ${missing.join(", ")}. Some features may be unavailable.`);
+	}
+	const auditSecret = process.env.AUDIT_TRAIL_SECRET;
+	if (!auditSecret || auditSecret.length < 16) {
+		console.warn("[config] AUDIT_TRAIL_SECRET is missing or too short; using insecure default is not recommended.");
+		missing.push("AUDIT_TRAIL_SECRET");
+	}
+	return missing;
+}
+const CONFIG_MISSING = validateConfig();
+
 const PORT = Number(process.env.WEB_PORT || 8787);
 
 // Resolve static root: prefer built React Vite app in apps/web/dist, fall back to apps/web/public
@@ -584,7 +599,7 @@ async function handleHealth(_req: http.IncomingMessage, res: http.ServerResponse
 		zetaris = { ok: false, configured: false, reason: "Zetaris host not configured" };
 	}
 
-	sendJson(res, 200, { meterless, zetaris });
+	sendJson(res, 200, { meterless, zetaris, missingCapabilities: CONFIG_MISSING });
 }
 
 function handleScenarios(_req: http.IncomingMessage, res: http.ServerResponse) {
