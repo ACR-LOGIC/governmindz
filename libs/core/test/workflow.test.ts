@@ -790,7 +790,7 @@ test("Orchestrator: sample mode run completes with state history", async () => {
 	const { Orchestrator } = await import("../../../apps/gateway/src/orchestrator.js");
 	const orchestrator = new Orchestrator({
 		mode: "sample",
-		scenarioPath: "input_examples/01-governance-readiness.json",
+		scenarioPath: "input_examples/01-fragmented-intelligence.json",
 		topicOverride: "Which governance controls should be verified?",
 		maxCycles: 3,
 	});
@@ -827,7 +827,7 @@ test("Orchestrator: audit integrity is maintained", async () => {
 	const { Orchestrator } = await import("../../../apps/gateway/src/orchestrator.js");
 	const orchestrator = new Orchestrator({
 		mode: "sample",
-		scenarioPath: "input_examples/01-governance-readiness.json",
+		scenarioPath: "input_examples/01-fragmented-intelligence.json",
 		maxCycles: 3,
 	});
 

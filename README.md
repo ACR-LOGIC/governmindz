@@ -252,6 +252,22 @@ handling, and unused Meterless capabilities—see [`docs/METERLESS.md`](docs/MET
 
 ---
 
+## Three Hackathon Track Demos
+
+Demo Mode ships exactly three scenarios, one per challenge track. Open
+`npm run web`, choose a card, and click **Start Demo**.
+
+| Track | Demo card | What it demonstrates |
+| :--- | :--- | :--- |
+| **01 — Solving Fragmented Intelligence** | 1. Solving Fragmented Intelligence | Reconciles conflicting ERP, logistics, and risk-feed records with explicit source and freshness provenance. |
+| **02 — The Agent That Can Explain Why** | 2. The Agent That Can Explain Why | Falsifies a pricing hypothesis with retention telemetry and explains the real churn driver with evidence and caveats. |
+| **03 — Reasoning Architecture** | 3. Reasoning Architecture | Applies policy rules, H-MEM precedents, and an auditable decision chain to clinic scheduling requests. |
+
+See [`JUDGE_DEMO_QUICK_REFERENCE.md`](JUDGE_DEMO_QUICK_REFERENCE.md) for the
+per-demo judge walkthrough and CLI commands.
+
+---
+
 ## Command Reference
 
 | Command | Purpose | Platform | Network |
@@ -259,10 +275,10 @@ handling, and unused Meterless capabilities—see [`docs/METERLESS.md`](docs/MET
 | **`npm run web`** | Start full-stack Mission Control web server (`http://127.0.0.1:8787`) | Win / Linux / Mac | Localhost |
 | **`npm run dev`** | Launch Vite frontend with Hot Module Replacement (`http://127.0.0.1:5173`) | Win / Linux / Mac | Localhost |
 | **`npm run build`** | Compile production client bundle (`apps/web/dist`) | Win / Linux / Mac | None |
-| **`npm test`** | Run full automated test suite (**114 / 114 passing**) | Win / Linux / Mac | None |
+| **`npm test`** | Run the full automated test suite | Win / Linux / Mac | None |
 | **`npm run typecheck`** | Run strict TypeScript validation (`tsc --noEmit`) | Win / Linux / Mac | None |
-| **`npm run demo:sample`** | Run standalone CLI multi-agent debate scenario | Win / Linux / Mac | None |
-| **`npm run samples`** | Execute all benchmark scenarios and generate traces | Win / Linux / Mac | None |
+| **`npm run demo:sample`** | Run the default Track 01 CLI demo scenario | Win / Linux / Mac | None |
+| **`npm run samples`** | Execute all three track scenarios and generate traces | Win / Linux / Mac | None |
 | **`npm run test:e2e`** | Execute Playwright E2E browser tests with video capture | Win / Linux / Mac | None |
 | **`npm run demo:dry`** | Validate live Zetaris and Meterless connectivity | Win / Linux / Mac | Yes (if Live) |
 | **`npm run demo`** | Execute live multi-agent deliberation CLI | Win / Linux / Mac | Yes |
@@ -278,16 +294,17 @@ The test suite runs natively across Windows, Linux, and macOS via Node.js's buil
 npm test
 ```
 
-### Complete Test Coverage (**114 / 114 Passing**):
-1. **Cryptographic Audit Chain Verifier Tests (8/8):** RFC-6962 / NIST SP 800-92 proof certificates, genesis anchor validation, corrupted block localization, broken link detection, and HMAC signature verification.
-2. **Parallel Crew Barrier Synchronization Tests (7/7):** Authoritative crew roster management, barrier locking while crews work, soft timeout transitions to `wrapping_up`, divergence detection, and release idempotency.
-3. **Crew Barrier Types & State Tests (7/7):** Type contracts, timestamp-ordered message appending, duplicate message prevention, and readiness predicates.
-4. **Supervisor Multi-Agent Workflow Tests (12/12):** Deliverable classification, concurrent crew execution, independent Hater dual audit, OpenXML `.pptx` generation, PDF-1.4 generation, CSV generation, SVG chart generation, supplementary evidence separation, and release approval gates.
-5. **Gravity Cryptographic Receipts Tests (5/5):** Verification, master key enforcement, and signature validity.
-6. **Meterless Provider Tests (12/12):** URL normalization, auth token resolution, JSON schema output constraints, and retry backoff.
-7. **Zetaris SQL Guard Tests (6/6):** Semicolon parsing, read-only assertion, DDL/write rejection, and HTTP token sanitization.
-8. **12-State Workflow State Machine Tests (34/34):** Formal state transitions, cycle bounds, inquiry scoring, intervention triggers, and audit hash-chain integrity.
-9. **Scheduler & Resilience Tests (47/47):** Concurrent execution scheduling, circuit breaker tripping/recovery, and adversarial stress testing.
+### Core Coverage Areas:
+1. **Cryptographic Audit Chain Verifier:** RFC-6962 / NIST SP 800-92 proof certificates, genesis anchor validation, corrupted block localization, broken link detection, and HMAC signature verification.
+2. **Parallel Crew Barrier Synchronization:** Authoritative crew roster management, barrier locking while crews work, soft timeout transitions to `wrapping_up`, divergence detection, and release idempotency.
+3. **Crew Barrier Types & State:** Type contracts, timestamp-ordered message appending, duplicate message prevention, and readiness predicates.
+4. **Supervisor Multi-Agent Workflow:** Deliverable classification, concurrent crew execution, independent Hater dual audit, OpenXML `.pptx` generation, PDF-1.4 generation, CSV generation, SVG chart generation, supplementary evidence separation, and release approval gates.
+5. **Gravity Cryptographic Receipts:** Verification, master key enforcement, and signature validity.
+6. **Meterless Provider:** URL normalization, auth token resolution, JSON schema output constraints, and retry backoff.
+7. **Zetaris SQL Guard:** Semicolon parsing, read-only assertion, DDL/write rejection, and HTTP token sanitization.
+8. **12-State Workflow State Machine:** Formal state transitions, cycle bounds, inquiry scoring, intervention triggers, and audit hash-chain integrity.
+9. **Scheduler & Resilience:** Concurrent execution scheduling, circuit breaker tripping/recovery, and adversarial stress testing.
+10. **Demo Presentation Queue & Track Demos:** Paced message reveal, immediate operational-event draining, pause/resume/reset, and Playwright coverage for all three track scenarios.
 
 ---
 
@@ -321,6 +338,8 @@ User Prompt ➔ Deliverable Contract ➔ Design Assistant ➔ Physical File ➔ 
 ## Hackathon Submission Metadata
 
 - **Event:** Open Agent Hackathon 2026 (October 22–27, 2026)
-- **Track:** Track 02 — The Agent That Can Explain Why
+- **Primary track:** Track 02 — The Agent That Can Explain Why
+- **Demo tracks:** Track 01 — Solving Fragmented Intelligence · Track 02 — The Agent That Can Explain Why · Track 03 — Reasoning Architecture
+- **Judging focus:** Impact 30 · Technical 20 · Innovation 15 · Demo 15 · Product & UX 10 · Sponsor Tech 10
 - **Repository:** [https://github.com/ACR-LOGIC/governmindz](https://github.com/ACR-LOGIC/governmindz)
 - **License:** Apache-2.0 / MIT

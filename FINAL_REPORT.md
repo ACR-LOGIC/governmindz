@@ -7,7 +7,7 @@
 
 - **System:** GOVERNMINDZ — Role-Separated AI Agent Deliberation, Parallel Research Crews (Data & Web), Barrier Synchronization, Deliverable Contract Enforcement, and Cryptographic Audit Trail Platform.
 - **Repository:** `https://github.com/ACR-LOGIC/governmindz`
-- **Active Branch:** `fix/ci-demo-credentials` (clean working tree, fully synchronized with `origin/fix/ci-demo-credentials`).
+- **Active Branch:** `main` (clean working tree, verified against `origin/main`).
 - **Core Technology Stack:**
   - **Frontend:** React 19, TypeScript, Vite 8, Tailwind CSS v4, Lucide React, Server-Sent Events (SSE) streaming client.
   - **Backend:** Node.js 22, TypeScript ESM, SQLite (via `better-sqlite3`), 12-state deterministic workflow engine, SHA-256 HMAC cryptographic audit chain.
@@ -19,44 +19,20 @@
 
 ---
 
-## 2. Automated Test Results (100% Pass Rate across 138 Tests)
+## 2. Verification (current `main`)
 
-| Test Category | Engine / Framework | Tests Run | Passed | Failed | Status |
-|---|---|---|---|---|---|
-| **Cryptographic Audit Chain Verifier** | Node.js Test Runner | 8 | 8 | 0 | ✅ PASS |
-| **Parallel Crew Barrier Synchronization** | Node.js Test Runner | 7 | 7 | 0 | ✅ PASS |
-| **Crew Barrier Types & State Predicates** | Node.js Test Runner | 7 | 7 | 0 | ✅ PASS |
-| **Supervisor Multi-Agent Workflow & Artifacts** | Node.js Test Runner | 12 | 12 | 0 | ✅ PASS |
-| **Gravity Receipt & Crypto** | Node.js Test Runner | 5 | 5 | 0 | ✅ PASS |
-| **Meterless Runtime Provider** | Node.js Test Runner | 12 | 12 | 0 | ✅ PASS |
-| **Zetaris SQL Guard & Policy Gate** | Node.js Test Runner | 6 | 6 | 0 | ✅ PASS |
-| **12-State Deterministic Engine** | Node.js Test Runner | 34 | 34 | 0 | ✅ PASS |
-| **Scheduler & Adversarial Resilience** | Node.js Test Runner | 47 | 47 | 0 | ✅ PASS |
-| **Browser E2E (Mission Control)** | Playwright (Chromium) | 6 | 6 | 0 | ✅ PASS |
-| **Total Automated System Tests** | **Full System Stack** | **144** | **144** | **0** | **100% PASS** |
+| Check | Command | Result |
+|---|---|---|
+| **TypeScript typecheck** | `npm run typecheck` | ✅ PASS |
+| **Unit & integration suite** | `npm test` | ✅ 160 tests · 155 passed · 5 skipped · 0 failed |
+| **Production build** | `npm run build` | ✅ PASS (49 modules transformed) |
+| **Browser E2E suite** | `npx playwright test` | ✅ 8 / 8 passed |
+| **Track demo E2E** | `npx playwright test tests/e2e/demo-scenarios.spec.ts` | ✅ 3 / 3 track demos completed |
+| **Demo CLI smoke test** | `npm run test:sample` | ✅ PASS |
 
-### Test Verification Confirmation:
-- **Backend Unit & Integration Suite (`npm test`):**
-  ```
-  # tests 114
-  # suites 0
-  # pass 114
-  # fail 0
-  # cancelled 0
-  # skipped 0
-  # todo 0
-  # duration_ms ~30s
-  ```
-- **TypeScript Typecheck (`npm run typecheck`):**
-  ```
-  > tsc --noEmit
-  0 diagnostic errors.
-  ```
-- **Client Production Build (`npm run build`):**
-  ```
-  ✓ 44 modules transformed.
-  Built in ~600ms (apps/web/dist)
-  ```
+The browser E2E coverage runs all three hackathon track demos end to end in
+deterministic Demo Mode and asserts that each reaches its final synthesis card
+without a run failure.
 
 ---
 

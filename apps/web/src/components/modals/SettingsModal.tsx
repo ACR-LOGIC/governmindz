@@ -192,11 +192,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 	}, [isOpen]);
 
 	useEffect(() => {
+		if (!isOpen) return;
 		const unsub = ttsService.subscribe((isSpeaking, seatId) => {
 			setSpeakingSeat(isSpeaking ? seatId || null : null);
 		});
 		return unsub;
-	}, []);
+	}, [isOpen]);
 
 	if (!isOpen) return null;
 

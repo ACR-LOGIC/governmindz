@@ -15,12 +15,12 @@ async function main() {
 
 		const output = await runDebate({
 			mode: "sample",
-			scenarioPath: "input_examples/01-regulatory-risk.json",
+			scenarioPath: "input_examples/01-fragmented-intelligence.json",
 			eventSink: (event) => events.push(event),
 		});
 
 		assert.equal(output.mode, "sample");
-		assert.equal(output.scenarioId, "regulatory-risk");
+		assert.equal(output.scenarioId, "fragmented-intelligence");
 		assert.equal(output.zetaris.isSynthetic, true);
 		assert.equal(output.zetaris.evidenceSource, "sample_scenario");
 		assert.equal(output.auditIntegrity, true);
