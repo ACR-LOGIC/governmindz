@@ -28,6 +28,7 @@ import { ResearchCrewRunner } from "./application/ResearchCrewRunner.js";
 import { calculateInquiryScore } from "./application/InquiryScorePolicy.js";
 import { collectDissentSources } from "./application/DissentSourceCollector.js";
 import { isConversationalInquiry } from "./application/ConversationalInquiryPolicy.js";
+import { emitCouncilAssignments } from "./application/CouncilAssignmentEmitter.js";
 
 interface ZetarisToolResult {
 	columns: string[];
@@ -302,50 +303,7 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 	}
 
 	// Emit Council Member task assignments & role acknowledgments
-	const councilAssignments = [
-		{
-			agentId: "FactChecker",
-			role: "Fact Checker",
-			task: "Inspect database schemas, primary keys, and catalog definitions across Zetaris.",
-			acknowledgment: "On it. Let me check the database schemas and records.",
-		},
-		{
-			agentId: "CloudArchitect",
-			role: "Cloud Architect",
-			task: "Evaluate zero-trust architecture, statement limits, and least-privilege cloud safety.",
-			acknowledgment: "Got it. Reviewing zero-trust safety and boundaries.",
-		},
-		{
-			agentId: "Synthesizer",
-			role: "Synthesizer",
-			task: "Reconcile claims, balance evidence uncertainty, and build unified consensus.",
-			acknowledgment: "Understood. Standing by to reconcile findings and evaluate consensus.",
-		},
-		{
-			agentId: "RivalChallenger",
-			role: "Rival Challenger",
-			task: "Subject findings to independent adversarial scrutiny and challenge unsupported claims.",
-			acknowledgment: "I’ll take a look. Checking for unverified assumptions.",
-		},
-		{
-			agentId: "Thinker",
-			role: "Thinker Agent",
-			task: "Probe operational contingency angles and boundary conditions.",
-			acknowledgment: "On it. Exploring hidden governance angles and edge cases.",
-		},
-	];
-
-	for (const a of councilAssignments) {
-		eventSink?.({
-			type: "agent_task_assigned",
-			agentId: a.agentId,
-			role: a.role,
-			taskId: `task_${a.agentId}_${randomUUID()}`,
-			task: a.task,
-			acknowledgment: a.acknowledgment,
-			timestamp: Date.now(),
-		});
-	}
+	emitCouncilAssignments(eventSink);
 
 	const configuredCrewTimeout = Number(process.env.CREW_TIMEOUT_MS);
 	const crewTimeoutMs =
