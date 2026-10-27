@@ -14,6 +14,7 @@ test("DemoPresentationQueue: paces burst of messages into ordered sequential rev
 			maxReadingTimeMs: 30,
 			transitionDelayMs: 20,
 			wordsPerMinute: 300,
+			audioTimeoutMs: 0,
 		},
 	);
 
@@ -70,6 +71,7 @@ test("DemoPresentationQueue: Pause and Resume controls freeze and continue prese
 			minReadingTimeMs: 40,
 			maxReadingTimeMs: 40,
 			transitionDelayMs: 20,
+			audioTimeoutMs: 0,
 		},
 	);
 
@@ -108,6 +110,7 @@ test("DemoPresentationQueue: Reset clears queue and prevents stale events from l
 		{
 			minReadingTimeMs: 80,
 			transitionDelayMs: 40,
+			audioTimeoutMs: 0,
 		},
 	);
 

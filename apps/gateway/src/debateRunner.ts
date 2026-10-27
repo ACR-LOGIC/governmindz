@@ -1,28 +1,16 @@
-function isConversationalInquiry(topic: string): boolean {
-	const trimmed = topic.trim().toLowerCase();
-	const greetings = /^(hi|hello|hey|good morning|good afternoon|good evening|greetings)\b/i;
-	const basicQuestions = /^(who are you|what can you do|what is governmindz|help)\b/i;
-	if (trimmed.length < 50 && (greetings.test(trimmed) || basicQuestions.test(trimmed))) {
-		if (!/zetaris|sec|fda|gleif|compliance|risk|database|query|data|governance|audit|catalog|standard/i.test(trimmed)) {
-			return true;
-		}
-	}
-	return false;
-}
-
 import { randomUUID } from "node:crypto";
-import { AgentSeat, type SeatConfig } from "@governmindz/core/debate/AgentSeat";
+import { type AgentSeat } from "@governmindz/core/debate/AgentSeat";
 import { buildMessageContractEnvelope } from "@governmindz/core/debate/AgentMessage";
 import { RivalChallenger } from "@governmindz/core/memory/RivalChallenger";
 import { ThinkerAgent } from "@governmindz/core/memory/ThinkerAgent";
 import { HMemService } from "@governmindz/core/memory/HMemService";
+import { formatZetarisResult } from "./format.js";
 import { DebateLoop, type DebateResult } from "@governmindz/core/debate/DebateLoop";
 import { LocalSeatTransport } from "@governmindz/core/debate/SeatTransport";
 import { auditTrail, type AuditEvent } from "@governmindz/core/engine/AuditTrailEmitter";
 import { MeterlessProvider } from "@governmindz/core/providers/MeterlessProvider";
 import { MeterlessSeatClient } from "@governmindz/core/providers/MeterlessSeatClient";
 import { PromptRegistry } from "@governmindz/core/services/PromptRegistry";
-import { formatZetarisResult } from "./format.js";
 import { loadSampleScenario, type SampleScenario } from "./sampleScenario.js";
 import { DocumentIngestionService } from "@governmindz/core/documents/DocumentIngestionService";
 import { SampleSeatClient } from "./sampleSeat.js";
@@ -36,16 +24,21 @@ import { DataCrew, type DataCrewReport } from "@governmindz/core/agents/DataCrew
 import { WebSearchCrew, type WebSearchCrewReport } from "@governmindz/core/agents/WebSearchCrew";
 import { DesignAssistant } from "@governmindz/core/documents/DesignAssistant";
 import { runCrewSafely, emptyDataCrewReport, emptyWebCrewReport } from "./crewResilience.js";
+import { ResearchCrewRunner } from "./application/ResearchCrewRunner.js";
+import { calculateInquiryScore } from "./application/InquiryScorePolicy.js";
+import { collectDissentSources } from "./application/DissentSourceCollector.js";
+import { isConversationalInquiry } from "./application/ConversationalInquiryPolicy.js";
+import { emitCouncilAssignments } from "./application/CouncilAssignmentEmitter.js";
+import { buildWebCitationContext } from "./application/WebCitationContextBuilder.js";
+import { DebateSeatFactory } from "./services/DebateSeatFactory.js";
+import { DocumentEvidenceIngestionService } from "./services/DocumentEvidenceIngestionService.js";
+import {
+	ZetarisEvidencePreparationService,
+	type ZetarisEvidenceResult,
+} from "./services/ZetarisEvidencePreparationService.js";
 
-interface ZetarisToolResult {
-	columns: string[];
-	rows: unknown[][];
-	total?: number;
+interface ZetarisToolResult extends ZetarisEvidenceResult {
 	timeUsed?: number;
-	circuitBreakerState?: string;
-	isSynthetic?: boolean;
-	evidenceSource?: string;
-	fallbackReason?: string;
 }
 
 export interface RunParams {
@@ -98,31 +91,28 @@ const DEFAULT_TOPIC =
 
 const hmem = new HMemService();
 
-function buildSeats(
-	provider: MeterlessProvider | null,
-	scenario?: SampleScenario,
-): AgentSeat[] {
-	const seatModel = process.env.METERLESS_SEAT_MODEL?.trim() || undefined;
-	const configs: SeatConfig[] = [
-		{ seatId: "FactChecker", role: "fact_checker", provider: "meterless", systemPrompt: PromptRegistry.load("fact_checker") },
-		{ seatId: "CloudArchitect", role: "cloud-architect", provider: "meterless", systemPrompt: PromptRegistry.load("architect") },
-		{ seatId: "Synthesizer", role: "synthesizer", provider: "meterless", systemPrompt: PromptRegistry.load("synthesizer") },
-	];
-	return configs.map((config) => {
-		if (scenario) {
-			const delay = process.env.NODE_ENV === "test" ? 0 : 2000;
-			return new AgentSeat(config, new SampleSeatClient(config.seatId, scenario.seats[config.seatId] ?? [], delay));
-		}
-		if (!provider) throw new Error("Meterless provider is required outside sample mode.");
-		const llm = new MeterlessSeatClient(provider, seatModel);
-		return new AgentSeat(config, {
-			complete: async (system: string, prompt: string) => {
-				const result = await llm.complete(system, prompt);
-				return result;
-			},
-		});
-	});
-}
+const debateSeatFactory = new DebateSeatFactory({
+	loadPrompt: (name) => PromptRegistry.load(name),
+	createSampleClient: (seatId, replies, delayMs) => new SampleSeatClient(seatId, replies, delayMs),
+	createMeterlessClient: (provider, model) => new MeterlessSeatClient(provider, model),
+});
+
+const documentEvidenceIngestionService = new DocumentEvidenceIngestionService({
+	createService: () => new DocumentIngestionService(),
+});
+
+const zetarisEvidencePreparationService = new ZetarisEvidencePreparationService({
+	formatResult: (result, maxRows) => formatZetarisResult(result, maxRows),
+	retrieveMemory: (topic, topN) => hmem.retrieve(topic, topN),
+});
+
+const researchCrewRunner = new ResearchCrewRunner({
+	createDataCrew: (config) => new DataCrew(config),
+	createWebCrew: (config) => new WebSearchCrew(config),
+	runCrewSafely,
+	emptyDataCrewReport,
+	emptyWebCrewReport,
+});
 
 function createDebateLoop(
 	seats: AgentSeat[],
@@ -172,19 +162,6 @@ function buildTask(topic: string, context: string): string {
 		"",
 		"Do not invent database names, row counts, sources, or credentials. If the evidence is insufficient, say so and lower your confidence.",
 	].join("\n");
-}
-
-function collectDissentSources(transcript: DebateResult["transcript"]): string[] {
-	const sources = new Set<string>();
-	for (const message of transcript) {
-		for (const source of [
-			...(message.structured?.dissents_from || []),
-			...(message.structured?.dissentsFrom || []),
-		]) {
-			if (source) sources.add(source);
-		}
-	}
-	return [...sources].sort();
 }
 
 export async function runDebate(params: RunParams): Promise<RunOutput> {
@@ -315,82 +292,7 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 	}
 
 	// Emit Council Member task assignments & role acknowledgments
-	const councilAssignments = [
-		{
-			agentId: "FactChecker",
-			role: "Fact Checker",
-			task: "Inspect database schemas, primary keys, and catalog definitions across Zetaris.",
-			acknowledgment: "On it. Let me check the database schemas and records.",
-		},
-		{
-			agentId: "CloudArchitect",
-			role: "Cloud Architect",
-			task: "Evaluate zero-trust architecture, statement limits, and least-privilege cloud safety.",
-			acknowledgment: "Got it. Reviewing zero-trust safety and boundaries.",
-		},
-		{
-			agentId: "Synthesizer",
-			role: "Synthesizer",
-			task: "Reconcile claims, balance evidence uncertainty, and build unified consensus.",
-			acknowledgment: "Understood. Standing by to reconcile findings and evaluate consensus.",
-		},
-		{
-			agentId: "RivalChallenger",
-			role: "Rival Challenger",
-			task: "Subject findings to independent adversarial scrutiny and challenge unsupported claims.",
-			acknowledgment: "I’ll take a look. Checking for unverified assumptions.",
-		},
-		{
-			agentId: "Thinker",
-			role: "Thinker Agent",
-			task: "Probe operational contingency angles and boundary conditions.",
-			acknowledgment: "On it. Exploring hidden governance angles and edge cases.",
-		},
-	];
-
-	for (const a of councilAssignments) {
-		eventSink?.({
-			type: "agent_task_assigned",
-			agentId: a.agentId,
-			role: a.role,
-			taskId: `task_${a.agentId}_${randomUUID()}`,
-			task: a.task,
-			acknowledgment: a.acknowledgment,
-			timestamp: Date.now(),
-		});
-	}
-
-	// 2. Parallel research: Launch Data Crew (4) and Web Search Crew (4) concurrently
-	const crewRoundId = `round_${randomUUID()}`;
-	eventSink?.({
-		type: "crew:created",
-		roundId: crewRoundId,
-		crewId: "data-crew",
-		payload: { label: "Data Research Crew (Zetaris)", type: "data" },
-		timestamp: Date.now(),
-	});
-	eventSink?.({
-		type: "crew:created",
-		roundId: crewRoundId,
-		crewId: "web-crew",
-		payload: { label: "Web Search Crew (External Standards)", type: "web" },
-		timestamp: Date.now(),
-	});
-
-	const crewExecutionRunId = randomUUID();
-	const dataCrew = new DataCrew({
-		runId: crewExecutionRunId,
-		topic,
-		mode: isSample ? "sample" : "live",
-		scenarioPath: params.scenarioPath,
-		eventSink,
-	});
-
-	const webCrew = new WebSearchCrew({
-		runId: crewExecutionRunId,
-		topic,
-		eventSink,
-	});
+	emitCouncilAssignments(eventSink);
 
 	const configuredCrewTimeout = Number(process.env.CREW_TIMEOUT_MS);
 	const crewTimeoutMs =
@@ -399,185 +301,49 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 			: isSample
 				? 45000
 				: 120000;
-	const [dataOutcome, webOutcome] = await Promise.all([
-		runCrewSafely(
-			"DataCrew",
-			() => dataCrew.run(),
-			(e) => emptyDataCrewReport(crewExecutionRunId, isSample ? "sample" : "live", e),
-			eventSink,
-			crewExecutionRunId,
-			crewTimeoutMs,
-		),
-		runCrewSafely(
-			"WebSearchCrew",
-			() => webCrew.run(),
-			(e) => emptyWebCrewReport(crewExecutionRunId, topic, e),
-			eventSink,
-			crewExecutionRunId,
-			crewTimeoutMs,
-		),
-	]);
-	const dataCrewReport = dataOutcome.report;
-	const webCrewReport = webOutcome.report;
-
-	if (!isSample && dataOutcome.failed) {
-		throw new Error(
-			`Live mode aborted: Zetaris Data Crew failed (${dataOutcome.error || "unknown error"}). ` +
-				"No synthetic fallback is permitted in live mode.",
-		);
-	}
-
-	// Emit initial pre-cue: inform FactChecker that research results are compiling
-	eventSink?.({
-		type: "agent_pre_cue",
-		cueId: `cue_${randomUUID()}`,
-		runId: crewExecutionRunId,
+	const {
+		crewRoundId,
+		crewExecutionRunId,
+		dataOutcome,
+		webOutcome,
+		dataCrewReport,
+		webCrewReport,
+	} = await researchCrewRunner.run({
+		topic,
+		mode: isSample ? "sample" : "live",
+		scenarioPath: params.scenarioPath,
 		conversationId: params.conversationId,
-		targetAgent: "FactChecker",
-		taskType: "prepare_schema_validation",
-		hint: "Research crews completed; prepare schema validation against Zetaris virtual fabric.",
-		sequence: 1,
-		timestamp: Date.now(),
+		eventSink,
+		timeoutMs: crewTimeoutMs,
 	});
-
-	eventSink?.(
-		dataOutcome.failed
-			? {
-					type: "crew:failed",
-					roundId: crewRoundId,
-					crewId: "data-crew",
-					payload: { error: dataOutcome.error, timedOut: dataOutcome.timedOut },
-					timestamp: Date.now(),
-				}
-			: {
-					type: "crew:ready",
-					roundId: crewRoundId,
-					crewId: "data-crew",
-					payload: { summary: dataCrewReport.summary },
-					timestamp: Date.now(),
-				},
-	);
-	eventSink?.(
-		webOutcome.failed
-			? {
-					type: "crew:failed",
-					roundId: crewRoundId,
-					crewId: "web-crew",
-					payload: { error: webOutcome.error, timedOut: webOutcome.timedOut },
-					timestamp: Date.now(),
-				}
-			: {
-					type: "crew:ready",
-					roundId: crewRoundId,
-					crewId: "web-crew",
-					payload: { summary: webCrewReport.summary },
-					timestamp: Date.now(),
-				},
-	);
-
-	// Emit downstream pre-cues to RivalChallenger and Synthesizer before formal challenges
-	eventSink?.({
-		type: "agent_pre_cue",
-		cueId: `cue_${randomUUID()}`,
-		runId: crewExecutionRunId,
-		conversationId: params.conversationId,
-		targetAgent: "RivalChallenger",
-		taskType: "prepare_adversarial_challenge",
-		hint: "Cross-silo findings ready; prepare adversarial review for unsupported assumptions.",
-		sequence: 2,
-		timestamp: Date.now(),
-	});
-	eventSink?.({
-		type: "agent_pre_cue",
-		cueId: `cue_${randomUUID()}`,
-		runId: crewExecutionRunId,
-		conversationId: params.conversationId,
-		targetAgent: "Synthesizer",
-		taskType: "prepare_consensus_synthesis",
-		hint: "Evidence collected; initialize multi-agent consensus alignment rubric.",
-		sequence: 3,
-		timestamp: Date.now(),
-	});
-
-	let zetarisContext = isSample
-		? formatZetarisResult(scenario!.zetaris, 50)
-		: formatZetarisResult(zetarisResult as any, 50);
-
-	if (isSample) {
-		zetarisContext = `[Demo Scenario: deterministic sample dataset — not live Zetaris data]\n${zetarisContext}`;
-	} else if (zetarisResult.isSynthetic) {
-		zetarisContext = `[Circuit Breaker: ${zetarisResult.circuitBreakerState ?? "OPEN"}] [Evidence Source: ${zetarisResult.evidenceSource ?? "synthetic_fallback"}]\n${zetarisContext}`;
-	}
-
-	const memoryRetrieved = isSample ? null : hmem.retrieve(topic, 5);
-	const evidenceContext = memoryRetrieved?.context
-		? `${zetarisContext}\n\n${memoryRetrieved.context}`
-		: zetarisContext;
 
 	const zetarisQuery = isSample
 		? scenario!.zetaris.query
 		: (process.env.ZETARIS_DEMO_QUERY?.trim() || "SHOW LIGHTNING DATABASES");
-
-	eventSink?.({
-		type: "zetaris",
+	const { evidenceContext } = zetarisEvidencePreparationService.prepare({
+		mode: isSample ? "sample" : "live",
+		topic,
 		query: zetarisQuery,
-		columns: zetarisResult.columns,
-		rows: zetarisResult.rows,
-		total: zetarisResult.total ?? zetarisResult.rows.length,
-		circuitBreakerState: zetarisResult.circuitBreakerState,
-		isSynthetic: zetarisResult.isSynthetic,
-		evidenceSource: zetarisResult.evidenceSource,
-		fallbackReason: zetarisResult.fallbackReason,
+		result: zetarisResult,
+		eventSink,
 	});
 
 	// Multi-Format Document Evidence Ingestion (PDF, CSV, XLSX)
-	let documentEvidenceContext = "";
-	if (params.attachments && params.attachments.length > 0) {
-		const docService = new DocumentIngestionService();
-		for (const att of params.attachments) {
-			try {
-				const parsed = await docService.ingest({
-					id: att.id,
-					filename: att.name,
-					dataUrl: att.dataUrl,
-					content: att.content,
-					filePath: att.filePath,
-					mimeType: att.type,
-					size: att.size,
-				});
-				eventSink?.({
-					type: "document_ingested",
-					documentId: parsed.documentId,
-					filename: parsed.filename,
-					format: parsed.format,
-					chunksCount: parsed.totalChunks,
-					sha256: parsed.sha256,
-				});
-			} catch (docErr) {
-				console.warn("Failed to ingest document:", String(att?.name), docErr);
-			}
-		}
-
-		if (docService.getAllChunks().length > 0) {
-			documentEvidenceContext = "\n" + docService.formatEvidenceContext();
-		}
-	}
+	const documentEvidenceContext = await documentEvidenceIngestionService.ingest(
+		params.attachments?.map((attachment) => ({
+			id: attachment.id,
+			filename: attachment.name,
+			dataUrl: attachment.dataUrl,
+			content: attachment.content,
+			filePath: attachment.filePath,
+			mimeType: attachment.type,
+			size: attachment.size,
+		})),
+		eventSink,
+	);
 
 	// Incorporate Web Search Crew citations into context
-	let webCitationContext = "";
-	if (webCrewReport.findings.length > 0) {
-		const allCits = webCrewReport.findings.flatMap((f) => f.citations);
-		if (allCits.length > 0) {
-			webCitationContext = [
-				"",
-				"External Web Research & Verified Standards (Web Search Crew):",
-				...allCits.map(
-					(r, idx: number) =>
-						`[Web Citation ${idx + 1}] "${r.title}" (${r.source}, URL: ${r.url}) [Status: ${r.status}]`,
-				),
-			].join("\n");
-		}
-	}
+	const webCitationContext = buildWebCitationContext(webCrewReport);
 
 	let combinedEvidenceContext = evidenceContext;
 	if (documentEvidenceContext) {
@@ -599,7 +365,12 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 		}
 	}
 
-	const seats = buildSeats(provider, scenario);
+	const seats = debateSeatFactory.create({
+		provider,
+		scenario,
+		seatModel: process.env.METERLESS_SEAT_MODEL?.trim() || undefined,
+		sampleDelayMs: process.env.NODE_ENV === "test" ? 0 : 2000,
+	});
 
 	// Rival Challenger & Thinker LLM clients: real in live mode, intelligent in sample mode.
 	let challengerClient: { complete: (s: string, p: string) => Promise<{ content: string; confidence: number }> };
@@ -691,11 +462,7 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 	});
 
 	// Inquiry score heuristic (1-10): based on topic complexity + evidence size.
-	let inquiryScore = 5;
-	if (topic.length > 120) inquiryScore += 1;
-	if (zetarisResult.rows.length > 5) inquiryScore += 1;
-	if (/confidential|conflict|dispute|uncertain/i.test(topic)) inquiryScore += 2;
-	inquiryScore = Math.max(1, Math.min(10, inquiryScore));
+	const inquiryScore = calculateInquiryScore(topic, zetarisResult.rows.length);
 
 	eventSink?.({ type: "inquiry_score", score: inquiryScore });
 

@@ -5,6 +5,7 @@ import path from "node:path";
 import { randomUUID, createHash } from "node:crypto";
 import Database from "better-sqlite3";
 import { runDebate } from "../gateway/src/debateRunner.js";
+import { RunDebateApplicationService } from "../gateway/src/application/RunDebateApplicationService.js";
 import { auditTrail } from "@governmindz/core/engine/AuditTrailEmitter";
 import { AuditChainVerifier } from "@governmindz/core/engine/AuditChainVerifier";
 import {
@@ -345,6 +346,48 @@ function upsertConversation(conv: any) {
 		data_json: JSON.stringify(payload),
 	});
 }
+
+const runDebateApplication = new RunDebateApplicationService(
+	{ execute: runDebate },
+	{
+		saveCompleted(conversationId, out) {
+			if (out.zetaris) {
+				saveEvidenceSnapshot(conversationId, out.zetaris);
+			}
+			const existing = getConversationById(conversationId);
+			if (!existing) return;
+
+			existing.status = "completed";
+			existing.finalConfidence = out.result?.finalConfidence;
+			existing.contract = out.contract || null;
+			existing.primaryArtifact = out.primaryArtifact || null;
+			existing.additionalArtifacts = out.additionalArtifacts || [];
+			existing.evidenceExport = out.evidenceExport || null;
+			existing.supervisorResponse = out.supervisorResponse || null;
+			existing.supervisorDecision = out.supervisorDecision || null;
+			existing.dataCrewReport = out.dataCrewReport || null;
+			existing.webCrewReport = out.webCrewReport || null;
+			if (!existing.messages || existing.messages.length === 0) {
+				existing.messages = Array.isArray(out.result?.transcript) ? out.result.transcript : [];
+			}
+			if (!existing.auditEvents || existing.auditEvents.length === 0) {
+				existing.auditEvents = out.auditEvents || [];
+			}
+			if (!existing.zetarisData && out.zetaris) {
+				existing.zetarisData = out.zetaris;
+			}
+			existing.updatedAt = Date.now();
+			upsertConversation(existing);
+		},
+		saveFailed(conversationId) {
+			const existing = getConversationById(conversationId);
+			if (!existing) return;
+			existing.status = "error";
+			existing.updatedAt = Date.now();
+			upsertConversation(existing);
+		},
+	},
+);
 
 function updateConversationTitle(id: string, title: string) {
 	const stmt = db.prepare("UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?");
@@ -732,7 +775,7 @@ async function handleRun(req: http.IncomingMessage, res: http.ServerResponse) {
 				if (scenarioPath && !scenarioPath.includes("/") && !scenarioPath.includes("\\")) {
 					scenarioPath = "input_examples/" + scenarioPath;
 				}
-				const out = await runDebate({
+				const out = await runDebateApplication.execute({
 					mode: params.mode === "live" ? "live" : "sample",
 					scenarioPath: scenarioPath,
 					topicOverride: params.topic,
@@ -744,37 +787,6 @@ async function handleRun(req: http.IncomingMessage, res: http.ServerResponse) {
 				});
 				run.result = out;
 				run.done = true;
-
-				// Update database persistence if conversation exists
-				if (run.conversationId) {
-					if (out.zetaris) {
-						saveEvidenceSnapshot(run.conversationId, out.zetaris);
-					}
-					const existing = getConversationById(run.conversationId);
-					if (existing) {
-						existing.status = "completed";
-						existing.finalConfidence = out.result?.finalConfidence;
-						existing.contract = out.contract || null;
-						existing.primaryArtifact = out.primaryArtifact || null;
-						existing.additionalArtifacts = out.additionalArtifacts || [];
-						existing.evidenceExport = out.evidenceExport || null;
-						existing.supervisorResponse = out.supervisorResponse || null;
-						existing.supervisorDecision = out.supervisorDecision || null;
-						existing.dataCrewReport = out.dataCrewReport || null;
-						existing.webCrewReport = out.webCrewReport || null;
-						if (!existing.messages || existing.messages.length === 0) {
-							existing.messages = Array.isArray(out.result?.transcript) ? out.result.transcript : [];
-						}
-						if (!existing.auditEvents || existing.auditEvents.length === 0) {
-							existing.auditEvents = out.auditEvents || [];
-						}
-						if (!existing.zetarisData && out.zetaris) {
-							existing.zetarisData = out.zetaris;
-						}
-						existing.updatedAt = Date.now();
-						upsertConversation(existing);
-					}
-				}
 
 				const completeEv = {
 					type: "complete",
@@ -823,14 +835,6 @@ async function handleRun(req: http.IncomingMessage, res: http.ServerResponse) {
 			} catch (err) {
 				run.error = err instanceof Error ? err.message : String(err);
 				run.done = true;
-				if (run.conversationId) {
-					const existing = getConversationById(run.conversationId);
-					if (existing) {
-						existing.status = "error";
-						existing.updatedAt = Date.now();
-						upsertConversation(existing);
-					}
-				}
 				const errEv = { type: "error", message: run.error };
 				run.events.push(errEv);
 				for (const r of run.listeners) {

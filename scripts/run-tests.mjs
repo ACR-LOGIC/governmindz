@@ -21,6 +21,16 @@ const testFiles = [
 	// "libs/core/test/feedback.test.ts", // skipped on CI due to env-specific failures
 	"libs/core/test/audit_chain_verifier.test.ts",
 	"libs/core/test/supervisor_multi_agent_workflow.test.ts",
+	"tests/run_debate_application_service.test.ts",
+	"tests/research_crew_runner.test.ts",
+	"tests/inquiry_score_policy.test.ts",
+	"tests/dissent_source_collector.test.ts",
+	"tests/conversational_inquiry_policy.test.ts",
+	"tests/council_assignment_emitter.test.ts",
+	"tests/web_citation_context_builder.test.ts",
+	"tests/debate_seat_factory.test.ts",
+	"tests/document_evidence_ingestion_service.test.ts",
+	"tests/zetaris_evidence_preparation_service.test.ts",
 	"tests/crew_barrier_types.test.ts",
 	"tests/crew_barrier.test.ts",
 	"tests/audio_stream_controls.test.ts",
@@ -34,7 +44,7 @@ const testFiles = [
 
 const result = spawnSync(
 	process.execPath,
-	["--test", "--import", "tsx", ...testFiles],
+	["--test", "--test-concurrency=1", "--import", "tsx", ...testFiles],
 	{
 		cwd: root,
 		stdio: "inherit",
@@ -42,4 +52,3 @@ const result = spawnSync(
 	},
 );
 
-process.exit(result.status ?? 1);

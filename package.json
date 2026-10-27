@@ -12,6 +12,7 @@
 		"typecheck": "tsc --noEmit",
 		"build": "vite build",
 		"dev": "vite",
+		"test:sample": "node --import tsx tests/run_debate_sample.test.ts",
 		"test:e2e": "playwright test",
 		"test": "node scripts/run-tests.mjs",
 		"demo": "node --env-file=.env.local --import tsx apps/gateway/src/main.ts",
