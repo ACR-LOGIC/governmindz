@@ -45,7 +45,7 @@ const testFiles = [
 
 const result = spawnSync(
 	process.execPath,
-	["--test", "--import", "tsx", ...testFiles],
+	["--test", "--test-concurrency=1", "--import", "tsx", ...testFiles],
 	{
 		cwd: root,
 		stdio: "inherit",
