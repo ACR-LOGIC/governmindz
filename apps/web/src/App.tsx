@@ -29,6 +29,7 @@ import { getAgentProfile } from "./services/agentRegistry";
 import { assignHumanCouncil, generateTaskDelegationAnnouncement } from "./services/nameRotation";
 import { ttsService } from "./services/ttsService";
 import { CrewBarrierManager } from "./services/crewBarrier";
+import { evaluateWebConversation } from "./services/conversationEvaluation";
 import { AgentArrivalManager } from "./services/agentArrivalManager";
 import { SynchronizedExitCoordinator } from "./services/synchronizedExitCoordinator";
 import { DemoPresentationQueue, type DemoQueueState } from "./services/demoPresentationQueue";
@@ -298,6 +299,7 @@ export const App: React.FC = () => {
 	const activeConv = useMemo(() => {
 		return conversations.find((c) => c.id === activeId) || null;
 	}, [conversations, activeId]);
+	const activeEvaluation = activeConv ? evaluateWebConversation(activeConv) : null;
 
 	// Load initial health and scenarios
 	const loadInitData = useCallback(async () => {
@@ -1278,7 +1280,7 @@ export const App: React.FC = () => {
 										inquiryScore={activeConv.inquiryScore}
 										finalConfidence={activeConv.finalConfidence}
 										rounds={2}
-										auditVerified={true}
+										auditVerified={false}
 										onSelectAgent={handleSelectAgentFromChat}
 										onStartPrompt={(prompt) => handleSendMessage(prompt, activeScenarioItem?.file)}
 										onRateMessage={handleRateMessage}
@@ -1328,10 +1330,10 @@ export const App: React.FC = () => {
 					agents={agentRoster}
 					onSelectAgent={handleSelectAgent}
 					chartData={chartData}
-					finalConfidence={activeConv?.finalConfidence}
-					consensusReached={activeConv?.status === "completed"}
+					finalConfidence={activeEvaluation?.evaluated ? activeConv?.finalConfidence : undefined}
+					consensusReached={Boolean(activeEvaluation?.evaluated && activeConv?.status === "completed")}
 					consensusMethod="synthesizer"
-					auditVerified={true}
+					auditVerified={false}
 					auditCount={activeConv?.auditEvents?.length || 0}
 					inquiryScore={activeConv?.inquiryScore}
 					currentRound={(activeConv?.messages?.filter((m) => m.round === 1).length ?? 0) > 0 ? 1 : 0}

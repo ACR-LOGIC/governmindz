@@ -6,7 +6,7 @@
 export * from "./providers/ProviderInterface";
 export * from "./providers/ProviderFactory";
 export * from "./providers/MeterlessProvider";
-export * from "./providers/MeterlessTokenStore";
+
 export * from "./providers/MeterlessSeatClient";
 
 export * from "./integrations/zetarisClient";
@@ -28,6 +28,7 @@ export * from "./debate/AgentSeat";
 export * from "./debate/SemanticTranscriptCompressor";
 
 export * from "./scoring/ConfidenceScorer";
+export * from "./scoring/ConversationEvaluation";
 
 export * from "./database/DatabaseService";
 
@@ -77,4 +78,6 @@ export * from "./orchestration/DeliverableContract";
 export * from "./agents/DataCrew";
 export * from "./agents/WebSearchCrew";
 export * from "./documents/DesignAssistant";
+export * from "./exports/zip";
+export * from "./exports/ConversationExport";
 export * from "./orchestration/SupervisorWorkflow";

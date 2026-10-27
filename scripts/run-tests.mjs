@@ -24,6 +24,8 @@ const testFiles = [
 	"tests/run_debate_application_service.test.ts",
 	"tests/research_crew_runner.test.ts",
 	"tests/inquiry_score_policy.test.ts",
+	"tests/conversation_evaluation.test.ts",
+	"tests/conversation_export.test.ts",
 	"tests/dissent_source_collector.test.ts",
 	"tests/conversational_inquiry_policy.test.ts",
 	"tests/council_assignment_emitter.test.ts",
