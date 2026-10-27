@@ -4,13 +4,13 @@ import { buildMessageContractEnvelope } from "@governmindz/core/debate/AgentMess
 import { RivalChallenger } from "@governmindz/core/memory/RivalChallenger";
 import { ThinkerAgent } from "@governmindz/core/memory/ThinkerAgent";
 import { HMemService } from "@governmindz/core/memory/HMemService";
+import { formatZetarisResult } from "./format.js";
 import { DebateLoop, type DebateResult } from "@governmindz/core/debate/DebateLoop";
 import { LocalSeatTransport } from "@governmindz/core/debate/SeatTransport";
 import { auditTrail, type AuditEvent } from "@governmindz/core/engine/AuditTrailEmitter";
 import { MeterlessProvider } from "@governmindz/core/providers/MeterlessProvider";
 import { MeterlessSeatClient } from "@governmindz/core/providers/MeterlessSeatClient";
 import { PromptRegistry } from "@governmindz/core/services/PromptRegistry";
-import { formatZetarisResult } from "./format.js";
 import { loadSampleScenario, type SampleScenario } from "./sampleScenario.js";
 import { DocumentIngestionService } from "@governmindz/core/documents/DocumentIngestionService";
 import { SampleSeatClient } from "./sampleSeat.js";
@@ -32,16 +32,13 @@ import { emitCouncilAssignments } from "./application/CouncilAssignmentEmitter.j
 import { buildWebCitationContext } from "./application/WebCitationContextBuilder.js";
 import { DebateSeatFactory } from "./services/DebateSeatFactory.js";
 import { DocumentEvidenceIngestionService } from "./services/DocumentEvidenceIngestionService.js";
+import {
+	ZetarisEvidencePreparationService,
+	type ZetarisEvidenceResult,
+} from "./services/ZetarisEvidencePreparationService.js";
 
-interface ZetarisToolResult {
-	columns: string[];
-	rows: unknown[][];
-	total?: number;
+interface ZetarisToolResult extends ZetarisEvidenceResult {
 	timeUsed?: number;
-	circuitBreakerState?: string;
-	isSynthetic?: boolean;
-	evidenceSource?: string;
-	fallbackReason?: string;
 }
 
 export interface RunParams {
@@ -102,6 +99,11 @@ const debateSeatFactory = new DebateSeatFactory({
 
 const documentEvidenceIngestionService = new DocumentEvidenceIngestionService({
 	createService: () => new DocumentIngestionService(),
+});
+
+const zetarisEvidencePreparationService = new ZetarisEvidencePreparationService({
+	formatResult: (result, maxRows) => formatZetarisResult(result, maxRows),
+	retrieveMemory: (topic, topN) => hmem.retrieve(topic, topN),
 });
 
 const researchCrewRunner = new ResearchCrewRunner({
@@ -315,35 +317,15 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 		timeoutMs: crewTimeoutMs,
 	});
 
-	let zetarisContext = isSample
-		? formatZetarisResult(scenario!.zetaris, 50)
-		: formatZetarisResult(zetarisResult as any, 50);
-
-	if (isSample) {
-		zetarisContext = `[Demo Scenario: deterministic sample dataset — not live Zetaris data]\n${zetarisContext}`;
-	} else if (zetarisResult.isSynthetic) {
-		zetarisContext = `[Circuit Breaker: ${zetarisResult.circuitBreakerState ?? "OPEN"}] [Evidence Source: ${zetarisResult.evidenceSource ?? "synthetic_fallback"}]\n${zetarisContext}`;
-	}
-
-	const memoryRetrieved = isSample ? null : hmem.retrieve(topic, 5);
-	const evidenceContext = memoryRetrieved?.context
-		? `${zetarisContext}\n\n${memoryRetrieved.context}`
-		: zetarisContext;
-
 	const zetarisQuery = isSample
 		? scenario!.zetaris.query
 		: (process.env.ZETARIS_DEMO_QUERY?.trim() || "SHOW LIGHTNING DATABASES");
-
-	eventSink?.({
-		type: "zetaris",
+	const { evidenceContext } = zetarisEvidencePreparationService.prepare({
+		mode: isSample ? "sample" : "live",
+		topic,
 		query: zetarisQuery,
-		columns: zetarisResult.columns,
-		rows: zetarisResult.rows,
-		total: zetarisResult.total ?? zetarisResult.rows.length,
-		circuitBreakerState: zetarisResult.circuitBreakerState,
-		isSynthetic: zetarisResult.isSynthetic,
-		evidenceSource: zetarisResult.evidenceSource,
-		fallbackReason: zetarisResult.fallbackReason,
+		result: zetarisResult,
+		eventSink,
 	});
 
 	// Multi-Format Document Evidence Ingestion (PDF, CSV, XLSX)
