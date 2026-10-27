@@ -38,6 +38,7 @@ import { DesignAssistant } from "@governmindz/core/documents/DesignAssistant";
 import { runCrewSafely, emptyDataCrewReport, emptyWebCrewReport } from "./crewResilience.js";
 import { ResearchCrewRunner } from "./application/ResearchCrewRunner.js";
 import { calculateInquiryScore } from "./application/InquiryScorePolicy.js";
+import { collectDissentSources } from "./application/DissentSourceCollector.js";
 
 interface ZetarisToolResult {
 	columns: string[];
@@ -182,19 +183,6 @@ function buildTask(topic: string, context: string): string {
 		"",
 		"Do not invent database names, row counts, sources, or credentials. If the evidence is insufficient, say so and lower your confidence.",
 	].join("\n");
-}
-
-function collectDissentSources(transcript: DebateResult["transcript"]): string[] {
-	const sources = new Set<string>();
-	for (const message of transcript) {
-		for (const source of [
-			...(message.structured?.dissents_from || []),
-			...(message.structured?.dissentsFrom || []),
-		]) {
-			if (source) sources.add(source);
-		}
-	}
-	return [...sources].sort();
 }
 
 export async function runDebate(params: RunParams): Promise<RunOutput> {
