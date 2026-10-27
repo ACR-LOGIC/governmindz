@@ -32,6 +32,7 @@ import { emitCouncilAssignments } from "./application/CouncilAssignmentEmitter.j
 import { buildWebCitationContext } from "./application/WebCitationContextBuilder.js";
 import { DebateSeatFactory } from "./services/DebateSeatFactory.js";
 import { DocumentEvidenceIngestionService } from "./services/DocumentEvidenceIngestionService.js";
+import { DebateSupportAgentFactory } from "./services/DebateSupportAgentFactory.js";
 import {
 	ZetarisEvidencePreparationService,
 	type ZetarisEvidenceResult,
@@ -104,6 +105,12 @@ const documentEvidenceIngestionService = new DocumentEvidenceIngestionService({
 const zetarisEvidencePreparationService = new ZetarisEvidencePreparationService({
 	formatResult: (result, maxRows) => formatZetarisResult(result, maxRows),
 	retrieveMemory: (topic, topN) => hmem.retrieve(topic, topN),
+});
+
+const debateSupportAgentFactory = new DebateSupportAgentFactory({
+	createMeterlessClient: (provider, model) => new MeterlessSeatClient(provider, model),
+	createRivalChallenger: (client) => new RivalChallenger(client),
+	createThinkerAgent: (client) => new ThinkerAgent(client),
 });
 
 const researchCrewRunner = new ResearchCrewRunner({
@@ -372,83 +379,13 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 		sampleDelayMs: process.env.NODE_ENV === "test" ? 0 : 2000,
 	});
 
-	// Rival Challenger & Thinker LLM clients: real in live mode, intelligent in sample mode.
-	let challengerClient: { complete: (s: string, p: string) => Promise<{ content: string; confidence: number }> };
-	let thinkerClient: { complete: (s: string, p: string) => Promise<{ content: string; confidence: number }> };
-
-	if (isSample) {
-		const delay = process.env.NODE_ENV === "test" ? 0 : 500;
-		challengerClient = {
-			complete: async (_s: string, p: string) => {
-				if (delay > 0) await new Promise((r) => setTimeout(r, delay));
-				const hasContradiction = /conflict|dispute|contradiction|disagree|breach/i.test(p);
-				if (hasContradiction) {
-					return {
-						content: JSON.stringify({
-							challenge: "Adversarial Challenge: Evidence conflicts with primary catalog schema or authorization rules.",
-							verifiedClaims: [],
-							unsupportedClaims: ["Conflicting claim requires verified cryptographic receipt"],
-							correctedPosition: "Align claim with verified database metadata before continuing.",
-							confidence: 0.85,
-						}),
-						confidence: 0.85,
-					};
-				}
-				return {
-					content: JSON.stringify({
-						challenge: "",
-						verifiedClaims: ["Evidence verified against catalog"],
-						unsupportedClaims: [],
-						correctedPosition: "",
-						confidence: 0.9,
-					}),
-					confidence: 0.9,
-				};
-			},
-		};
-
-		thinkerClient = {
-			complete: async () => {
-				if (delay > 0) await new Promise((r) => setTimeout(r, delay));
-				const isClinic = /clinic|scheduling|acuity|or1|cardiac|patient|hospital/i.test(topic);
-				const isGovernance = /governance|database|lightning|zetaris|finance/i.test(topic);
-
-				let questionText = "@FactChecker @CloudArchitect — Good initial proposals, but let us probe an edge case: what are our contingency protocols and secondary review procedures before we finalize this consensus?";
-				let questionReason = "Edge-case contingency and policy limit verification.";
-
-				if (isClinic) {
-					questionText = "@FactChecker @CloudArchitect — Solid initial triage, but let us probe an edge case before we lock this down: what is our protocol if severe transit or weather delays hit the 15-minute ICU transfer for REQ-704? Do we have a backup intermediate care telemetry bed reserved to hold them safely?";
-					questionReason = "Contingency risk: transit and weather delays could impact ICU transfer timeline.";
-				} else if (isGovernance) {
-					questionText = "@FactChecker @CloudArchitect — Before we lock in consensus, what are our secondary access review procedures and retention schedules for the confidential finance_demo source? Are there policy override exceptions we need to document?";
-					questionReason = "Unexplored governance angle: retention schedules and access review audit frequencies.";
-				}
-
-				return {
-					content: JSON.stringify({
-						questions: [
-							{
-								question: questionText,
-								assignedTo: ["FactChecker", "CloudArchitect"],
-								reason: questionReason,
-							},
-						],
-						summary: "Probed critical contingency protocol and retention boundaries.",
-					}),
-					confidence: 0.88,
-				};
-			},
-		};
-	} else {
-		const seatModel = process.env.METERLESS_SEAT_MODEL?.trim() || undefined;
-		const llm = new MeterlessSeatClient(provider!, seatModel);
-		challengerClient = {
-			complete: async (s: string, p: string) => llm.complete(s, p),
-		};
-		thinkerClient = challengerClient;
-	}
-	const rivalChallenger = new RivalChallenger(challengerClient as any);
-	const thinkerAgent = new ThinkerAgent(thinkerClient as any);
+	const { rivalChallenger, thinkerAgent } = debateSupportAgentFactory.create({
+		mode: isSample ? "sample" : "live",
+		topic,
+		provider,
+		model: process.env.METERLESS_SEAT_MODEL?.trim() || undefined,
+		delayMs: process.env.NODE_ENV === "test" ? 0 : 500,
+	});
 
 	// 3. Hater independently challenges both crews separately
 	const crewChallenges = await rivalChallenger.challengeCrewsIndependently({
