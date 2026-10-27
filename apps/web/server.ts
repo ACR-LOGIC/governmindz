@@ -11,7 +11,6 @@ import {
 	credibilityManager,
 	computeCredibilityMetrics,
 	COLD_START_PRIORS,
-	type AgentCredibilityRecord,
 } from "@governmindz/core/kernel/CredibilityManager";
 import { HMemService } from "@governmindz/core/memory/HMemService";
 import { MeterlessProvider } from "@governmindz/core/providers/MeterlessProvider";
@@ -47,8 +46,12 @@ const PORT = Number(process.env.WEB_PORT || 8787);
 
 // Resolve static root: prefer built React Vite app in apps/web/dist, fall back to apps/web/public
 const DIST_DIR = path.resolve(process.cwd(), "apps/web/dist");
-const PUBLIC_DIR = path.resolve(process.cwd(), "apps/web/public");
-const ROOT = fs.existsSync(DIST_DIR) ? DIST_DIR : PUBLIC_DIR;
+const ROOT = DIST_DIR;
+if (!fs.existsSync(DIST_DIR)) {
+	console.warn(
+		"[GovernMindz] apps/web/dist is missing. Run `npm run build` before starting the web server (npm start/web do this automatically).",
+	);
+}
 
 // ============================================================
 // SQLite Conversation Persistence
@@ -669,10 +672,17 @@ async function handleRun(req: http.IncomingMessage, res: http.ServerResponse) {
 				return;
 			}
 			try {
-				await zetarisQueryHandler(
+				const probe = (await zetarisQueryHandler(
 					{ query: "SELECT 1", limit: 1 },
 					{ callerRole: "analyst", correlationId: randomUUID() },
-				);
+				)) as any;
+				if (probe?.isSynthetic) {
+					sendJson(res, 503, {
+						error:
+							"Live mode unavailable: Zetaris returned a synthetic fallback. No demo or synthetic data is permitted in live mode.",
+					});
+					return;
+				}
 			} catch (err: any) {
 				sendJson(res, 503, {
 					error: `Live mode unavailable: Zetaris connection failed (${err?.message || "unknown error"}). No synthetic fallback is used in live mode.`,
@@ -891,7 +901,14 @@ async function handleHealth(_req: http.IncomingMessage, res: http.ServerResponse
 				{ query: "SELECT 1", limit: 1 },
 				{ callerRole: "analyst", correlationId: randomUUID() },
 			)) as any;
-			zetaris = { ok: true, configured: true, rows: r.rows ? r.rows.length : 0 };
+			zetaris = r?.isSynthetic
+				? {
+						ok: false,
+						configured: true,
+						rows: 0,
+						reason: "Zetaris is unreachable; the provider returned synthetic fallback data.",
+					}
+				: { ok: true, configured: true, rows: r.rows ? r.rows.length : 0 };
 		} catch (e) {
 			zetaris = { ok: false, configured: true, reason: String(e) };
 		}

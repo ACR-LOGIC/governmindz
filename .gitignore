@@ -14,6 +14,8 @@ data/
 test-results/
 playwright-report/
 blob-report/
+test-artifacts-supervisor/
+logs/*.jsonl
 *.webm
 *.mp4
 *.local

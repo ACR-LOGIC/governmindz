@@ -3,12 +3,7 @@ import {
 	Users,
 	TrendingUp,
 	ShieldCheck,
-	Sparkles,
-	ExternalLink,
 	CheckCircle2,
-	AlertTriangle,
-	HelpCircle,
-	Bot,
 	BrainCircuit,
 	Radio,
 } from "lucide-react";
@@ -43,7 +38,6 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 	consensusMethod,
 	auditVerified,
 	auditCount,
-	inquiryScore,
 	currentRound,
 	isOpen,
 }) => {

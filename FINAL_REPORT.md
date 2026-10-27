@@ -38,9 +38,9 @@
 ### Test Verification Confirmation:
 - **Backend Unit & Integration Suite (`npm test`):**
   ```
-  # tests 138
+  # tests 114
   # suites 0
-  # pass 138
+  # pass 114
   # fail 0
   # cancelled 0
   # skipped 0

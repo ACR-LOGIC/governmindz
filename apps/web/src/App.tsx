@@ -40,9 +40,6 @@ import type {
 	HealthStatus,
 	ScenarioItem,
 	AgentProfile,
-	AuditEvent,
-	ZetarisData,
-	WorkflowTimelineEvent,
 } from "./types";
 
 
@@ -197,7 +194,6 @@ export const App: React.FC = () => {
 	const [agentRoster, setAgentRoster] = useState<AgentProfile[]>([]);
 	const [arrivalManager] = useState(() => new AgentArrivalManager({}, (roster) => setAgentRoster(roster)));
 	const arrivalConversationRef = useRef<string | null>(null);
-	const acknowledgedAgentsRef = useRef<Set<string>>(new Set());
 
 	useEffect(() => {
 		return () => {
