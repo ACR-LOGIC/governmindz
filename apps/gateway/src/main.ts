@@ -186,11 +186,12 @@ function writeSampleArtifacts(
 	resultDebate: DebateResult,
 	auditEvents: AuditEvent[],
 ): { outputPath: string; logPath: string } {
+	const scenarioBase = path.basename(scenarioPath, ".json");
 	const outputPath =
 		process.env.SAMPLE_OUTPUT?.trim() ||
-		path.join("output_examples", `${scenario.id}.json`);
+		path.join("output_examples", `${scenarioBase}.json`);
 	const logPath =
-		process.env.SAMPLE_LOG?.trim() || path.join("logs", `${scenario.id}.jsonl`);
+		process.env.SAMPLE_LOG?.trim() || path.join("logs", `${scenarioBase}.jsonl`);
 	const resolvedOutput = path.resolve(process.cwd(), outputPath);
 	fs.mkdirSync(path.dirname(resolvedOutput), { recursive: true });
 	const payload = {
