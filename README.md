@@ -264,7 +264,9 @@ Demo Mode ships exactly three scenarios, one per challenge track. Open
 | **03 — Reasoning Architecture** | 3. Reasoning Architecture | Applies policy rules, H-MEM precedents, and an auditable decision chain to clinic scheduling requests. |
 
 See [`JUDGE_DEMO_QUICK_REFERENCE.md`](JUDGE_DEMO_QUICK_REFERENCE.md) for the
-per-demo judge walkthrough and CLI commands.
+per-demo judge walkthrough and CLI commands. For the complete Track 03
+start-to-finish tutorial, including every evidence, record, and credential
+step, see [`TRACK_03_REASONING_GUIDED_DEMO.md`](TRACK_03_REASONING_GUIDED_DEMO.md).
 
 ---
 
