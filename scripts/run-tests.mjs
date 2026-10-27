@@ -23,6 +23,7 @@ const testFiles = [
 	"libs/core/test/supervisor_multi_agent_workflow.test.ts",
 	"tests/run_debate_application_service.test.ts",
 	"tests/run_debate_sample.test.ts",
+	"tests/research_crew_runner.test.ts",
 	"tests/crew_barrier_types.test.ts",
 	"tests/crew_barrier.test.ts",
 	"tests/audio_stream_controls.test.ts",

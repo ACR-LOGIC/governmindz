@@ -36,6 +36,7 @@ import { DataCrew, type DataCrewReport } from "@governmindz/core/agents/DataCrew
 import { WebSearchCrew, type WebSearchCrewReport } from "@governmindz/core/agents/WebSearchCrew";
 import { DesignAssistant } from "@governmindz/core/documents/DesignAssistant";
 import { runCrewSafely, emptyDataCrewReport, emptyWebCrewReport } from "./crewResilience.js";
+import { ResearchCrewRunner } from "./application/ResearchCrewRunner.js";
 
 interface ZetarisToolResult {
 	columns: string[];
@@ -97,6 +98,14 @@ const DEFAULT_TOPIC =
 	"Assess the Zetaris data available to this agent and recommend a governance-safe debate workflow for the Open Agent Hackathon.";
 
 const hmem = new HMemService();
+
+const researchCrewRunner = new ResearchCrewRunner({
+	createDataCrew: (config) => new DataCrew(config),
+	createWebCrew: (config) => new WebSearchCrew(config),
+	runCrewSafely,
+	emptyDataCrewReport,
+	emptyWebCrewReport,
+});
 
 function buildSeats(
 	provider: MeterlessProvider | null,
@@ -360,38 +369,6 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 		});
 	}
 
-	// 2. Parallel research: Launch Data Crew (4) and Web Search Crew (4) concurrently
-	const crewRoundId = `round_${randomUUID()}`;
-	eventSink?.({
-		type: "crew:created",
-		roundId: crewRoundId,
-		crewId: "data-crew",
-		payload: { label: "Data Research Crew (Zetaris)", type: "data" },
-		timestamp: Date.now(),
-	});
-	eventSink?.({
-		type: "crew:created",
-		roundId: crewRoundId,
-		crewId: "web-crew",
-		payload: { label: "Web Search Crew (External Standards)", type: "web" },
-		timestamp: Date.now(),
-	});
-
-	const crewExecutionRunId = randomUUID();
-	const dataCrew = new DataCrew({
-		runId: crewExecutionRunId,
-		topic,
-		mode: isSample ? "sample" : "live",
-		scenarioPath: params.scenarioPath,
-		eventSink,
-	});
-
-	const webCrew = new WebSearchCrew({
-		runId: crewExecutionRunId,
-		topic,
-		eventSink,
-	});
-
 	const configuredCrewTimeout = Number(process.env.CREW_TIMEOUT_MS);
 	const crewTimeoutMs =
 		Number.isFinite(configuredCrewTimeout) && configuredCrewTimeout > 0
@@ -399,104 +376,20 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 			: isSample
 				? 45000
 				: 120000;
-	const [dataOutcome, webOutcome] = await Promise.all([
-		runCrewSafely(
-			"DataCrew",
-			() => dataCrew.run(),
-			(e) => emptyDataCrewReport(crewExecutionRunId, isSample ? "sample" : "live", e),
-			eventSink,
-			crewExecutionRunId,
-			crewTimeoutMs,
-		),
-		runCrewSafely(
-			"WebSearchCrew",
-			() => webCrew.run(),
-			(e) => emptyWebCrewReport(crewExecutionRunId, topic, e),
-			eventSink,
-			crewExecutionRunId,
-			crewTimeoutMs,
-		),
-	]);
-	const dataCrewReport = dataOutcome.report;
-	const webCrewReport = webOutcome.report;
-
-	if (!isSample && dataOutcome.failed) {
-		throw new Error(
-			`Live mode aborted: Zetaris Data Crew failed (${dataOutcome.error || "unknown error"}). ` +
-				"No synthetic fallback is permitted in live mode.",
-		);
-	}
-
-	// Emit initial pre-cue: inform FactChecker that research results are compiling
-	eventSink?.({
-		type: "agent_pre_cue",
-		cueId: `cue_${randomUUID()}`,
-		runId: crewExecutionRunId,
+	const {
+		crewRoundId,
+		crewExecutionRunId,
+		dataOutcome,
+		webOutcome,
+		dataCrewReport,
+		webCrewReport,
+	} = await researchCrewRunner.run({
+		topic,
+		mode: isSample ? "sample" : "live",
+		scenarioPath: params.scenarioPath,
 		conversationId: params.conversationId,
-		targetAgent: "FactChecker",
-		taskType: "prepare_schema_validation",
-		hint: "Research crews completed; prepare schema validation against Zetaris virtual fabric.",
-		sequence: 1,
-		timestamp: Date.now(),
-	});
-
-	eventSink?.(
-		dataOutcome.failed
-			? {
-					type: "crew:failed",
-					roundId: crewRoundId,
-					crewId: "data-crew",
-					payload: { error: dataOutcome.error, timedOut: dataOutcome.timedOut },
-					timestamp: Date.now(),
-				}
-			: {
-					type: "crew:ready",
-					roundId: crewRoundId,
-					crewId: "data-crew",
-					payload: { summary: dataCrewReport.summary },
-					timestamp: Date.now(),
-				},
-	);
-	eventSink?.(
-		webOutcome.failed
-			? {
-					type: "crew:failed",
-					roundId: crewRoundId,
-					crewId: "web-crew",
-					payload: { error: webOutcome.error, timedOut: webOutcome.timedOut },
-					timestamp: Date.now(),
-				}
-			: {
-					type: "crew:ready",
-					roundId: crewRoundId,
-					crewId: "web-crew",
-					payload: { summary: webCrewReport.summary },
-					timestamp: Date.now(),
-				},
-	);
-
-	// Emit downstream pre-cues to RivalChallenger and Synthesizer before formal challenges
-	eventSink?.({
-		type: "agent_pre_cue",
-		cueId: `cue_${randomUUID()}`,
-		runId: crewExecutionRunId,
-		conversationId: params.conversationId,
-		targetAgent: "RivalChallenger",
-		taskType: "prepare_adversarial_challenge",
-		hint: "Cross-silo findings ready; prepare adversarial review for unsupported assumptions.",
-		sequence: 2,
-		timestamp: Date.now(),
-	});
-	eventSink?.({
-		type: "agent_pre_cue",
-		cueId: `cue_${randomUUID()}`,
-		runId: crewExecutionRunId,
-		conversationId: params.conversationId,
-		targetAgent: "Synthesizer",
-		taskType: "prepare_consensus_synthesis",
-		hint: "Evidence collected; initialize multi-agent consensus alignment rubric.",
-		sequence: 3,
-		timestamp: Date.now(),
+		eventSink,
+		timeoutMs: crewTimeoutMs,
 	});
 
 	let zetarisContext = isSample
