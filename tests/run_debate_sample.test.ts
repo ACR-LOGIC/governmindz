@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
 
-test("runDebate sample mode returns a complete deterministic workflow without live providers", async () => {
+// Run outside node:test worker processes because this full-workflow smoke test
+// exercises better-sqlite3 and can crash when loaded in a test worker on Linux.
+async function main() {
 	const previousNodeEnv = process.env.NODE_ENV;
 	const previousCrewTimeout = process.env.CREW_TIMEOUT_MS;
 	process.env.NODE_ENV = "test";
@@ -42,4 +43,9 @@ test("runDebate sample mode returns a complete deterministic workflow without li
 		if (previousCrewTimeout === undefined) delete process.env.CREW_TIMEOUT_MS;
 		else process.env.CREW_TIMEOUT_MS = previousCrewTimeout;
 	}
+}
+
+main().catch((error: unknown) => {
+	console.error(error);
+	process.exitCode = 1;
 });

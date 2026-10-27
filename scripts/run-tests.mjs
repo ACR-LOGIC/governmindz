@@ -22,7 +22,6 @@ const testFiles = [
 	"libs/core/test/audit_chain_verifier.test.ts",
 	"libs/core/test/supervisor_multi_agent_workflow.test.ts",
 	"tests/run_debate_application_service.test.ts",
-	"tests/run_debate_sample.test.ts",
 	"tests/research_crew_runner.test.ts",
 	"tests/inquiry_score_policy.test.ts",
 	"tests/dissent_source_collector.test.ts",
@@ -53,4 +52,18 @@ const result = spawnSync(
 	},
 );
 
-process.exit(result.status ?? 1);
+if (result.status !== 0) {
+	process.exit(result.status ?? 1);
+}
+
+const sampleResult = spawnSync(
+	process.execPath,
+	["--import", "tsx", "tests/run_debate_sample.test.ts"],
+	{
+		cwd: root,
+		stdio: "inherit",
+		env,
+	},
+);
+
+process.exit(sampleResult.status ?? 1);
