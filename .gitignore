@@ -28,6 +28,7 @@ logs/hmem*.json
 logs/hmem*.db
 .idea/
 .vscode/
+.cursor/
 .agents/
 *.db
 *.db-journal
