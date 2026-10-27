@@ -106,13 +106,11 @@ export class DemoPresentationQueue {
 
 		this.queue.push(item);
 
-		if (this.state === "idle" || this.state === "playing") {
-			if (this.state === "idle") {
-				this.setState("playing");
-			}
-			if (!this.currentTimer && !this.currentItem) {
-				this.processNext();
-			}
+		if (this.state === "idle" || this.state === "completed") {
+			this.setState("playing");
+		}
+		if (this.state === "playing" && !this.currentTimer && !this.currentItem) {
+			this.processNext();
 		}
 	}
 
@@ -178,17 +176,21 @@ export class DemoPresentationQueue {
 	private processNext() {
 		if (this.state !== "playing") return;
 
-		if (this.queue.length === 0) {
-			this.currentItem = null;
-			this.setState("completed");
-			return;
+		while (this.queue.length > 0) {
+			const nextItem = this.queue.shift()!;
+			this.currentItem = nextItem;
+			this.onReveal(nextItem);
+
+			// Operational events are not conversational turns, so drain them
+			// synchronously and only pause for the next visible message.
+			if (nextItem.type === "message") {
+				this.scheduleNextTransition(nextItem);
+				return;
+			}
 		}
 
-		const nextItem = this.queue.shift()!;
-		this.currentItem = nextItem;
-		this.onReveal(nextItem);
-
-		this.scheduleNextTransition(nextItem);
+		this.currentItem = null;
+		this.setState("completed");
 	}
 
 	private scheduleNextTransition(item: DemoDisplayItem | null, customDuration?: number) {

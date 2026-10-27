@@ -1,88 +1,116 @@
-# ✅ Governmindz Hackathon: Complete Judge Demo Quick Reference
+# Judge Demo Quick Reference
 
-## 3-Demo Showcase (15 Minutes)
+Three demos, one per Open Agent Hackathon track. Every demo runs in deterministic
+Demo Mode with no API keys and no network access.
 
-### DEMO 1: Zetaris Multi-Source Company Risk Analysis
-**Windows (PowerShell):**
-```powershell
-$env:GOVERNMINDZ_TOPIC = "Our organization received acquisition offers from 7 Fortune 500 companies (Apple, IBM, Oracle, Walmart, Target, Ford, Tesla). Before accepting any partnership, assess regulatory compliance risk. Use Zetaris to cross-reference: (1) SEC_DATA financial volatility, (2) GLEIF_REST legal entity status, (3) COMPANY_DNS industry risk. Rank all 7 companies by governance risk. Which poses HIGHEST compliance risk?"
-npm run demo
-```
+## Run the demos
 
-**Linux / macOS (Bash/Zsh):**
-```bash
-export GOVERNMINDZ_TOPIC="Our organization received acquisition offers from 7 Fortune 500 companies (Apple, IBM, Oracle, Walmart, Target, Ford, Tesla). Before accepting any partnership, assess regulatory compliance risk. Use Zetaris to cross-reference: (1) SEC_DATA financial volatility, (2) GLEIF_REST legal entity status, (3) COMPANY_DNS industry risk. Rank all 7 companies by governance risk. Which poses HIGHEST compliance risk?"
-npm run demo
-```
-
-**What Judges Hear & See:**
-- Parallel Crews: Data Crew queries 3 Zetaris tables while Web Search Crew retrieves regulatory standards.
-- FactChecker: "Tesla 42% YoY growth anomaly - recommend verification".
-- CloudArchitect: "Oracle missing LEI in GLEIF registry - cannot verify legal entity".
-- Synthesizer: "Policy recommendation: RESTRICTED access for Tesla/Oracle, CONDITIONAL for Ford".
-
----
-
-### DEMO 2: PII Re-identification Risk & Privacy Governance
-**Windows (PowerShell):**
-```powershell
-$env:GOVERNMINDZ_TOPIC = "We want to share NY_TAXI data with researchers. Zetaris, join taxi_trips + drivers + zones + surge_pricing. For each driver, calculate: (1) trip frequency, (2) geographic footprint, (3) earnings profile. Create PII exposure score. Which drivers safe to anonymize? Which must be blocked? What privacy policy?"
-npm run demo
-```
-
-**Linux / macOS (Bash/Zsh):**
-```bash
-export GOVERNMINDZ_TOPIC="We want to share NY_TAXI data with researchers. Zetaris, join taxi_trips + drivers + zones + surge_pricing. For each driver, calculate: (1) trip frequency, (2) geographic footprint, (3) earnings profile. Create PII exposure score. Which drivers safe to anonymize? Which must be blocked? What privacy policy?"
-npm run demo
-```
-
-**What Judges Hear & See:**
-- FactChecker: "Driver D12345: 5,847 trips in 3 zones = 92/100 PII exposure (HIGH)".
-- Thinker: "Even pseudonymized, zone + earnings pattern = re-identifiable".
-- Synthesizer: "Recommend: Block high-exposure drivers OR mandate de-identification".
-
----
-
-### DEMO 3: Interactive Mission Control Web UI (Parallel Crews & Barrier Sync)
-**Windows / Linux / macOS:**
 ```bash
 npm run web
-# Open http://127.0.0.1:8787 in browser
+# Open http://127.0.0.1:8787
 ```
 
-**What Judges See:**
-- Real-time **Parallel Research Crew Bubbles** with independent progress streams.
-- **Barrier Synchronization**: Observational bubbles remain visible until all required crews are ready; posts one combined summary before animated closure.
-- Expressive Character Avatars (FactChecker, CloudArchitect, Synthesizer, RivalChallenger, Thinker, Supervisor, DesignAssistant).
-- **Authoritative Deliverable Card** with direct download links (`.pptx`, `.pdf`, `.csv`, `.svg`) and separate `-evidence.json` exports.
-- **Cryptographic Audit Ledger**: Block-by-block hash chain with NIST SP 800-92 proof validation.
+Demo Mode is selected by default. Pick a card, then click **Start Demo**.
 
----
-
-## Complete Test Suite Verification (**114 / 114 Tests Passing**)
+For a CLI run of the same scenario (works in PowerShell and POSIX shells):
 
 ```bash
-npm test
+node --import tsx apps/gateway/src/sample.ts --scenario input_examples/01-fragmented-intelligence.json
+node --import tsx apps/gateway/src/sample.ts --scenario input_examples/02-explain-why.json
+node --import tsx apps/gateway/src/sample.ts --scenario input_examples/03-reasoning-architecture.json
 ```
-
-- **Cryptographic Audit Chain Verifier:** 8/8 PASS
-- **Parallel Crew Barrier Synchronization:** 7/7 PASS
-- **Crew Barrier Types & State:** 7/7 PASS
-- **Supervisor Multi-Agent Workflow:** 12/12 PASS
-- **Gravity Receipts & Master Key Crypto:** 5/5 PASS
-- **Meterless Runtime Provider:** 12/12 PASS
-- **Zetaris SQL Guard & Policy Gate:** 6/6 PASS
-- **12-State Deterministic Engine:** 34/34 PASS
-- **Scheduler & Adversarial Resilience:** 47/47 PASS
 
 ---
 
-## Competitive Advantage Overview
+## Demo 1 — Track 01: Solving Fragmented Intelligence
 
-| Feature | GovernMindz | Generic LLM Agents |
-| :--- | :--- | :--- |
-| **Data Access** | Read-only SQL guard over 8 federated databases | Unguarded or hallucinated queries |
-| **Research Model** | Concurrent 4-agent Data Crew + 4-agent Web Crew | Single-agent sequential scraping |
-| **Barrier Sync** | Coordinated parallel bubbles with barrier release | Uncoordinated or silent background threads |
-| **Deliverables** | Physical `.pptx`, `.pdf`, `.csv`, `.svg` file generation | Plain text chat substitution |
-| **Audit Trail** | Tamper-evident SHA-256 HMAC hash chain | Ephemeral, unverified chat history |
+**Card:** `1. Solving Fragmented Intelligence`
+
+**What to watch:** The Data Crew reconciles three conflicting supplier records
+(ERP Postgres export, Logistics Ticket API, Vendor Risk feed). The Fact Checker
+attributes every claim to its source and freshness; the Cloud Architect defines a
+provenance-weighted reconciliation rule; the Synthesizer publishes one canonical
+delivery date without inventing missing timestamps.
+
+**What judges want to see:**
+- Discovery and joining of fragmented, heterogeneous data sources.
+- Explicit source-system and freshness attribution.
+- Conflict preservation before resolution, not silent overwriting.
+
+**Look for:** `SUP-8021` resolves to `2026-11-14`; `SUP-4419` stays delivered;
+the final answer cites all three silos and the audit chain stays intact.
+
+---
+
+## Demo 2 — Track 02: The Agent That Can Explain Why
+
+**Card:** `2. The Agent That Can Explain Why`
+
+**What to watch:** The council tests the board's pricing hypothesis against SMB
+retention telemetry. The evidence falsifies it: cohorts with 0% price change
+churned just as hard while p99 latency spiked to 1.8–1.9 seconds. The final
+answer explains the causal chain, cites the telemetry rows, and discloses limits.
+
+**What judges want to see:**
+- Multi-step investigation across data sources.
+- Competing hypotheses and unsupported-claim challenges.
+- An evidence-backed answer that explains *why*, including caveats.
+
+**Look for:** enterprise churn stays at 2.1% despite the same price increase;
+SMB churn tracks reliability degradation; `Final Executive Explanation` appears
+in the final synthesis card.
+
+---
+
+## Demo 3 — Track 03: Reasoning Architecture
+
+**Card:** `3. Reasoning Architecture`
+
+**What to watch:** The agent processes four clinic scheduling requests against
+operational policy rules, historical H-MEM precedents, and audit constraints.
+It allocates the single available operating room to the Level 1 emergency,
+escalates the Level 2 transfer with a telemetry-bay fallback, and queues the
+remaining requests by policy.
+
+**What judges want to see:**
+- A deterministic reasoning path from data to a decision.
+- Policy gates and precedent retrieval before action.
+- Cryptographic auditability of every consequential step.
+
+**Look for:** `REQ-701` gets OR 1; `REQ-704` transfers with a Telemetry Bay B
+fallback; every decision cites a policy rule and a precedent; the audit chain
+reports verified integrity.
+
+---
+
+## Scoring alignment
+
+The hackathon scores Impact 30, Technical 20, Innovation 15, Demo 15,
+Product & UX 10, and Sponsor Tech 10. Each demo is built to make the judge's
+decision easy:
+
+| Criterion | Evidence in the demos |
+| :--- | :--- |
+| Impact | Real supplier, retention, and clinical decision workflows with explicit users and consequences. |
+| Technical | Deterministic sample engine, typed event contracts, barrier synchronization, SQL read-only gate, and SHA-256 audit chain. |
+| Innovation | Role-separated adversarial debate plus provenance-aware reconciliation and policy-gated reasoning. |
+| Demo | Three focused end-to-end runs with visible evidence, disagreement, and final synthesis. |
+| Product & UX | One-card launch, paced multi-agent presentation, pause/resume, and download-ready final decisions. |
+| Sponsor Tech | Zetaris federated evidence and Meterless/NVIDIA model routing are part of the reasoning path, not decoration. |
+
+**Primary submission track:** Track 02 — The Agent That Can Explain Why. The
+other two demos show the same architecture applied to Tracks 01 and 03.
+
+---
+
+## Verification
+
+```bash
+npm run typecheck
+npm test
+npm run build
+npx playwright test tests/e2e/demo-scenarios.spec.ts
+```
+
+The Playwright test launches all three demos and asserts that each reaches its
+final synthesis card without a run failure.

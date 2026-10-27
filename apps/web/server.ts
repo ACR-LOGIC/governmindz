@@ -933,27 +933,20 @@ function handleScenarios(_req: http.IncomingMessage, res: http.ServerResponse) {
 	}
 
 	const PREFERRED_ORDER = [
-		"01-regulatory-risk.json",
-		"02-pii-exposure.json",
-		"03-clinical-safety.json",
 		"01-fragmented-intelligence.json",
 		"02-explain-why.json",
 		"03-reasoning-architecture.json",
 	];
 
 	const titleMap: Record<string, string> = {
-		"01-regulatory-risk.json": "1. Regulatory Risk Analysis (SEC + GLEIF + DNS)",
-		"02-pii-exposure.json": "2. PII Re-identification & Privacy (NY Taxi)",
-		"03-clinical-safety.json": "3. Clinical Trials & Drug Safety (FDA + Trials)",
-		"01-fragmented-intelligence.json": "4. Supply Chain Intelligence (Cross-Silo ERP)",
-		"02-explain-why.json": "5. Why SMB Churn Rose in Q3 (Telemetry)",
-		"03-reasoning-architecture.json": "6. Reasoning Architecture & Policy Gates",
+		"01-fragmented-intelligence.json": "1. Solving Fragmented Intelligence (Cross-Silo ERP)",
+		"02-explain-why.json": "2. The Agent That Can Explain Why (SMB Churn)",
+		"03-reasoning-architecture.json": "3. Reasoning Architecture (Policy Gates & H-MEM)",
 	};
 
-	// Exclude outdated legacy stubs from UI presentation
-	const activeFiles = files.filter(
-		(f) => !["01-governance-readiness.json", "02-federated-evidence.json", "03-audit-explainability.json"].includes(f)
-	);
+	// Only expose the three track demos. Stale benchmark scenarios are ignored
+	// even if an old copy remains on disk.
+	const activeFiles = files.filter((f) => PREFERRED_ORDER.includes(f));
 
 	activeFiles.sort((a, b) => {
 		const idxA = PREFERRED_ORDER.indexOf(a);

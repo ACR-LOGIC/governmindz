@@ -1,6 +1,6 @@
 # ✅ GOVERNMINDZ HACKATHON: COMPLETE SETUP & SUBMISSION VERIFICATION
 
-**Status:** ALL REQUIREMENTS MET & VERIFIED (114 / 114 Automated Tests Passing) ✅
+**Status:** Core requirements verified locally. Run the commands below to reproduce the current results.
 
 ---
 
@@ -60,7 +60,7 @@
 - Native execution on **Windows** (PowerShell / Command Prompt).
 - Native execution on **Linux** (Ubuntu, Debian, Fedora, Arch).
 - Native execution on **macOS** (Apple Silicon M1/M2/M3/M4 & Intel).
-- Verified via `npm test` (**114 / 114 tests passing**).
+- Verified via `npm test` and the three-demo Playwright run.
 
 ---
 
@@ -76,8 +76,11 @@ npm run typecheck
 # Build web application bundle
 npm run build
 
-# Run offline deterministic debate benchmark
+# Run offline deterministic debate benchmark (Track 01 default)
 npm run demo:sample
+
+# Run all three track scenarios end to end
+npx playwright test tests/e2e/demo-scenarios.spec.ts
 
 # Launch interactive web interface
 npm run web

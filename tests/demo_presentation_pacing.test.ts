@@ -39,6 +39,51 @@ test("DemoPresentationQueue: paces burst of messages into ordered sequential rev
 	queue.destroy();
 });
 
+test("DemoPresentationQueue: enqueue restarts a queue that completed before events arrived", () => {
+	const revealed: string[] = [];
+	const queue = new DemoPresentationQueue((item) => {
+		revealed.push(item.id);
+	});
+
+	// A run can call play() before the first SSE event is enqueued.
+	queue.play();
+	assert.equal(queue.getState(), "completed");
+
+	queue.enqueue({ id: "late-1", type: "message", payload: {}, textLength: 10 });
+	assert.equal(queue.getState(), "playing");
+	assert.deepEqual(revealed, ["late-1"]);
+
+	queue.destroy();
+});
+
+test("DemoPresentationQueue: operational events drain without consuming reading time", async () => {
+	const revealed: string[] = [];
+	const queue = new DemoPresentationQueue(
+		(item) => {
+			revealed.push(item.id);
+		},
+		() => {},
+		{
+			minReadingTimeMs: 60,
+			maxReadingTimeMs: 60,
+			transitionDelayMs: 10,
+			audioTimeoutMs: 0,
+		},
+	);
+
+	queue.enqueue({ id: "msg-1", type: "message", payload: {}, textLength: 1 });
+	for (let i = 0; i < 10; i += 1) {
+		queue.enqueue({ id: `crew-${i}`, type: "crew", payload: {}, textLength: 1 });
+	}
+	queue.enqueue({ id: "msg-2", type: "message", payload: {}, textLength: 1 });
+
+	await new Promise((r) => setTimeout(r, 220));
+	assert.ok(revealed.includes("crew-9"), "Operational events must drain in order");
+	assert.ok(revealed.includes("msg-2"), "The next message must not wait for operational-event reading time");
+
+	queue.destroy();
+});
+
 test("DemoPresentationQueue: Live mode bypasses queue and reveals immediately with 0 delay", () => {
 	const revealed: string[] = [];
 	const queue = new DemoPresentationQueue((item) => {
