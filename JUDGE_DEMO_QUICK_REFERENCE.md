@@ -81,6 +81,10 @@ remaining requests by policy.
 fallback; every decision cites a policy rule and a precedent; the audit chain
 reports verified integrity.
 
+**Full walkthrough:** [`TRACK_03_REASONING_GUIDED_DEMO.md`](TRACK_03_REASONING_GUIDED_DEMO.md)
+covers the complete Track 03 demo, including the data query, evidence, teams,
+final outputs, full records, and the Zetaris/Meterless setup for Live Mode.
+
 ---
 
 ## Scoring alignment
