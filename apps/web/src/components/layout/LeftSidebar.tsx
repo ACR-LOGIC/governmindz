@@ -7,10 +7,7 @@ import {
 	Check,
 	X,
 	Settings as SettingsIcon,
-	Sparkles,
-	SlidersHorizontal,
 	FileText,
-	ChevronRight,
 } from "lucide-react";
 import type { Conversation, ScenarioItem } from "../../types";
 

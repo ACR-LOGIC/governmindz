@@ -39,5 +39,6 @@ if (existingSecret.length < 16) {
 console.log("\nSetup complete!");
 console.log("To start GovernMindz locally:");
 console.log("  npm install");
-console.log("  npm run web");
-console.log("\nThen open: http://127.0.0.1:8787");
+console.log("  npm start");
+console.log("\n`npm start` builds the frontend, loads .env.local, and starts the web server.");
+console.log("Then open: http://127.0.0.1:8787");

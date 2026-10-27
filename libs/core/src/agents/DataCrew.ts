@@ -88,6 +88,11 @@ export class DataCrew {
 			try {
 				const query = process.env.ZETARIS_DEMO_QUERY?.trim() || "SHOW LIGHTNING DATABASES";
 				const res = await this.config.queryExecutor(query);
+				if (res.isSynthetic) {
+					throw new Error(
+						"Zetaris returned a synthetic fallback; live mode cannot use synthetic evidence.",
+					);
+				}
 				rawResult = {
 					columns: res.columns || [],
 					rows: res.rows || [],

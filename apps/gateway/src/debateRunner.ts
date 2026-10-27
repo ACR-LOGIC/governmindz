@@ -22,12 +22,11 @@ import { auditTrail, type AuditEvent } from "@governmindz/core/engine/AuditTrail
 import { MeterlessProvider } from "@governmindz/core/providers/MeterlessProvider";
 import { MeterlessSeatClient } from "@governmindz/core/providers/MeterlessSeatClient";
 import { PromptRegistry } from "@governmindz/core/services/PromptRegistry";
-import { formatZetarisResult, buildOrchestratorExecutiveSummary } from "./format.js";
+import { formatZetarisResult } from "./format.js";
 import { loadSampleScenario, type SampleScenario } from "./sampleScenario.js";
 import { DocumentIngestionService } from "@governmindz/core/documents/DocumentIngestionService";
 import { SampleSeatClient } from "./sampleSeat.js";
 import { zetarisQueryHandler } from "./tools/zetaris.tools.js";
-import { executeWebSearch, type WebSearchResultItem } from "./tools/webSearch.tools.js";
 import {
 	classifyDeliverable,
 	type DeliverableContract,
@@ -226,6 +225,11 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 			throw new Error(
 				`Live mode aborted: Zetaris Lightning query failed (${reason}). ` +
 					"Live runs never substitute synthetic or demo data. Check ZETARIS_REST_URL, ZETARIS_ORG_ID, ZETARIS_API_KEY, and that the Zetaris service is running.",
+			);
+		}
+		if (result.isSynthetic) {
+			throw new Error(
+				"Live mode aborted: Zetaris returned a synthetic fallback. No demo or synthetic evidence is permitted in live mode.",
 			);
 		}
 		zetarisResult = result;

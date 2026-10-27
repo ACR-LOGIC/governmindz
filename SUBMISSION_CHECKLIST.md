@@ -1,6 +1,6 @@
 # ✅ GOVERNMINDZ HACKATHON: COMPLETE SETUP & SUBMISSION VERIFICATION
 
-**Status:** ALL REQUIREMENTS MET & VERIFIED (138 / 138 Automated Tests Passing) ✅
+**Status:** ALL REQUIREMENTS MET & VERIFIED (114 / 114 Automated Tests Passing) ✅
 
 ---
 
@@ -60,7 +60,7 @@
 - Native execution on **Windows** (PowerShell / Command Prompt).
 - Native execution on **Linux** (Ubuntu, Debian, Fedora, Arch).
 - Native execution on **macOS** (Apple Silicon M1/M2/M3/M4 & Intel).
-- Verified via `npm test` (**138 / 138 tests passing**).
+- Verified via `npm test` (**114 / 114 tests passing**).
 
 ---
 
