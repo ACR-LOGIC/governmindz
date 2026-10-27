@@ -51,7 +51,7 @@ clinical scheduling decision:
 
 ### Requirements
 
-- Node.js 20 or later.
+- Node.js 22 or later.
 - Dependencies installed from the repository root.
 - A browser at `http://127.0.0.1:8787`.
 - No Zetaris, Meterless, or cloud credentials are needed for this walkthrough.
@@ -377,6 +377,27 @@ Below the evidence and caveats, the card exposes:
 deck. The CSV and Word exports contain the conversation, decision, evidence, and
 audit context for further analysis.
 
+### Explore the Zetaris data interactively
+
+After the final message is visible, click **`Explore Zetaris Data`** on the
+final card. The app switches to **Trust & Evidence** and focuses the
+**Interactive Zetaris Evidence Explorer** (`#tour-zetaris`).
+
+You can also open it directly from **Trust & Evidence** under
+**`Zetaris Lightning Federated Data Catalog`**. The explorer supports:
+
+- Searching every column.
+- Sorting by `request_id`, `patient_tier`, `acuity_score`, and the other fields.
+- Inspecting a row field by field and copying its JSON.
+- Switching between table view and raw JSON.
+- Copying the exact SQL.
+- Downloading the full result set as CSV or JSON.
+
+The source badge reads **`Deterministic scenario`** in Demo Mode and
+**`Live Zetaris`** for a live query. The guided product tour covers
+this view as step 6, **Interactive Zetaris Evidence Explorer**. For the full
+Zetaris architecture and credential guide, see [`Zetaris.md`](Zetaris.md).
+
 ### Wait for the artifact
 
 If the final card is visible but the PDF card is not, the presentation queue is
@@ -398,12 +419,17 @@ integrity cockpit.
 - The annotation `read-only · 50 row limit`.
 - The `4 sources discovered` count.
 - The captured clinic queue table with `REQ-701` through `REQ-704`.
-- A search box for filtering the discovered records.
+- An interactive explorer with search, sortable columns, row inspection, raw
+  JSON, copy SQL/row, and CSV/JSON downloads.
+- A source badge: **`Deterministic scenario`** in Demo Mode or **`Live Zetaris`**
+  when the rows came from a live query.
 
 This is where you answer: **“Where is the data query?”** Point to the SQL box,
-then point to the four rows that the decision used. In Demo Mode this is the
-deterministic scenario dataset; in Live Mode the same view exposes a
-**`Verify raw evidence`** link after a run.
+then point to the four rows that the decision used. Click **`Explore Zetaris
+Data`** from the final card or `#tour-zetaris` in this view to demonstrate the
+interactive version. In Demo Mode this is the deterministic scenario dataset;
+in Live Mode the same view exposes a **`Verify raw evidence`** link after a run.
+The full Zetaris guide is [`Zetaris.md`](Zetaris.md).
 
 ### 8.2 Trust & Evidence: the audit ledger
 
@@ -483,7 +509,8 @@ policy checks, synthesis, and delivery.
 
 | What you need | Demo Mode location | Live Mode / server location |
 | :--- | :--- | :--- |
-| **Data query** | `Trust & Evidence → SQL` box; crew log entries during research | Same UI plus `Verify raw evidence` and `/api/evidence/<conversationId>` |
+| **Data query** | `Trust & Evidence → Zetaris Lightning Federated Data Catalog`; click `Explore Zetaris Data`; crew log entries during research | Same UI plus `Verify raw evidence` and `/api/evidence/<conversationId>` |
+| **Interactive data** | `Explore Zetaris Data` on the final card or `Trust & Evidence`; search, sort, inspect rows, raw JSON, CSV/JSON downloads | Same explorer over the live captured dataset |
 | **Evidence** | Final card `Verified Governance Evidence`; crew logs; agent drawer; evidence export JSON | Same UI plus captured evidence snapshot and `/evidence/<conversationId>` page |
 | **Teams** | Right `Agent Roster`; message headers; `Parallel Research Crews` | Same UI; live crew events stream into the same panels |
 | **Conversation** | Center `/ Conversation`; left history; `Details` inspector | Same UI; persisted to `data/conversations.db` |
@@ -499,7 +526,7 @@ policy checks, synthesis, and delivery.
 
 | Question | Answer |
 | :--- | :--- |
-| **Where is the data query?** | `Trust & Evidence → Zetaris Lightning Federated Data Catalog` shows the exact SQL, the read-only/50-row annotation, and the four captured clinic rows. The crew log also shows the query activity during research. |
+| **Where is the data query?** | `Trust & Evidence → Zetaris Lightning Federated Data Catalog` shows the exact SQL, the read-only/50-row annotation, and the four captured clinic rows. Click `Explore Zetaris Data` for search, sorting, row inspection, raw JSON, and CSV/JSON downloads. The crew log also shows the query activity during research. |
 | **Where is the evidence?** | Three visible layers: the final card’s `Verified Governance Evidence`, the agent drawer’s `Reasoning Records & Assertions`, and the crew logs. The full evidence export is downloadable from the final card and stored in `data/artifacts/`. |
 | **Where are the teams?** | Right sidebar `Agent Roster` (16/16 active), the message header on every turn, and the `Parallel Research Crews` panel with separate Data and Web crew logs. |
 | **Where is the conversation?** | The center `Conversation` view, the left history entry `3. Reasoning Architecture`, and the `All Deliberation (12)` filter. Every message also has a `Details` inspector. |
@@ -602,8 +629,13 @@ Fill in the fields:
 - **Zetaris Host / Domain**: for example `sql.lightning.zetaris.io`.
 - **Port**: for example `443`.
 - **Database / Schema**: for example `LIGHTNING_DB`.
-- **Username**.
-- **Password / Secret**.
+- **REST API Key / Token**: required for the live REST query path.
+- **Username**: optional metadata for onboarding/display.
+- **JDBC Password / Secret**: optional; the REST path uses the API key, not the
+  JDBC password.
+
+For the complete variable reference and connection architecture, see
+[`Zetaris.md`](Zetaris.md).
 
 **Cryptographic Audit Trail**
 
@@ -632,6 +664,16 @@ for local use. Never commit `.env.local`, `data/credentials.enc`, or
    ```
 
    Look for `meterless.state: "online"` and `zetaris.ok: true`.
+
+6. For a direct Zetaris-only check:
+
+   ```bash
+   npm run zetaris:check
+   ```
+
+   A healthy result reports `source: "live_zetaris"`, `synthetic: false`, and
+   `circuitBreakerState: "CLOSED"`. The command exits non-zero if the client
+   falls back to synthetic data.
 
 ### Step 5 — Switch to Live Mode
 
@@ -708,9 +750,18 @@ header.
 
 ### Live Mode says Zetaris credentials are missing
 
-Open **`Configure Credentials`** and fill in the Zetaris host, port, database,
-user, and password/secret. Confirm `Zetaris` is green in the header and
-`/api/health` reports `zetaris.ok: true`.
+Open **`Configure Credentials`** and fill in the Zetaris host (or REST URL),
+organization id, and **REST API Key / Token**. The JDBC password is optional for
+the REST query path. Confirm `Zetaris` is green in the header and `/api/health`
+reports `zetaris.ok: true`, then run `npm run zetaris:check`.
+
+### The Zetaris explorer is missing or empty
+
+The **`Explore Zetaris Data`** button appears on the final card only when the
+run captured a Zetaris dataset. In Demo Mode, open **Trust & Evidence** directly
+and scroll to **`Zetaris Lightning Federated Data Catalog`**. If the view is
+empty, wait for the final card, then rerun the scenario. If a live query returned
+no rows, check the catalog/table name and row limit.
 
 ### The server is missing the client build
 
@@ -734,11 +785,14 @@ Use this before a live judging session:
 - [ ] The Track 03 card shows exactly one `Start Demo` action.
 - [ ] The run reaches `Final Synthesized Governance Decision`.
 - [ ] The final card shows the PDF deliverable and evidence export.
+- [ ] `Explore Zetaris Data` opens the explorer with four clinic rows; search,
+      sort, row inspection, raw JSON, CSV, and JSON downloads all work.
 - [ ] `Trust & Evidence` shows the exact SQL, four clinic rows, and a verified
       audit ledger.
 - [ ] `Execution` shows `6 / 10`, `COMPLETED`, and the transition log.
 - [ ] `Export` downloads the Granular Outputs JSON and Audit Ledger JSONL.
-- [ ] For Live Mode, both header indicators are green and `/api/health` is clean.
+- [ ] For Live Mode, both header indicators are green, `/api/health` is clean,
+      and `npm run zetaris:check` reports `synthetic: false`.
 
 ### Reproduce the demo from the CLI
 
@@ -754,7 +808,9 @@ npx playwright test tests/e2e/demo-scenarios.spec.ts
 ```
 
 This test runs all three track demos and asserts that each reaches its final
-synthesis card without a run failure.
+synthesis card without a run failure. It then opens the Track 03 final card,
+clicks **Explore Zetaris Data**, and exercises search, sorting, row inspection,
+raw JSON, and CSV/JSON downloads.
 
 ---
 
@@ -775,6 +831,11 @@ synthesis card without a run failure.
 > Trust & Evidence gives us the exact SQL, the captured rows, and a nine-block
 > SHA-256 audit chain with a genesis anchor and terminal hash. We can tamper with
 > the working copy to prove the chain detects mutation, then restore it.
+>
+> Click Explore Zetaris Data to inspect the same dataset interactively: search
+> the rows, sort by acuity, open a row, switch to raw JSON, or download the
+> evidence as CSV or JSON. This is not a screenshot; it is the exact captured
+> query result behind the decision.
 >
 > The same architecture can run against a real Zetaris catalog and Meterless
 > runtime. That is the path from deterministic demo evidence to production

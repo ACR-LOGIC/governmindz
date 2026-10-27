@@ -35,6 +35,9 @@ Available both as an **interactive Mission Control Web Application** (React 19, 
   - **Design Assistant (1):** Compiles and validates physical artifacts on disk.
 - **Cryptographic Auditability:**
   - Unbroken SHA-256 hash-chained ledger verifying every agent action from genesis block to session completion with NIST SP 800-92 / RFC 6962 attestation certificates.
+- **Interactive Zetaris Evidence Explorer:**
+  - After a run, open **Explore Zetaris Data** from the final card or **Trust & Evidence** to search, sort, inspect rows, switch to raw JSON, copy the exact SQL/row JSON, and download CSV/JSON evidence.
+  - The dataset is labeled as live Zetaris, deterministic scenario, or synthetic fallback. See [`Zetaris.md`](Zetaris.md) for the full integration guide.
 - **Local-First & Meterless Runtime:**
   - Zero-cloud-cost model execution via Meterless Runtime routing to NVIDIA Nemotron 3.5 Lightning 30B with deterministic JSON schema output contracts. Offline demo benchmarks run with zero API keys.
 
@@ -267,6 +270,8 @@ See [`JUDGE_DEMO_QUICK_REFERENCE.md`](JUDGE_DEMO_QUICK_REFERENCE.md) for the
 per-demo judge walkthrough and CLI commands. For the complete Track 03
 start-to-finish tutorial, including every evidence, record, and credential
 step, see [`TRACK_03_REASONING_GUIDED_DEMO.md`](TRACK_03_REASONING_GUIDED_DEMO.md).
+For the Zetaris architecture, data path, credential setup, live-connection
+verification, and explorer details, see [`Zetaris.md`](Zetaris.md).
 
 ---
 
@@ -283,6 +288,7 @@ step, see [`TRACK_03_REASONING_GUIDED_DEMO.md`](TRACK_03_REASONING_GUIDED_DEMO.m
 | **`npm run samples`** | Execute all three track scenarios and generate traces | Win / Linux / Mac | None |
 | **`npm run test:e2e`** | Execute Playwright E2E browser tests with video capture | Win / Linux / Mac | None |
 | **`npm run demo:dry`** | Validate live Zetaris and Meterless connectivity | Win / Linux / Mac | Yes (if Live) |
+| **`npm run zetaris:check`** | Verify the live Zetaris REST query path and fail on synthetic fallback | Win / Linux / Mac | Yes |
 | **`npm run demo`** | Execute live multi-agent deliberation CLI | Win / Linux / Mac | Yes |
 | **`npm run smoke`** | Run preflight API and schema health checks | Win / Linux / Mac | Yes |
 
@@ -306,7 +312,7 @@ npm test
 7. **Zetaris SQL Guard:** Semicolon parsing, read-only assertion, DDL/write rejection, and HTTP token sanitization.
 8. **12-State Workflow State Machine:** Formal state transitions, cycle bounds, inquiry scoring, intervention triggers, and audit hash-chain integrity.
 9. **Scheduler & Resilience:** Concurrent execution scheduling, circuit breaker tripping/recovery, and adversarial stress testing.
-10. **Demo Presentation Queue & Track Demos:** Paced message reveal, immediate operational-event draining, pause/resume/reset, and Playwright coverage for all three track scenarios.
+10. **Demo Presentation Queue & Track Demos:** Paced message reveal, immediate operational-event draining, pause/resume/reset, Playwright coverage for all three track scenarios, and interactive Zetaris evidence exploration (search, sort, row inspection, raw JSON, CSV/JSON downloads).
 
 ---
 

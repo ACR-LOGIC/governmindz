@@ -35,6 +35,7 @@ interface GroupConversationProps {
 	onPauseDemo?: () => void;
 	onResumeDemo?: () => void;
 	onResetDemo?: () => void;
+	onExploreZetaris?: () => void;
 }
 
 export const GroupConversation: React.FC<GroupConversationProps> = ({
@@ -61,6 +62,7 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 	onPauseDemo,
 	onResumeDemo,
 	onResetDemo,
+	onExploreZetaris,
 }) => {
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -457,6 +459,7 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 									consensusMethod={consensusMethod}
 									rounds={rounds}
 									auditVerified={auditVerified}
+									onExploreZetaris={onExploreZetaris}
 								/>
 							</React.Fragment>
 						);

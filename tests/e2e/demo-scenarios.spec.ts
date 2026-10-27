@@ -22,6 +22,7 @@ test.describe("Demo mode track scenarios", () => {
 			window.localStorage.setItem("governmindz_launch_preference", "demo");
 			window.localStorage.setItem("governmindz_mode_preference", "demo");
 			window.localStorage.removeItem("governmindz_demo_history");
+			window.localStorage.removeItem("governmindz_demo_history_v1");
 		});
 	});
 
@@ -47,5 +48,44 @@ test.describe("Demo mode track scenarios", () => {
 			await expect(page.getByText(demo.finalAnswer).first()).toBeVisible();
 			await expect(page.getByText(/Run failed/)).toHaveCount(0);
 		}
+
+		// The last demo is Track 03. Exercise the interactive Zetaris evidence explorer.
+		await page.getByRole("button", { name: /Explore Zetaris Data/i }).click();
+
+		const explorer = page.getByTestId("zetaris-data-explorer");
+		await expect(explorer).toBeVisible();
+		await expect(explorer.getByText(/SELECT request_id/)).toBeVisible();
+		await expect(explorer.getByText("Deterministic scenario", { exact: true })).toBeVisible();
+		await expect(explorer.locator("tbody tr")).toHaveCount(4);
+
+		// Sort descending by request_id.
+		const requestIdHeader = explorer.getByRole("button", { name: /request_id/ });
+		await requestIdHeader.click();
+		await requestIdHeader.click();
+		await expect(explorer.locator("tbody tr").first()).toContainText("REQ-704");
+
+		// Search, inspect a row, and switch to raw JSON.
+		await explorer.getByTestId("zetaris-search").fill("REQ-704");
+		await expect(explorer.locator("tbody tr")).toHaveCount(1);
+		await expect(explorer.getByText("REQ-701")).toHaveCount(0);
+		await explorer.getByRole("button", { name: "Reset view" }).click();
+		await expect(explorer.locator("tbody tr")).toHaveCount(4);
+
+		await explorer.getByTestId("zetaris-inspect-0").click();
+		await expect(explorer.getByTestId("zetaris-row-detail")).toContainText("request_id");
+		await expect(explorer.getByTestId("zetaris-row-detail")).toContainText("REQ-701");
+
+		await explorer.getByRole("button", { name: "Raw JSON" }).click();
+		await expect(explorer.getByTestId("zetaris-raw-json")).toContainText('"query"');
+		await expect(explorer.getByTestId("zetaris-raw-json")).toContainText("clinic_queue_state");
+
+		// Download the full dataset in both formats.
+		const csvDownload = page.waitForEvent("download");
+		await explorer.getByTestId("zetaris-download-csv").click();
+		expect((await csvDownload).suggestedFilename()).toBe("zetaris-evidence.csv");
+
+		const jsonDownload = page.waitForEvent("download");
+		await explorer.getByTestId("zetaris-download-json").click();
+		expect((await jsonDownload).suggestedFilename()).toBe("zetaris-evidence.json");
 	});
 });

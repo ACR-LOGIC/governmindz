@@ -119,6 +119,42 @@ test("query sends auth, org, request id, and maps headers/data", async () => {
 	assert.equal(captured.body.sql, "SHOW LIGHTNING DATABASES");
 });
 
+test("derives REST URL from ZETARIS_HOST and ZETARIS_PORT when REST_URL is unset", async () => {
+	const previousHost = process.env.ZETARIS_HOST;
+	const previousPort = process.env.ZETARIS_PORT;
+	const previousRestUrl = process.env.ZETARIS_REST_URL;
+	let capturedUrl = "";
+
+	try {
+		await withServer(
+			(req, res) => {
+				capturedUrl = String(req.url);
+				res.writeHead(200, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ headers: ["value"], data: [[1]], total: 1 }));
+			},
+			async (baseUrl) => {
+				const url = new URL(baseUrl);
+				process.env.ZETARIS_HOST = url.hostname;
+				process.env.ZETARIS_PORT = url.port;
+				delete process.env.ZETARIS_REST_URL;
+
+				const client = new ZetarisClient({ apiKey: "test-key" });
+				const result = await client.query("SELECT 1");
+				assert.deepEqual(result.rows, [[1]]);
+			},
+		);
+	} finally {
+		if (previousHost === undefined) delete process.env.ZETARIS_HOST;
+		else process.env.ZETARIS_HOST = previousHost;
+		if (previousPort === undefined) delete process.env.ZETARIS_PORT;
+		else process.env.ZETARIS_PORT = previousPort;
+		if (previousRestUrl === undefined) delete process.env.ZETARIS_REST_URL;
+		else process.env.ZETARIS_REST_URL = previousRestUrl;
+	}
+
+	assert.equal(capturedUrl, "/api/v1.0/sql-editor/sqls/run");
+});
+
 test("rejects unsupported statements before any network call", async () => {
 	const client = new ZetarisClient({
 		restUrl: "http://127.0.0.1:1/api/v1.0",

@@ -4,7 +4,6 @@ import {
 	ShieldCheck,
 	CheckCircle2,
 	AlertTriangle,
-	Search,
 	Copy,
 	Check,
 	Lock,
@@ -33,13 +32,13 @@ import {
 	exportAuditProofCertificateJson,
 	exportAuditProofCertificatePrintable,
 } from "../../services/exportService";
+import { ZetarisDataExplorer } from "./ZetarisDataExplorer";
 
 interface TrustEvidenceViewProps {
 	conversation: Conversation;
 }
 
 export const TrustEvidenceView: React.FC<TrustEvidenceViewProps> = ({ conversation }) => {
-	const [searchQuery, setSearchQuery] = useState("");
 	const [copiedHash, setCopiedHash] = useState<string | null>(null);
 
 	// Audit trail working state
@@ -169,10 +168,6 @@ export const TrustEvidenceView: React.FC<TrustEvidenceViewProps> = ({ conversati
 		total: 3,
 	};
 
-	const filteredRows = zetaris.rows.filter((r) =>
-		r.some((cell) => String(cell).toLowerCase().includes(searchQuery.toLowerCase())),
-	);
-
 	return (
 		<div className="flex-1 overflow-y-auto px-6 py-6 space-y-8">
 			<div className="max-w-4xl mx-auto space-y-8">
@@ -212,68 +207,7 @@ export const TrustEvidenceView: React.FC<TrustEvidenceViewProps> = ({ conversati
 						</div>
 					</div>
 
-					{/* Query display */}
-					<div className="bg-[#0a0e1a] p-3 rounded-xl border border-[#1e2842] font-mono text-xs flex items-center justify-between text-slate-300">
-						<div className="flex items-center gap-2">
-							<span className="text-teal-400 font-bold">SQL:</span>
-							<span className="text-amber-300">{zetaris.query}</span>
-						</div>
-						<span className="text-[10px] text-slate-400">read-only · 50 row limit</span>
-					</div>
-
-					{/* Table search filter */}
-					<div className="relative">
-						<Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
-						<input
-							type="text"
-							value={searchQuery}
-							onChange={(e) => setSearchQuery(e.target.value)}
-							placeholder="Search discovered tables or classifications…"
-							className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-[#0a0e1a] border border-[#1e2842] text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-teal-500"
-						/>
-					</div>
-
-					{/* Responsive Table */}
-					<div className="overflow-x-auto rounded-xl border border-[#1e2842] bg-[#0c101e]">
-						<table className="w-full text-left text-xs">
-							<thead className="bg-[#18203a] text-slate-300 font-mono uppercase text-[10px] tracking-wider border-b border-[#1e2842]">
-								<tr>
-									{zetaris.columns.map((c) => (
-										<th key={c} className="py-2.5 px-4 font-semibold">
-											{c}
-										</th>
-									))}
-								</tr>
-							</thead>
-							<tbody className="divide-y divide-[#1e2842]/50 font-mono text-slate-200">
-								{filteredRows.map((row, idx) => (
-									<tr key={idx} className="hover:bg-[#12182b]/60 transition-colors">
-										{row.map((cell, cIdx) => {
-											const cellStr = String(cell);
-											const isConfidential = cellStr.toLowerCase() === "confidential";
-											const isInternal = cellStr.toLowerCase() === "internal";
-
-											return (
-												<td key={cIdx} className="py-2.5 px-4">
-													{isConfidential ? (
-														<span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950/60 border border-rose-800 text-rose-300">
-															confidential
-														</span>
-													) : isInternal ? (
-														<span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-sky-950/60 border border-sky-800 text-sky-300">
-															internal
-														</span>
-													) : (
-														cellStr
-													)}
-												</td>
-											);
-										})}
-									</tr>
-								))}
-							</tbody>
-						</table>
-					</div>
+					<ZetarisDataExplorer data={zetaris} mode={conversation.mode} />
 				</div>
 
 				{/* Section 2: Authoritative Web Citations & External Research */}

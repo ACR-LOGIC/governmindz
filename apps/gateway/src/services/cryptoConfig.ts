@@ -100,6 +100,8 @@ export function loadLocalEnvIfPresent(): void {
 					if (parsed.zetarisPort && !process.env.ZETARIS_PORT) process.env.ZETARIS_PORT = parsed.zetarisPort;
 					if (parsed.zetarisUser && !process.env.ZETARIS_USER) process.env.ZETARIS_USER = parsed.zetarisUser;
 					if (parsed.zetarisPassword && !process.env.ZETARIS_PASSWORD) process.env.ZETARIS_PASSWORD = parsed.zetarisPassword;
+					if (parsed.zetarisApiKey && !process.env.ZETARIS_API_KEY) process.env.ZETARIS_API_KEY = parsed.zetarisApiKey;
+					if (parsed.zetarisApiAuth && !process.env.ZETARIS_API_AUTH) process.env.ZETARIS_API_AUTH = parsed.zetarisApiAuth;
 					if (parsed.zetarisDatabase && !process.env.ZETARIS_DATABASE) process.env.ZETARIS_DATABASE = parsed.zetarisDatabase;
 					if (parsed.auditSecret && !process.env.AUDIT_TRAIL_SECRET) process.env.AUDIT_TRAIL_SECRET = parsed.auditSecret;
 				}
@@ -124,6 +126,7 @@ export interface ConfigStatus {
 	zetarisUser: string;
 	zetarisDatabase: string;
 	hasZetarisPassword: boolean;
+	hasZetarisApiKey: boolean;
 	auditSecretConfigured: boolean;
 }
 
@@ -160,14 +163,15 @@ export function getConfigStatus(): ConfigStatus {
 	}
 
 	const zetarisUser = process.env.ZETARIS_USER || process.env.ZETARIS_USERNAME || "";
-	const zetarisPass = process.env.ZETARIS_PASSWORD || process.env.ZETARIS_API_KEY || process.env.ZETARIS_API_AUTH || "";
+	const zetarisPass = process.env.ZETARIS_PASSWORD || "";
+	const zetarisApiKey = process.env.ZETARIS_API_KEY || process.env.ZETARIS_API_AUTH || "";
 	const zetarisDb = process.env.ZETARIS_DATABASE || "LIGHTNING_DB";
 
 	const auditSecret = process.env.AUDIT_TRAIL_SECRET || "";
 
 	const zetarisConfigured = Boolean(
 		(process.env.ZETARIS_HOST?.trim() || process.env.ZETARIS_REST_URL?.trim() || process.env.ZETARIS_JDBC_URL?.trim()) &&
-		(process.env.ZETARIS_API_KEY?.trim() || process.env.ZETARIS_API_AUTH?.trim() || process.env.ZETARIS_PASSWORD?.trim() || process.env.ZETARIS_USERNAME?.trim())
+		zetarisApiKey.trim()
 	);
 
 	const meterlessConfigured = Boolean(
@@ -186,6 +190,7 @@ export function getConfigStatus(): ConfigStatus {
 		zetarisUser: zetarisUser ? maskString(zetarisUser, 2) : "",
 		zetarisDatabase: zetarisDb,
 		hasZetarisPassword: Boolean(zetarisPass.trim()),
+		hasZetarisApiKey: Boolean(zetarisApiKey.trim()),
 		auditSecretConfigured: Boolean(auditSecret.trim()),
 	};
 }
@@ -198,6 +203,7 @@ export interface SaveConfigPayload {
 	zetarisPort?: string;
 	zetarisUser?: string;
 	zetarisPassword?: string;
+	zetarisApiKey?: string;
 	zetarisDatabase?: string;
 	auditSecret?: string;
 }
@@ -220,7 +226,8 @@ export function saveSecureConfig(payload: SaveConfigPayload): void {
 			process.env.ZETARIS_REST_URL = zh;
 		} else if (zh) {
 			const port = payload.zetarisPort?.trim() || process.env.ZETARIS_PORT || "8888";
-			process.env.ZETARIS_REST_URL = `http://${zh}:${port}/api/v1.0`;
+			const protocol = port === "443" ? "https" : "http";
+			process.env.ZETARIS_REST_URL = `${protocol}://${zh}:${port}/api/v1.0`;
 		}
 	}
 	if (payload.zetarisPort !== undefined) {
@@ -232,6 +239,9 @@ export function saveSecureConfig(payload: SaveConfigPayload): void {
 	}
 	if (payload.zetarisPassword !== undefined) {
 		process.env.ZETARIS_PASSWORD = payload.zetarisPassword.trim();
+	}
+	if (payload.zetarisApiKey !== undefined) {
+		process.env.ZETARIS_API_KEY = payload.zetarisApiKey.trim();
 	}
 	if (payload.zetarisDatabase !== undefined) {
 		process.env.ZETARIS_DATABASE = payload.zetarisDatabase.trim();
@@ -272,6 +282,8 @@ export function saveSecureConfig(payload: SaveConfigPayload): void {
 	if (process.env.ZETARIS_USER) envMap.set("ZETARIS_USER", process.env.ZETARIS_USER);
 	if (process.env.ZETARIS_USERNAME) envMap.set("ZETARIS_USERNAME", process.env.ZETARIS_USERNAME);
 	if (process.env.ZETARIS_PASSWORD) envMap.set("ZETARIS_PASSWORD", process.env.ZETARIS_PASSWORD);
+	if (process.env.ZETARIS_API_KEY) envMap.set("ZETARIS_API_KEY", process.env.ZETARIS_API_KEY);
+	if (process.env.ZETARIS_API_AUTH) envMap.set("ZETARIS_API_AUTH", process.env.ZETARIS_API_AUTH);
 	if (process.env.ZETARIS_DATABASE) envMap.set("ZETARIS_DATABASE", process.env.ZETARIS_DATABASE);
 	if (process.env.AUDIT_TRAIL_SECRET) envMap.set("AUDIT_TRAIL_SECRET", process.env.AUDIT_TRAIL_SECRET);
 
@@ -294,6 +306,8 @@ export function saveSecureConfig(payload: SaveConfigPayload): void {
 		zetarisPort: process.env.ZETARIS_PORT || "",
 		zetarisUser: process.env.ZETARIS_USER || "",
 		zetarisPassword: process.env.ZETARIS_PASSWORD || "",
+		zetarisApiKey: process.env.ZETARIS_API_KEY || "",
+		zetarisApiAuth: process.env.ZETARIS_API_AUTH || "",
 		zetarisDatabase: process.env.ZETARIS_DATABASE || "",
 		auditSecret: process.env.AUDIT_TRAIL_SECRET || "",
 		updatedAt: new Date().toISOString(),

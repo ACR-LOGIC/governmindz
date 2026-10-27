@@ -235,6 +235,7 @@ export interface ConfigStatusResponse {
 	zetarisUser: string;
 	zetarisDatabase: string;
 	hasZetarisPassword: boolean;
+	hasZetarisApiKey: boolean;
 	auditSecretConfigured: boolean;
 }
 

@@ -22,7 +22,7 @@ const TOUR_STEPS: TourStep[] = [
 		description:
 			"Deliberations unfold here as specialized agents debate federated data governance. Review synthesized consensus conclusions, evidence citations, and rate agent responses.",
 		selector: "#tour-chat",
-		badge: "Step 1 of 5",
+		badge: "Step 1 of 6",
 	},
 	{
 		id: "roster",
@@ -30,7 +30,7 @@ const TOUR_STEPS: TourStep[] = [
 		description:
 			"Observe specialized agents with rotating human names and domain tasks. Click any agent avatar to inspect their live reasoning scratchpad and evidence matrix.",
 		selector: "#tour-roster",
-		badge: "Step 2 of 5",
+		badge: "Step 2 of 6",
 	},
 	{
 		id: "history",
@@ -38,7 +38,7 @@ const TOUR_STEPS: TourStep[] = [
 		description:
 			"Access and manage your persistent multi-agent debate history, create new debates, and switch between past governance sessions.",
 		selector: "#tour-history",
-		badge: "Step 3 of 5",
+		badge: "Step 3 of 6",
 	},
 	{
 		id: "mode",
@@ -46,7 +46,7 @@ const TOUR_STEPS: TourStep[] = [
 		description:
 			"Switch between deterministic Demo mode with guided prompt scenarios and Live mode connected to real Zetaris Lightning and Meterless AI engines.",
 		selector: "#tour-mode",
-		badge: "Step 4 of 5",
+		badge: "Step 4 of 6",
 	},
 	{
 		id: "explorer",
@@ -54,7 +54,15 @@ const TOUR_STEPS: TourStep[] = [
 		description:
 			"Verify the full 12-state orchestration lifecycle, inspect Zetaris federated SQL queries, and validate the SHA-256 cryptographic audit trail ledger.",
 		selector: "#tour-explorer",
-		badge: "Step 5 of 5",
+		badge: "Step 5 of 6",
+	},
+	{
+		id: "zetaris",
+		title: "Interactive Zetaris Evidence Explorer",
+		description:
+			"Open Trust & Evidence after a run to inspect the exact Zetaris dataset. Search and sort rows, open record details, switch to Raw JSON, and download the full dataset as CSV or JSON.",
+		selector: "#tour-evidence",
+		badge: "Step 6 of 6",
 	},
 ];
 

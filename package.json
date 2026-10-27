@@ -18,6 +18,7 @@
 		"demo": "node --env-file=.env.local --import tsx apps/gateway/src/main.ts",
 		"demo:dry": "node --env-file=.env.local --import tsx apps/gateway/src/main.ts --dry-run",
 		"demo:sample": "node --import tsx apps/gateway/src/sample.ts",
+		"zetaris:check": "node --env-file=.env.local --import tsx scripts/check-zetaris.ts",
 		"samples": "node scripts/run-samples.mjs",
 		"smoke": "node --env-file=.env.local --import tsx apps/gateway/src/smoke.ts",
 		"orchestrator": "node --env-file=.env.local --import tsx apps/gateway/src/main.ts --orchestrator",
