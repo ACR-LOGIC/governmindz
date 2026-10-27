@@ -29,6 +29,7 @@ import {
 	copyDeliberationRichHtml,
 } from "../../services/exportService";
 import { PresentationModal } from "./PresentationModal";
+import { evaluateWebConversation, formatConfidence } from "../../services/conversationEvaluation";
 
 interface FinalAnswerCardProps {
 	message: ChatMessage;
@@ -55,13 +56,12 @@ export const FinalAnswerCard: React.FC<FinalAnswerCardProps> = ({
 	const [modalInitialTab, setModalInitialTab] = useState<"diagram" | "chart" | "slides" | "export">("diagram");
 	const [copiedRich, setCopiedRich] = useState(false);
 
-	const conf = finalConfidence ?? message.confidence ?? 0.85;
 	const positionText = message.structured?.position || message.content;
 
-	// Build fallback conversation object if not directly passed
+	// Build fallback conversation object if not directly passed.
 	const convData: Conversation = conversation || {
 		id: `conv_${message.id}`,
-		title: "Consensus Governance Decree",
+		title: "Governance Decision Briefing",
 		topic: message.structured?.position?.slice(0, 80) || "Multi-Agent Deliberation",
 		mode: "sample",
 		createdAt: message.timestamp || Date.now(),
@@ -69,9 +69,16 @@ export const FinalAnswerCard: React.FC<FinalAnswerCardProps> = ({
 		messages: [message],
 		auditEvents: [],
 		status: "completed",
-		finalConfidence: conf,
+		finalConfidence: finalConfidence ?? message.confidence,
 		workflowEvents: [],
 	};
+
+	const evaluation = evaluateWebConversation(convData);
+	const conf = evaluation.confidence;
+	const confidenceLabel = formatConfidence(conf);
+	const hasConfidence = conf != null;
+	const auditLabel = auditVerified === true ? "Verified" : "Not verified";
+	const statusLabel = evaluation.evaluated ? "Evaluated" : evaluation.label;
 
 	useEffect(() => {
 		const unsub = ttsService.subscribe((speaking, _seat, msgId) => {
@@ -81,7 +88,7 @@ export const FinalAnswerCard: React.FC<FinalAnswerCardProps> = ({
 	}, [message.id]);
 
 	const handleCopy = () => {
-		const textToCopy = `GovernMindz Final Synthesized Governance Decision (${(conf * 100).toFixed(1)}% Calibrated Confidence):\n\n${positionText}\n\nEvidence:\n${(message.structured?.evidence || []).map((e) => `• ${e}`).join("\n")}\n\nCaveats:\n${(message.structured?.caveats || []).map((c) => `• ${c}`).join("\n")}`;
+		const textToCopy = `GovernMindz Final Synthesized Governance Decision\nCalibrated Confidence: ${confidenceLabel}\n\n${positionText}\n\nEvidence:\n${(message.structured?.evidence || []).map((e) => `• ${e}`).join("\n")}\n\nCaveats:\n${(message.structured?.caveats || []).map((c) => `• ${c}`).join("\n")}`;
 
 		if (navigator.clipboard) {
 			navigator.clipboard.writeText(textToCopy);
@@ -130,8 +137,14 @@ export const FinalAnswerCard: React.FC<FinalAnswerCardProps> = ({
 						<div>
 							<h3 className="font-display font-bold text-base text-[#f4b942] flex items-center gap-2">
 								Final Synthesized Governance Decision
-								<span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
-									Consensus Reached
+								<span
+									className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+										evaluation.evaluated
+											? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+											: "bg-amber-500/20 text-amber-300 border-amber-500/40"
+									}`}
+								>
+									{statusLabel}
 								</span>
 							</h3>
 							<div className="text-xs text-slate-400">
@@ -177,11 +190,19 @@ export const FinalAnswerCard: React.FC<FinalAnswerCardProps> = ({
 						</div>
 
 						<div className="text-right">
-							<div className="text-2xl font-mono font-extrabold text-[#f4b942]">
-								{(conf * 100).toFixed(1)}%
+							<div
+								className={`text-2xl font-mono font-extrabold ${
+									hasConfidence ? "text-[#f4b942]" : "text-slate-400"
+								}`}
+							>
+								{confidenceLabel}
 							</div>
-							<div className="text-[10px] font-mono text-emerald-400 uppercase tracking-wider">
-								Calibrated Confidence
+							<div
+								className={`text-[10px] font-mono uppercase tracking-wider ${
+									hasConfidence ? "text-emerald-400" : "text-slate-400"
+								}`}
+							>
+								{hasConfidence ? "Calibrated Confidence" : "Confidence unavailable"}
 							</div>
 						</div>
 					</div>
@@ -197,7 +218,7 @@ export const FinalAnswerCard: React.FC<FinalAnswerCardProps> = ({
 					<div className="mb-4">
 						<div className="text-[11px] font-mono uppercase tracking-wider text-emerald-400 mb-1.5 flex items-center gap-1.5">
 							<CheckCircle2 className="w-3.5 h-3.5" />
-							<span>Verified Governance Evidence</span>
+							<span>Evidence Citations</span>
 						</div>
 						<ul className="space-y-1 text-xs text-slate-300">
 							{message.structured.evidence.map((ev, i) => (
@@ -443,14 +464,18 @@ export const FinalAnswerCard: React.FC<FinalAnswerCardProps> = ({
 					</div>
 					<div>
 						<span className="text-[10px] uppercase text-slate-400 block">Audit Chain</span>
-						<span className="text-emerald-400 font-semibold flex items-center gap-1">
+						<span
+							className={`font-semibold flex items-center gap-1 ${
+								auditVerified === true ? "text-emerald-400" : "text-amber-400"
+							}`}
+						>
 							<ShieldCheck className="w-3.5 h-3.5" />
-							{auditVerified !== false ? "Verified" : "Tampered"}
+							{auditLabel}
 						</span>
 					</div>
 					<div>
 						<span className="text-[10px] uppercase text-slate-400 block">Status</span>
-						<span className="text-teal-400 font-semibold">Completed</span>
+						<span className="text-teal-400 font-semibold">{statusLabel}</span>
 					</div>
 				</div>
 

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
 	X,
 	Download,
@@ -20,15 +20,17 @@ import {
 } from "lucide-react";
 import type { Conversation } from "../../types";
 import {
-	exportConversationAsPdf,
-	exportConversationAsCsvSpreadsheet,
-	exportConversationAsWordDoc,
+	downloadConversationArchive,
+	downloadConversationExport,
+	type ConversationExportFormat,
+} from "../../services/exportBundle";
+import {
 	exportConversationAsVisualDiagramSvg,
 	exportConfidenceChartAsSvg,
 	generateDeliberationMermaidCode,
 	copyDeliberationRichHtml,
-	exportConversationAsMarkdown,
 } from "../../services/exportService";
+import { evaluateWebConversation, formatConfidence } from "../../services/conversationEvaluation";
 
 interface PresentationModalProps {
 	isOpen: boolean;
@@ -47,18 +49,68 @@ export const PresentationModal: React.FC<PresentationModalProps> = ({
 	const [slideIndex, setSlideIndex] = useState(0);
 	const [copiedMermaid, setCopiedMermaid] = useState(false);
 	const [copiedRichHtml, setCopiedRichHtml] = useState(false);
+	const [exportPhase, setExportPhase] = useState<"idle" | "working" | "success" | "error">("idle");
+	const [exportMessage, setExportMessage] = useState("");
+	const exportAbortRef = useRef<AbortController | null>(null);
+
+	useEffect(() => {
+		return () => exportAbortRef.current?.abort();
+	}, []);
+
+	const modalRunExport = async (format: ConversationExportFormat) => {
+		if (exportPhase === "working") return;
+		if (format === "zip" && !evaluation.evaluated) return;
+
+		exportAbortRef.current?.abort();
+		const controller = new AbortController();
+		exportAbortRef.current = controller;
+		setExportPhase("working");
+		setExportMessage("");
+
+		try {
+			const result =
+				format === "zip"
+					? await downloadConversationArchive(conversation, controller.signal)
+					: await downloadConversationExport(conversation, format, controller.signal);
+			setExportPhase("success");
+			setExportMessage(`Downloaded ${result.filename}`);
+			if (result.warnings.length > 0) {
+				setExportMessage((prev) => `${prev} — ${result.warnings.join(" ")}`);
+			}
+		} catch (error) {
+			if (controller.signal.aborted) {
+				setExportPhase("idle");
+				return;
+			}
+			setExportPhase("error");
+			setExportMessage(error instanceof Error ? error.message : "Export failed.");
+		} finally {
+			if (exportAbortRef.current === controller) {
+				exportAbortRef.current = null;
+			}
+		}
+	};
+
+	const cancelModalExport = () => {
+		exportAbortRef.current?.abort();
+		exportAbortRef.current = null;
+		setExportPhase("idle");
+		setExportMessage("");
+	};
 
 	if (!isOpen) return null;
 
-	const finalMsg =
-		conversation.messages.find((m) => m.type === "final" || m.fromSeat === "Synthesizer") ||
-		conversation.messages[conversation.messages.length - 1];
+	const finalMsg = conversation.messages.find(
+		(m) => m.type === "final" || m.fromSeat === "Synthesizer",
+	);
+	const evaluation = evaluateWebConversation(conversation);
+	const confidence = formatConfidence(evaluation.confidence);
+	const hasConfidence = evaluation.confidence != null;
+	const finalAnswer = evaluation.answer;
+	const auditEvent = conversation.auditEvents[conversation.auditEvents.length - 1];
 
-	const confidence = conversation.finalConfidence
-		? (conversation.finalConfidence * 100).toFixed(1)
-		: finalMsg?.confidence
-			? (finalMsg.confidence * 100).toFixed(1)
-			: "94.5";
+	const archiveEnabled = evaluation.evaluated;
+	const exportBusy = exportPhase === "working";
 
 	const handleCopyMermaid = () => {
 		const code = generateDeliberationMermaidCode(conversation);
@@ -78,47 +130,57 @@ export const PresentationModal: React.FC<PresentationModalProps> = ({
 	const slides = [
 		{
 			title: "Executive Governance Decree",
-			subtitle: "Final Calibrated Multi-Agent Consensus",
+			subtitle: evaluation.evaluated
+				? "Final Answer and Recorded Confidence"
+				: `Answer status: ${evaluation.label}`,
 			render: () => (
 				<div className="space-y-4">
 					<div className="bg-amber-950/30 border-2 border-amber-500/60 rounded-2xl p-6 relative overflow-hidden">
 						<div className="flex items-center justify-between border-b border-amber-500/30 pb-3 mb-4">
 							<div className="flex items-center gap-2 text-amber-400 font-bold text-base">
 								<Award className="w-5 h-5" />
-								<span>Final Consensus Finding</span>
+								<span>Final Governance Answer</span>
 							</div>
-							<div className="px-3 py-1 bg-amber-500 text-slate-950 font-bold text-sm rounded-full">
-								{confidence}% Confidence
+							<div className={`px-3 py-1 font-bold text-sm rounded-full ${hasConfidence ? "bg-amber-500 text-slate-950" : "bg-slate-700 text-slate-200"}`}>
+								Confidence: {confidence}
 							</div>
 						</div>
 						<p className="text-slate-100 text-sm leading-relaxed whitespace-pre-wrap font-medium">
-							{finalMsg?.structured?.position || finalMsg?.content || "Deliberation consensus reached."}
+							{finalAnswer || "No substantive final answer has been recorded."}
 						</p>
+						{!evaluation.evaluated && (
+							<p className="mt-3 text-xs text-amber-300 border-t border-amber-500/30 pt-2">
+								{evaluation.label}: {evaluation.reason}
+							</p>
+						)}
 					</div>
 
 					<div className="grid grid-cols-2 gap-3 text-xs">
 						<div className="bg-[#121829] border border-[#232f50] rounded-xl p-3">
 							<div className="text-[10px] uppercase font-mono text-emerald-400 font-bold mb-1 flex items-center gap-1">
 								<CheckCircle2 className="w-3.5 h-3.5" />
-								<span>Verified Citations</span>
+								<span>Evidence Citations</span>
 							</div>
 							<div className="text-slate-300 space-y-1">
-								{(finalMsg?.structured?.evidence || ["Multi-source join on primary key", "Zetaris schema verified"]).slice(0, 3).map((e, i) => (
-									<div key={i} className="truncate">• {e}</div>
+								{(finalMsg?.structured?.evidence || []).slice(0, 3).map((e, i) => (
+									<div key={i} className="truncate"> {e}</div>
 								))}
+								{(finalMsg?.structured?.evidence || []).length === 0 && (
+									<div className="text-slate-400 italic">No evidence citations recorded.</div>
+								)}
 							</div>
 						</div>
 
 						<div className="bg-[#121829] border border-[#232f50] rounded-xl p-3">
 							<div className="text-[10px] uppercase font-mono text-amber-400 font-bold mb-1 flex items-center gap-1">
 								<ShieldCheck className="w-3.5 h-3.5" />
-								<span>Audit Integrity</span>
+								<span>Audit Record</span>
 							</div>
 							<div className="text-slate-300 font-mono text-[11px] truncate">
-								Hash: {conversation.auditEvents[conversation.auditEvents.length - 1]?.hash || "Verified"}
+								Hash: {auditEvent?.hash || "Not recorded"}
 							</div>
-							<div className="text-emerald-400 text-[10px] mt-1 font-semibold">
-								100% ECDSA Tamper-Proof
+							<div className={`text-[10px] mt-1 font-semibold ${auditEvent ? "text-slate-300" : "text-slate-400"}`}>
+								{auditEvent ? `${conversation.auditEvents.length} event(s) recorded; verification not performed` : "No audit events recorded"}
 							</div>
 						</div>
 					</div>
@@ -156,7 +218,7 @@ export const PresentationModal: React.FC<PresentationModalProps> = ({
 						</div>
 					) : (
 						<div className="text-center py-12 text-slate-400 text-xs">
-							Federated Zetaris query results attached to audit ledger.
+							No Zetaris query result is attached to this conversation.
 						</div>
 					)}
 				</div>
@@ -179,7 +241,7 @@ export const PresentationModal: React.FC<PresentationModalProps> = ({
 											<span className="text-[10px] font-mono text-slate-400 font-normal">Round {m.round || 1}</span>
 										</div>
 										<span className="text-sky-400 font-mono">
-											{m.confidence ? `${(m.confidence * 100).toFixed(0)}% Conf.` : ""}
+											{m.confidence != null ? `${(m.confidence * 100).toFixed(0)}% Conf.` : "N/A"}
 										</span>
 									</div>
 									<p className="text-slate-300 leading-relaxed">
@@ -192,25 +254,25 @@ export const PresentationModal: React.FC<PresentationModalProps> = ({
 			),
 		},
 		{
-			title: "Cryptographic Audit Certificate",
-			subtitle: "Tamper-Evident SHA-256 Merkle Ledger",
+			title: "Audit Ledger Record",
+			subtitle: "Recorded SHA-256 Hash Chain and Signatures",
 			render: () => (
 				<div className="bg-[#090d16] border border-[#1e293b] rounded-xl p-5 font-mono text-xs space-y-3">
-					<div className="text-emerald-400 font-bold flex items-center gap-2">
+					<div className={`font-bold flex items-center gap-2 ${auditEvent ? "text-slate-200" : "text-amber-400"}`}>
 						<ShieldCheck className="w-4 h-4" />
-						<span>Cryptographic Integrity Certificate: Verified</span>
+						<span>{auditEvent ? "Audit events recorded" : "No audit events recorded"}</span>
 					</div>
 					<div className="text-slate-400 space-y-1.5 text-[11px]">
 						<div><span className="text-slate-500">Session ID:</span> {conversation.id}</div>
-						<div><span className="text-slate-500">Total Tamper-Proof Blocks:</span> {conversation.auditEvents.length}</div>
-						{conversation.auditEvents.length > 0 && (
+						<div><span className="text-slate-500">Recorded Events:</span> {conversation.auditEvents.length}</div>
+						{auditEvent && (
 							<>
-								<div className="truncate"><span className="text-slate-500">Latest Hash:</span> <span className="text-sky-400">{conversation.auditEvents[conversation.auditEvents.length - 1].hash}</span></div>
-								<div className="truncate"><span className="text-slate-500">Previous Hash:</span> {conversation.auditEvents[conversation.auditEvents.length - 1].previous_hash}</div>
-								<div className="truncate"><span className="text-slate-500">ECDSA Signature:</span> {conversation.auditEvents[conversation.auditEvents.length - 1].signature}</div>
+								<div className="truncate"><span className="text-slate-500">Latest Hash:</span> <span className="text-sky-400">{auditEvent.hash}</span></div>
+								<div className="truncate"><span className="text-slate-500">Previous Hash:</span> {auditEvent.previous_hash}</div>
+								<div className="truncate"><span className="text-slate-500">Signature:</span> {auditEvent.signature}</div>
 							</>
 						)}
-						<div><span className="text-slate-500">Standard:</span> RFC-6962 Certificate Transparency Compliant</div>
+						<div className="text-amber-300"><span className="text-slate-500">Verification:</span> Not performed in this view</div>
 					</div>
 				</div>
 			),
@@ -420,6 +482,35 @@ export const PresentationModal: React.FC<PresentationModalProps> = ({
 							</div>
 
 							<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+								{exportPhase === "working" && (
+									<div className="col-span-2 p-2 rounded bg-[#2a1b0a] border border-amber-900/50 text-amber-300 text-xs">
+										Generating PDF... Cancel if needed.
+										<button
+											type="button"
+											onClick={cancelModalExport}
+											className="ml-2 underline text-xs hover:text-white"
+										>
+											Cancel
+										</button>
+									</div>
+								)}
+								{exportPhase === "success" && (
+									<div className="col-span-2 p-2 rounded bg-[#0b2117] border border-emerald-900/50 text-emerald-300 text-xs">
+										{exportMessage || "Downloaded"}
+									</div>
+								)}
+								{exportPhase === "error" && (
+									<div className="col-span-2 p-2 rounded bg-[#2e1616] border border-rose-900/50 text-rose-300 text-xs">
+										{exportMessage || "Export failed."}
+										<button
+											type="button"
+											onClick={() => setExportPhase("idle")}
+											className="ml-2 underline text-xs hover:text-white"
+										>
+											Dismiss
+										</button>
+									</div>
+								)}
 								{/* PDF Report */}
 								<div className="bg-[#101627] border border-[#1e2a4a] hover:border-amber-500/50 rounded-xl p-4 transition-all">
 									<div className="flex items-center gap-3 mb-2">
@@ -427,18 +518,19 @@ export const PresentationModal: React.FC<PresentationModalProps> = ({
 											<FileText className="w-5 h-5" />
 										</div>
 										<div>
-											<div className="text-xs font-bold text-white">Executive PDF Report</div>
-											<div className="text-[11px] text-slate-400">Printable briefing with logos & signatures</div>
-										</div>
+										<div className="text-xs font-bold text-white">Executive PDF Report</div>
+										<div className="text-[11px] text-slate-400">Real browser-rendered PDF</div>
 									</div>
-									<button
-										type="button"
-										onClick={() => exportConversationAsPdf(conversation)}
-										className="w-full mt-2 py-2 px-3 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors shadow-sm"
-									>
-										<Download className="w-3.5 h-3.5" />
-										<span>Generate & Print PDF</span>
-									</button>
+								</div>
+								<button
+									type="button"
+									disabled={exportBusy}
+									onClick={() => modalRunExport("pdf")}
+									className={`w-full mt-2 py-2 px-3 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors shadow-sm ${exportBusy ? "opacity-60 cursor-not-allowed" : ""}`}
+								>
+									<Download className="w-3.5 h-3.5" />
+									<span>Download PDF</span>
+								</button>
 								</div>
 
 								{/* Spreadsheet CSV */}
@@ -448,18 +540,19 @@ export const PresentationModal: React.FC<PresentationModalProps> = ({
 											<FileSpreadsheet className="w-5 h-5" />
 										</div>
 										<div>
-											<div className="text-xs font-bold text-white">Spreadsheet Dataset (.CSV)</div>
-											<div className="text-[11px] text-slate-400">Excel / Google Sheets compatible matrix</div>
-										</div>
+										<div className="text-xs font-bold text-white">Spreadsheet Dataset (.CSV)</div>
+										<div className="text-[11px] text-slate-400">Portable tabular evidence matrix</div>
 									</div>
-									<button
-										type="button"
-										onClick={() => exportConversationAsCsvSpreadsheet(conversation)}
-										className="w-full mt-2 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors shadow-sm"
-									>
-										<Download className="w-3.5 h-3.5" />
-										<span>Download Spreadsheet</span>
-									</button>
+								</div>
+								<button
+									type="button"
+									disabled={exportBusy}
+									onClick={() => modalRunExport("csv")}
+									className={`w-full mt-2 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors shadow-sm ${exportBusy ? "opacity-60 cursor-not-allowed" : ""}`}
+								>
+									<Download className="w-3.5 h-3.5" />
+									<span>Download Spreadsheet</span>
+								</button>
 								</div>
 
 								{/* Word Doc */}
@@ -469,18 +562,19 @@ export const PresentationModal: React.FC<PresentationModalProps> = ({
 											<FileText className="w-5 h-5" />
 										</div>
 										<div>
-											<div className="text-xs font-bold text-white">Word / Docs Document (.DOC)</div>
-											<div className="text-[11px] text-slate-400">Microsoft Word formatted briefing</div>
-										</div>
+										<div className="text-xs font-bold text-white">Word Document (.DOCX)</div>
+										<div className="text-[11px] text-slate-400">Structured Office document</div>
 									</div>
-									<button
-										type="button"
-										onClick={() => exportConversationAsWordDoc(conversation)}
-										className="w-full mt-2 py-2 px-3 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors shadow-sm"
-									>
-										<Download className="w-3.5 h-3.5" />
-										<span>Download Word Document</span>
-									</button>
+								</div>
+								<button
+									type="button"
+									disabled={exportBusy}
+									onClick={() => modalRunExport("docx")}
+									className={`w-full mt-2 py-2 px-3 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors shadow-sm ${exportBusy ? "opacity-60 cursor-not-allowed" : ""}`}
+								>
+									<Download className="w-3.5 h-3.5" />
+									<span>Download Word Document</span>
+								</button>
 								</div>
 
 								{/* Copy Rich HTML */}
@@ -512,7 +606,7 @@ export const PresentationModal: React.FC<PresentationModalProps> = ({
 				<div className="px-5 py-3 border-t border-[#1b253f] bg-[#0c101d] flex items-center justify-between text-xs text-slate-400">
 					<div className="flex items-center gap-2">
 						<ShieldCheck className="w-4 h-4 text-emerald-400" />
-						<span>Cryptographically verified output signed by GovernMindz Autonomous Council</span>
+						<span>Exports preserve recorded provenance metadata; factual and audit verification must be reported separately</span>
 					</div>
 					<button
 						type="button"

@@ -97,5 +97,21 @@ export default defineConfig({
 	build: {
 		outDir: path.resolve(process.cwd(), "apps/web/dist"),
 		emptyOutDir: true,
+		rolldownOptions: {
+			external: [
+				"@playwright/test",
+				"playwright-core",
+				"chromium-bidi",
+				"ws",
+				"mime",
+				"debug",
+				"proxy-from-env",
+				"attract-map",
+				"rzs",
+				"tough-cookie",
+				"uuid",
+				"yazl",
+			],
+		},
 	},
 });

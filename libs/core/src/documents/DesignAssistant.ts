@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import zlib from "node:zlib";
 import { randomUUID } from "node:crypto";
+import { createZipBuffer } from "../exports/zip.js";
 import type {
 	ArtifactDescriptor,
 	DeliverableContract,
@@ -24,81 +24,6 @@ export interface DesignAssistantInput {
 		auditHash?: string;
 	};
 	artifactsDir?: string;
-}
-
-/**
- * Minimal in-memory ZIP builder using Node.js built-in zlib
- */
-function createZipBuffer(files: Array<{ path: string; content: string | Buffer }>): Buffer {
-	const localHeaders: Buffer[] = [];
-	const centralHeaders: Buffer[] = [];
-	let offset = 0;
-
-	for (const f of files) {
-		const data = Buffer.isBuffer(f.content) ? f.content : Buffer.from(f.content, "utf8");
-		const uncompressedSize = data.length;
-		const crc = zlib.crc32(data);
-		const compressed = zlib.deflateRawSync(data);
-		const compressedSize = compressed.length;
-		const nameBuf = Buffer.from(f.path, "utf8");
-
-		// Local file header (30 bytes + name)
-		const lh = Buffer.alloc(30 + nameBuf.length);
-		lh.writeUInt32LE(0x04034b50, 0); // Local header signature
-		lh.writeUInt16LE(20, 4); // Version needed
-		lh.writeUInt16LE(0, 6); // General flags
-		lh.writeUInt16LE(8, 8); // Deflate compression
-		lh.writeUInt16LE(0, 10); // Mod time
-		lh.writeUInt16LE(0, 12); // Mod date
-		lh.writeUInt32LE(crc, 14); // CRC-32
-		lh.writeUInt32LE(compressedSize, 18);
-		lh.writeUInt32LE(uncompressedSize, 22);
-		lh.writeUInt16LE(nameBuf.length, 26);
-		lh.writeUInt16LE(0, 28); // Extra field len
-		nameBuf.copy(lh, 30);
-
-		localHeaders.push(lh, compressed);
-
-		// Central directory header (46 bytes + name)
-		const ch = Buffer.alloc(46 + nameBuf.length);
-		ch.writeUInt32LE(0x02014b50, 0); // Central header signature
-		ch.writeUInt16LE(20, 4); // Version made by
-		ch.writeUInt16LE(20, 6); // Version needed
-		ch.writeUInt16LE(0, 8); // General flags
-		ch.writeUInt16LE(8, 10); // Deflate compression
-		ch.writeUInt16LE(0, 12); // Mod time
-		ch.writeUInt16LE(0, 14); // Mod date
-		ch.writeUInt32LE(crc, 16); // CRC-32
-		ch.writeUInt32LE(compressedSize, 20);
-		ch.writeUInt32LE(uncompressedSize, 24);
-		ch.writeUInt16LE(nameBuf.length, 28);
-		ch.writeUInt16LE(0, 30); // Extra field len
-		ch.writeUInt16LE(0, 32); // Comment len
-		ch.writeUInt16LE(0, 34); // Disk start
-		ch.writeUInt16LE(0, 36); // Internal attr
-		ch.writeUInt32LE(0, 38); // External attr
-		ch.writeUInt32LE(offset, 42); // Relative offset
-		nameBuf.copy(ch, 46);
-
-		centralHeaders.push(ch);
-		offset += lh.length + compressedSize;
-	}
-
-	const centralDirOffset = offset;
-	const centralDirSize = centralHeaders.reduce((sum, h) => sum + h.length, 0);
-
-	// End of central directory record (22 bytes)
-	const eocd = Buffer.alloc(22);
-	eocd.writeUInt32LE(0x06054b50, 0); // EOCD signature
-	eocd.writeUInt16LE(0, 4); // Disk number
-	eocd.writeUInt16LE(0, 6); // Start disk
-	eocd.writeUInt16LE(files.length, 8); // Total entries on disk
-	eocd.writeUInt16LE(files.length, 10); // Total entries
-	eocd.writeUInt32LE(centralDirSize, 12);
-	eocd.writeUInt32LE(centralDirOffset, 16);
-	eocd.writeUInt16LE(0, 20); // Comment len
-
-	return Buffer.concat([...localHeaders, ...centralHeaders, eocd]);
 }
 
 export class DesignAssistant {

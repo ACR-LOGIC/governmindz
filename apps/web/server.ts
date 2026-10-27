@@ -15,6 +15,12 @@ import {
 } from "@governmindz/core/kernel/CredibilityManager";
 import { HMemService } from "@governmindz/core/memory/HMemService";
 import { MeterlessProvider } from "@governmindz/core/providers/MeterlessProvider";
+import {
+	buildConversationExport,
+	ExportBuildError,
+	type ConversationExportFormat,
+	type ExportArtifactFile,
+} from "@governmindz/core/exports/ConversationExport";
 import { zetarisQueryHandler } from "../gateway/src/tools/zetaris.tools.js";
 import { executeWebSearch } from "../gateway/src/tools/webSearch.tools.js";
 import { getConfigStatus, saveSecureConfig, loadLocalEnvIfPresent } from "../gateway/src/services/cryptoConfig.js";
@@ -529,6 +535,163 @@ let activeRun: string | null = null;
 function sendJson(res: http.ServerResponse, status: number, data: any) {
 	res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
 	res.end(JSON.stringify(data));
+}
+
+const EXPORT_BODY_LIMIT_BYTES = 15 * 1024 * 1024;
+
+function readJsonBody(req: http.IncomingMessage, maxBytes = EXPORT_BODY_LIMIT_BYTES): Promise<any> {
+	return new Promise((resolve, reject) => {
+		const chunks: Buffer[] = [];
+		let size = 0;
+		let tooLarge = false;
+		req.on("data", (chunk: Buffer) => {
+			size += chunk.length;
+			if (size > maxBytes) {
+				tooLarge = true;
+				return;
+			}
+			chunks.push(chunk);
+		});
+		req.on("end", () => {
+			if (tooLarge) {
+				reject(new ExportBuildError("Export request is too large.", 413));
+				return;
+			}
+			try {
+				const raw = Buffer.concat(chunks).toString("utf8");
+				resolve(raw ? JSON.parse(raw) : {});
+			} catch {
+				reject(new ExportBuildError("Export request must contain valid JSON.", 400));
+			}
+		});
+		req.on("error", () => reject(new ExportBuildError("Unable to read export request.", 400)));
+	});
+}
+
+function contentDisposition(filename: string): string {
+	const ascii = filename.replace(/[^\x20-\x7E]/g, "_").replace(/["\\]/g, "_");
+	return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+}
+
+const ARTIFACT_CONTENT_TYPES: Record<string, string> = {
+	".pdf": "application/pdf",
+	".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+	".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+	".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+	".csv": "text/csv; charset=utf-8",
+	".json": "application/json; charset=utf-8",
+	".md": "text/markdown; charset=utf-8",
+	".txt": "text/plain; charset=utf-8",
+	".svg": "image/svg+xml",
+	".png": "image/png",
+};
+
+function collectReferencedArtifacts(conversation: any): {
+	files: ExportArtifactFile[];
+	warnings: string[];
+} {
+	const descriptors = [
+		conversation?.primaryArtifact,
+		conversation?.evidenceExport,
+		...(Array.isArray(conversation?.additionalArtifacts) ? conversation.additionalArtifacts : []),
+	].filter(Boolean) as Array<Record<string, unknown>>;
+	const files: ExportArtifactFile[] = [];
+	const warnings: string[] = [];
+	const seen = new Set<string>();
+	for (const descriptor of descriptors) {
+		const rawFilename = typeof descriptor.filename === "string" ? descriptor.filename : "";
+		const filename = path.basename(rawFilename);
+		if (!rawFilename || filename !== rawFilename) {
+			warnings.push(`Skipped an artifact with an unsafe filename: ${rawFilename || "(missing)"}.`);
+			continue;
+		}
+		if (seen.has(filename)) continue;
+		seen.add(filename);
+		const extension = path.extname(filename).toLowerCase();
+		const contentType = ARTIFACT_CONTENT_TYPES[extension];
+		if (!contentType) {
+			warnings.push(`Skipped unsupported artifact type: ${filename}.`);
+			continue;
+		}
+		const filePath = path.join(ARTIFACTS_DIR, filename);
+		if (!filePath.startsWith(ARTIFACTS_DIR + path.sep)) {
+			warnings.push(`Skipped artifact outside the approved directory: ${filename}.`);
+			continue;
+		}
+		try {
+			const stat = fs.statSync(filePath);
+			if (!stat.isFile() || stat.size === 0) {
+				warnings.push(`Skipped empty or invalid artifact: ${filename}.`);
+				continue;
+			}
+			if (stat.size > 25 * 1024 * 1024) {
+				warnings.push(`Skipped artifact larger than 25 MB: ${filename}.`);
+				continue;
+			}
+			files.push({
+				filename,
+				data: Buffer.from(fs.readFileSync(filePath)),
+				contentType,
+				title: typeof descriptor.title === "string" ? descriptor.title : filename,
+				sourceId: typeof descriptor.id === "string" ? descriptor.id : undefined,
+				kind: typeof descriptor.type === "string" ? descriptor.type : undefined,
+			});
+		} catch {
+			warnings.push(`Referenced artifact is not available on this server: ${filename}.`);
+		}
+	}
+	return { files, warnings };
+}
+
+async function handleExports(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+	if (req.method !== "POST") {
+		sendJson(res, 405, { error: "Use POST to build a conversation export." });
+		return;
+	}
+	try {
+		const payload = await readJsonBody(req);
+		const allowedFormats: ConversationExportFormat[] = [
+			"pdf",
+			"docx",
+			"xlsx",
+			"csv",
+			"json",
+			"markdown",
+			"jsonl",
+			"zip",
+		];
+		const format = payload?.format as ConversationExportFormat;
+		if (!allowedFormats.includes(format)) {
+			throw new ExportBuildError(`Unsupported export format: ${String(payload?.format)}`);
+		}
+		if (!payload?.conversation || typeof payload.conversation !== "object") {
+			throw new ExportBuildError("A conversation payload is required.");
+		}
+		const artifacts =
+			format === "zip" ? collectReferencedArtifacts(payload.conversation) : { files: [], warnings: [] };
+		const generated = await buildConversationExport(payload.conversation, format, {
+			artifactFiles: artifacts.files,
+			artifactWarnings: artifacts.warnings,
+		});
+		res.writeHead(200, {
+			"Content-Type": generated.contentType,
+			"Content-Disposition": contentDisposition(generated.filename),
+			"Content-Length": String(generated.data.length),
+			"Cache-Control": "no-store",
+			"X-Content-Type-Options": "nosniff",
+			"X-Export-Warnings": String(artifacts.warnings.length),
+		});
+		res.end(generated.data);
+	} catch (error) {
+		if (res.headersSent) {
+			res.end();
+			return;
+		}
+		const statusCode = error instanceof ExportBuildError ? error.statusCode : 500;
+		sendJson(res, statusCode, {
+			error: error instanceof Error ? error.message : "Export failed.",
+		});
+	}
 }
 
 function serveStatic(req: http.IncomingMessage, res: http.ServerResponse) {
@@ -1550,6 +1713,8 @@ const server = http.createServer((req, res) => {
 		handleModels(req, res);
 	} else if (pathname === "/api/meterless/detect") {
 		handleMeterlessDetect(req, res);
+	} else if (pathname === "/api/exports") {
+		void handleExports(req, res);
 	} else if (pathname === "/api/conversations") {
 		handleConversations(req, res);
 	} else if (pathname.startsWith("/api/conversations/")) {

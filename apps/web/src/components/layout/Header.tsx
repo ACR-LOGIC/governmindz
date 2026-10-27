@@ -21,14 +21,33 @@ import {
 } from "lucide-react";
 import type { ActiveTab, HealthStatus, Conversation } from "../../types";
 import { ttsService } from "../../services/ttsService";
+import { detectMeterless } from "../../services/api";
 import {
-	exportConversationAsPdf,
-	exportConversationAsCsvSpreadsheet,
-	exportConversationAsWordDoc,
-	exportConversationAsJson,
-	exportConversationAsMarkdown,
-	exportAuditLogAsJsonl,
-} from "../../services/exportService";
+	downloadConversationArchive,
+	downloadConversationExport,
+	type ConversationExportFormat,
+} from "../../services/exportBundle";
+import { evaluateWebConversation, formatConfidence } from "../../services/conversationEvaluation";
+
+type ExportPhase = "idle" | "working" | "success" | "error";
+
+interface ExportUiState {
+	phase: ExportPhase;
+	format?: ConversationExportFormat;
+	message?: string;
+	warnings: string[];
+}
+
+const EXPORT_LABELS: Record<ConversationExportFormat, string> = {
+	pdf: "PDF report",
+	docx: "Word document",
+	xlsx: "Excel workbook",
+	csv: "CSV dataset",
+	json: "JSON export",
+	markdown: "Markdown briefing",
+	jsonl: "Audit JSONL",
+	zip: "Download All archive",
+};
 
 interface HeaderProps {
 	activeTab: ActiveTab;
@@ -70,11 +89,117 @@ export const Header: React.FC<HeaderProps> = ({
 
 	const [ttsEnabled, setTtsEnabled] = useState(false);
 	const [exportMenuOpen, setExportMenuOpen] = useState(false);
+	const [meterlessConnecting, setMeterlessConnecting] = useState(false);
+	const [exportState, setExportState] = useState<ExportUiState>({
+		phase: "idle",
+		warnings: [],
+	});
 	const exportRef = useRef<HTMLDivElement>(null);
+	const exportAbortRef = useRef<AbortController | null>(null);
+	const evaluation = activeConversation ? evaluateWebConversation(activeConversation) : null;
+	const archiveEnabled = evaluation?.status === "EVALUATED";
+	const exportBusy = exportState.phase === "working";
 
 	useEffect(() => {
 		setTtsEnabled(ttsService.isTtsEnabled());
 	}, []);
+
+	useEffect(() => {
+		return () => exportAbortRef.current?.abort();
+	}, []);
+
+	const runExport = async (format: ConversationExportFormat) => {
+		if (!activeConversation || exportBusy) return;
+		if (format === "zip" && !archiveEnabled) return;
+
+		exportAbortRef.current?.abort();
+		const controller = new AbortController();
+		exportAbortRef.current = controller;
+		setExportState({ phase: "working", format, warnings: [] });
+
+		try {
+			const result =
+				format === "zip"
+					? await downloadConversationArchive(activeConversation, controller.signal)
+					: await downloadConversationExport(activeConversation, format, controller.signal);
+			setExportState({
+				phase: "success",
+				format,
+				message: `${result.filename} downloaded.`,
+				warnings: result.warnings,
+			});
+		} catch (error) {
+			if (controller.signal.aborted) {
+				setExportState({ phase: "idle", warnings: [] });
+				return;
+			}
+			const message =
+				error instanceof Error
+					? error.message
+					: `Could not generate the ${EXPORT_LABELS[format]}.`;
+			setExportState({ phase: "error", format, message, warnings: [] });
+		} finally {
+			if (exportAbortRef.current === controller) {
+				exportAbortRef.current = null;
+			}
+		}
+	};
+
+	const cancelExport = () => {
+		exportAbortRef.current?.abort();
+		exportAbortRef.current = null;
+		setExportState({ phase: "idle", warnings: [] });
+	};
+
+	const exportActions: Array<{
+		format: ConversationExportFormat;
+		label: string;
+		description: string;
+		icon: React.ReactNode;
+	}> = [
+		{
+			format: "pdf",
+			label: "Executive Report (.PDF)",
+			description: "Real browser-rendered PDF with evaluation and audit status",
+			icon: <FileText className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />,
+		},
+		{
+			format: "docx",
+			label: "Word Document (.DOCX)",
+			description: "Editable Office document with structured sections",
+			icon: <FileText className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />,
+		},
+		{
+			format: "xlsx",
+			label: "Excel Workbook (.XLSX)",
+			description: "Formatted workbook with separate data sheets",
+			icon: <FileSpreadsheet className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />,
+		},
+		{
+			format: "csv",
+			label: "Spreadsheet Dataset (.CSV)",
+			description: "Portable tabular messages, evidence, and audit records",
+			icon: <FileSpreadsheet className="w-4 h-4 text-teal-400 shrink-0 mt-0.5" />,
+		},
+		{
+			format: "json",
+			label: "Granular Outputs (.JSON)",
+			description: "Complete structured conversation and audit data",
+			icon: <FileJson className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />,
+		},
+		{
+			format: "markdown",
+			label: "Executive Briefing (.MD)",
+			description: "Readable briefing with explicit evaluation labels",
+			icon: <FileCode className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />,
+		},
+		{
+			format: "jsonl",
+			label: "Audit Ledger Stream (.JSONL)",
+			description: "Recorded audit events for SIEM and archive workflows",
+			icon: <Layers className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />,
+		},
+	];
 
 	// Close menus when clicking outside
 	useEffect(() => {
@@ -91,6 +216,24 @@ export const Header: React.FC<HeaderProps> = ({
 		const next = !ttsEnabled;
 		ttsService.setTtsEnabled(next);
 		setTtsEnabled(next);
+	};
+
+	const handleMeterlessClick = async () => {
+		if (meterlessConnecting) return;
+		if (meterlessOnline) {
+			onOpenCredentials?.();
+			return;
+		}
+		setMeterlessConnecting(true);
+		try {
+			await detectMeterless();
+			refreshHealth();
+		} catch (error) {
+			console.warn("Meterless auto-detection failed:", error);
+			refreshHealth();
+		} finally {
+			setMeterlessConnecting(false);
+		}
 	};
 
 	return (
@@ -193,7 +336,8 @@ export const Header: React.FC<HeaderProps> = ({
 					{/* Meterless Indicator */}
 					<button
 						type="button"
-						onClick={onOpenCredentials}
+						onClick={handleMeterlessClick}
+						disabled={meterlessConnecting}
 						className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md border transition-colors ${
 							meterlessOnline
 								? "bg-emerald-950/40 border-emerald-800 text-emerald-300"
@@ -202,10 +346,12 @@ export const Header: React.FC<HeaderProps> = ({
 								: "bg-[#181822] border-[#2a2a38] text-slate-400"
 						}`}
 						title={
-							meterlessOnline
+							meterlessConnecting
+								? "Attempting to connect Meterless Nightshift..."
+								: meterlessOnline
 								? "Meterless Runtime: Online at 127.0.0.1:8088"
 								: mode === "live"
-								? "Meterless: Offline or Unreachable (Click to configure)"
+								? "Meterless: Offline or Unreachable (Click to try auto-connect)"
 								: "Meterless: Demo Simulation Active"
 						}
 					>
@@ -218,7 +364,7 @@ export const Header: React.FC<HeaderProps> = ({
 									: "bg-slate-500"
 							}`}
 						/>
-						<span>Meterless</span>
+						<span>{meterlessConnecting ? "Connecting..." : "Meterless"}</span>
 					</button>
 
 					{/* Zetaris Indicator */}
@@ -304,130 +450,141 @@ export const Header: React.FC<HeaderProps> = ({
 					</button>
 
 					{exportMenuOpen && activeConversation && (
-						<div className="absolute right-0 mt-2 w-72 bg-[#141418] border border-[#2a2a36] rounded-xl shadow-2xl p-2 z-50 animate-fadeIn space-y-1">
-							<div className="px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-slate-400 border-b border-[#22222c]">
-								Executive Output Suite
-							</div>
-
+					<div className="absolute right-0 mt-2 w-80 bg-[#141418] border border-[#2a2a36] rounded-xl shadow-2xl p-2 z-50 animate-fadeIn space-y-1">
+						<div className="flex items-center justify-between px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-slate-400 border-b border-[#22222c]">
+							<span>Export conversation</span>
 							<button
 								type="button"
-								onClick={() => {
-									exportConversationAsPdf(activeConversation);
-									setExportMenuOpen(false);
-								}}
-								className="w-full flex items-start gap-2.5 p-2 rounded-lg text-left hover:bg-[#1f1f28] text-slate-200 transition-colors group"
+								onClick={() => setExportMenuOpen(false)}
+								className="text-slate-400 hover:text-white"
+								aria-label="Close export menu"
 							>
-								<FileText className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-								<div>
-									<div className="text-xs font-semibold group-hover:text-rose-300">
-										Executive Report (.PDF)
-									</div>
-									<div className="text-[10px] text-slate-400 leading-tight">
-										Printable executive briefing with verified consensus
-									</div>
-								</div>
-							</button>
-
-							<button
-								type="button"
-								onClick={() => {
-									exportConversationAsCsvSpreadsheet(activeConversation);
-									setExportMenuOpen(false);
-								}}
-								className="w-full flex items-start gap-2.5 p-2 rounded-lg text-left hover:bg-[#1f1f28] text-slate-200 transition-colors group"
-							>
-								<FileSpreadsheet className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-								<div>
-									<div className="text-xs font-semibold group-hover:text-emerald-300">
-										Spreadsheet Dataset (.CSV)
-									</div>
-									<div className="text-[10px] text-slate-400 leading-tight">
-										Excel/Sheets tabular evidence & audit records
-									</div>
-								</div>
-							</button>
-
-							<button
-								type="button"
-								onClick={() => {
-									exportConversationAsWordDoc(activeConversation);
-									setExportMenuOpen(false);
-								}}
-								className="w-full flex items-start gap-2.5 p-2 rounded-lg text-left hover:bg-[#1f1f28] text-slate-200 transition-colors group"
-							>
-								<FileCode className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
-								<div>
-									<div className="text-xs font-semibold group-hover:text-sky-300">
-										Word / Docs Document (.DOC)
-									</div>
-									<div className="text-[10px] text-slate-400 leading-tight">
-										Microsoft Word editable briefing document
-									</div>
-								</div>
-							</button>
-
-							<div className="px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider text-slate-500 border-t border-[#22222c] pt-1">
-								Technical & Audit Formats
-							</div>
-
-							<button
-								type="button"
-								onClick={() => {
-									exportConversationAsJson(activeConversation);
-									setExportMenuOpen(false);
-								}}
-								className="w-full flex items-start gap-2.5 p-2 rounded-lg text-left hover:bg-[#1f1f28] text-slate-200 transition-colors group"
-							>
-								<FileJson className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-								<div>
-									<div className="text-xs font-semibold group-hover:text-amber-300">
-										Granular Outputs (.JSON)
-									</div>
-									<div className="text-[10px] text-slate-400 leading-tight">
-										Full audit ledger, citations, telemetry & messages
-									</div>
-								</div>
-							</button>
-
-							<button
-								type="button"
-								onClick={() => {
-									exportConversationAsMarkdown(activeConversation);
-									setExportMenuOpen(false);
-								}}
-								className="w-full flex items-start gap-2.5 p-2 rounded-lg text-left hover:bg-[#1f1f28] text-slate-200 transition-colors group"
-							>
-								<FileText className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-								<div>
-									<div className="text-xs font-semibold group-hover:text-emerald-300">
-										Executive Briefing (.MD)
-									</div>
-									<div className="text-[10px] text-slate-400 leading-tight">
-										Formatted synthesis, verified positions & citations
-									</div>
-								</div>
-							</button>
-
-							<button
-								type="button"
-								onClick={() => {
-									exportAuditLogAsJsonl(activeConversation);
-									setExportMenuOpen(false);
-								}}
-								className="w-full flex items-start gap-2.5 p-2 rounded-lg text-left hover:bg-[#1f1f28] text-slate-200 transition-colors group"
-							>
-								<Layers className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
-								<div>
-									<div className="text-xs font-semibold group-hover:text-purple-300">
-										Audit Ledger Stream (.JSONL)
-									</div>
-									<div className="text-[10px] text-slate-400 leading-tight">
-										Cryptographic chain events for SIEM compliance
-									</div>
-								</div>
+								✕
 							</button>
 						</div>
-					)}
+
+						{evaluation ? (
+							<div className="px-2 py-1.5 text-[10px] font-mono border-b border-[#22222c] pb-1.5">
+								{evaluation.status === "EVALUATED"
+									? `Evaluated · Confidence: ${formatConfidence(evaluation.confidence)} · Download All: enabled`
+									: `Not evaluated · Confidence: ${formatConfidence(evaluation.confidence)} · Download All: disabled until evaluation completes`}
+							</div>
+						) : null}
+
+						<div className="px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-slate-400 border-b border-[#22222c] pb-1">
+							Single formats
+						</div>
+						{exportActions.map((action) => (
+							<button
+								key={action.format}
+								type="button"
+								disabled={exportBusy}
+								onClick={() => runExport(action.format)}
+								className={`w-full flex items-start gap-2.5 p-2 rounded-lg text-left transition-colors ${
+									exportBusy ? "opacity-60 cursor-not-allowed" : "hover:bg-[#1f1f28] text-slate-200"
+								}`}
+							>
+								{action.icon}
+								<div>
+									<div className="text-xs font-semibold">{action.label}</div>
+									<div className="text-[10px] text-slate-400 leading-tight">
+										{action.description}
+									</div>
+								</div>
+							</button>
+						))}
+
+						<div className="px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider text-slate-500 border-t border-[#22222c] pt-1">
+							Conversation archive
+						</div>
+						<button
+							type="button"
+							id="tour-download-all"
+							disabled={exportBusy || !archiveEnabled}
+							onClick={() => runExport("zip")}
+							aria-disabled={!archiveEnabled}
+							className={`w-full flex items-start gap-2.5 p-2 rounded-lg border text-left transition-colors ${
+								!archiveEnabled
+									? "border-[#4c566a] bg-[#1a1a24] text-slate-500 opacity-80 cursor-not-allowed"
+									: exportBusy
+										? "border-amber-500/60 bg-[#2a1b0a] text-amber-200 opacity-60 cursor-not-allowed"
+										: "border-amber-500/50 bg-[#16161a] text-amber-300 hover:bg-[#1f1f28] hover:border-amber-400"
+							} mb-1`}
+						>
+							<Download className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+							<div>
+								<div className="text-xs font-semibold">
+									{archiveEnabled ? "Download All (.ZIP)" : "Download All (.ZIP)"}
+								</div>
+								<div className="text-[10px] text-slate-400 leading-tight">
+									{archiveEnabled
+										? "Complete evaluable export including all referenced artifacts"
+										: "Complete evaluation required before archive download"}
+								</div>
+							</div>
+						</button>
+
+						{exportState.phase === "working" && (
+							<div className="px-2 py-1.5 flex flex-col gap-1.5 border-t border-[#22222c] pt-1">
+								<div className="flex items-center gap-2">
+									<RefreshCw className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+									<span className="text-xs font-semibold text-amber-300">
+										Generating {EXPORT_LABELS[exportState.format || "zip"]}...
+									</span>
+								</div>
+								<button
+									type="button"
+									onClick={cancelExport}
+									className="w-full p-1.5 rounded bg-[#2a1b0a] border border-amber-900/50 text-amber-300 text-[10px] hover:bg-[#2a1b0a]/70"
+								>
+									Cancel export
+								</button>
+							</div>
+						)}
+
+						{exportState.phase === "success" && (
+							<div className="px-2 py-1.5 flex flex-col gap-1.5 border-t border-[#22222c] pt-1 bg-[#0b2117]">
+								<div className="flex items-center gap-2">
+									<span className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse" />
+									<span className="text-xs font-semibold text-emerald-300">
+										{exportState.message || "Downloaded"}
+									</span>
+								</div>
+								{exportState.warnings.length > 0 && (
+									<div className="text-[10px] text-amber-300 leading-tight">
+										{exportState.warnings.join(" ")}
+									</div>
+								)}
+								{exportState.format && (
+									<button
+										type="button"
+										onClick={() => runExport(exportState.format ?? "pdf")}
+										className="w-full p-1 rounded bg-emerald-900/30 border border-emerald-600/40 text-emerald-200 text-[10px] hover:bg-emerald-900/50"
+									>
+										Download again
+									</button>
+								)}
+							</div>
+						)}
+
+						{exportState.phase === "error" && (
+							<div className="px-2 py-1.5 flex flex-col gap-1.5 border-t border-[#22222c] pt-1 bg-[#2e1616]">
+								<div className="text-[10px] text-rose-300 leading-tight break-words">
+									{exportState.message || "Export failed"}
+								</div>
+								{exportState.format && (
+									<button
+										type="button"
+										onClick={() => runExport(exportState.format ?? "pdf")}
+										className="w-full p-1 rounded bg-[#7f1d1d] border border-rose-700 text-rose-200 text-[10px] hover:bg-[#7f1d1d]/70"
+									>
+										Retry
+									</button>
+								)}
+							</div>
+						)}
+					</div>
+				)}
 				</div>
 
 				{/* Settings button */}
