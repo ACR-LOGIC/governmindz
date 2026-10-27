@@ -153,6 +153,7 @@ export const Header: React.FC<HeaderProps> = ({
 				</button>
 
 				<button
+					id="tour-evidence"
 					type="button"
 					onClick={() => setActiveTab("evidence")}
 					className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${

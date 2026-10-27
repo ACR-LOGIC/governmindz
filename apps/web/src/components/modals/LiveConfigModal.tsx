@@ -23,6 +23,7 @@ export const LiveConfigModal: React.FC<LiveConfigModalProps> = ({ isOpen, onClos
 	const [zetarisPort, setZetarisPort] = useState("443");
 	const [zetarisUser, setZetarisUser] = useState("");
 	const [zetarisPassword, setZetarisPassword] = useState("");
+	const [zetarisApiKey, setZetarisApiKey] = useState("");
 	const [zetarisDatabase, setZetarisDatabase] = useState("");
 
 	const [auditSecret, setAuditSecret] = useState("");
@@ -30,6 +31,7 @@ export const LiveConfigModal: React.FC<LiveConfigModalProps> = ({ isOpen, onClos
 	// Visibility toggles
 	const [showMeterlessKey, setShowMeterlessKey] = useState(false);
 	const [showZetarisPass, setShowZetarisPass] = useState(false);
+	const [showZetarisApiKey, setShowZetarisApiKey] = useState(false);
 	const [showAuditSecret, setShowAuditSecret] = useState(false);
 
 	useEffect(() => {
@@ -70,6 +72,7 @@ export const LiveConfigModal: React.FC<LiveConfigModalProps> = ({ isOpen, onClos
 			if (zetarisPort.trim()) payload.zetarisPort = zetarisPort.trim();
 			if (zetarisUser.trim()) payload.zetarisUser = zetarisUser.trim();
 			if (zetarisPassword.trim()) payload.zetarisPassword = zetarisPassword.trim();
+			if (zetarisApiKey.trim()) payload.zetarisApiKey = zetarisApiKey.trim();
 			if (zetarisDatabase.trim()) payload.zetarisDatabase = zetarisDatabase.trim();
 
 			if (auditSecret.trim()) payload.auditSecret = auditSecret.trim();
@@ -271,6 +274,30 @@ export const LiveConfigModal: React.FC<LiveConfigModalProps> = ({ isOpen, onClos
 									className="w-full bg-[#0c101e] border border-[#1e2842] rounded-lg px-3 py-2 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500"
 								/>
 							</div>
+							<div className="sm:col-span-3">
+								<label className="block text-[11px] text-slate-400 mb-1">REST API Key / Token</label>
+								<div className="relative">
+									<input
+										type={showZetarisApiKey ? "text" : "password"}
+										value={zetarisApiKey}
+										onChange={(e) => setZetarisApiKey(e.target.value)}
+										placeholder={status?.hasZetarisApiKey ? "•••••••••••• (Leave blank to keep current)" : "Zetaris API key or auth token"}
+										className="w-full bg-[#0c101e] border border-[#1e2842] rounded-lg pl-3 pr-10 py-2 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500"
+									/>
+									<button
+										type="button"
+										onClick={() => setShowZetarisApiKey(!showZetarisApiKey)}
+										className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+										aria-label={showZetarisApiKey ? "Hide Zetaris API key" : "Show Zetaris API key"}
+									>
+										{showZetarisApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+									</button>
+								</div>
+								<p className="text-[10px] text-slate-500 mt-1">
+									Used as the Bearer token for read-only Zetaris REST queries. This is the
+									credential the live query path needs.
+								</p>
+							</div>
 							<div>
 								<label className="block text-[11px] text-slate-400 mb-1">Username</label>
 								<input
@@ -282,19 +309,20 @@ export const LiveConfigModal: React.FC<LiveConfigModalProps> = ({ isOpen, onClos
 								/>
 							</div>
 							<div>
-								<label className="block text-[11px] text-slate-400 mb-1">Password / Secret</label>
+								<label className="block text-[11px] text-slate-400 mb-1">JDBC Password (optional)</label>
 								<div className="relative">
 									<input
 										type={showZetarisPass ? "text" : "password"}
 										value={zetarisPassword}
 										onChange={(e) => setZetarisPassword(e.target.value)}
-										placeholder={status?.hasZetarisPassword ? "•••••••••••• (Keep current)" : "Password"}
+										placeholder={status?.hasZetarisPassword ? "•••••••••••• (Keep current)" : "Optional JDBC password"}
 										className="w-full bg-[#0c101e] border border-[#1e2842] rounded-lg pl-3 pr-10 py-2 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500"
 									/>
 									<button
 										type="button"
 										onClick={() => setShowZetarisPass(!showZetarisPass)}
 										className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+										aria-label={showZetarisPass ? "Hide Zetaris JDBC password" : "Show Zetaris JDBC password"}
 									>
 										{showZetarisPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
 									</button>

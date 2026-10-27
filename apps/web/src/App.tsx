@@ -540,6 +540,14 @@ export const App: React.FC = () => {
 		showToast("Demo restarted. Choose a scenario to begin.");
 	};
 
+	// Jump from a completed answer to the interactive Zetaris evidence explorer.
+	const handleExploreZetaris = useCallback(() => {
+		setActiveTab("evidence");
+		setTimeout(() => {
+			document.getElementById("tour-zetaris")?.scrollIntoView({ behavior: "smooth", block: "start" });
+		}, 80);
+	}, []);
+
 	// Finish Tour
 	const handleFinishTour = () => {
 		setTourOpen(false);
@@ -1287,6 +1295,7 @@ export const App: React.FC = () => {
 											demoQueueRef.current?.reset();
 											handleStartOver();
 										}}
+										onExploreZetaris={handleExploreZetaris}
 									/>
 									<MessageComposer
 										mode={mode}

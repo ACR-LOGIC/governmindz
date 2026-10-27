@@ -20,21 +20,28 @@ test.describe("GovernMindz Mission Control Frontend", () => {
 		await page.waitForLoadState("networkidle");
 
 		// Verify Tour dialog appears on first launch
-		await expect(page.getByText("Step 1 of 5")).toBeVisible();
+		await expect(page.getByText("Step 1 of 6")).toBeVisible();
 		await expect(page.getByText("AI Multi-Agent Group Chat")).toBeVisible();
 
 		// Click Next to Step 2
 		await page.getByRole("button", { name: /Next/i }).click();
-		await expect(page.getByText("Step 2 of 5")).toBeVisible();
+		await expect(page.getByText("Step 2 of 6")).toBeVisible();
 		await expect(page.getByText("Active Agent Council & Live Reasoning")).toBeVisible();
 
 		// Click Back to Step 1 (exact match to avoid matching scenario text)
 		await page.getByRole("button", { name: "Back", exact: true }).click();
-		await expect(page.getByText("Step 1 of 5")).toBeVisible();
+		await expect(page.getByText("Step 1 of 6")).toBeVisible();
+
+		// Advance to the new interactive Zetaris explorer step.
+		for (let i = 0; i < 5; i++) {
+			await page.getByRole("button", { name: /Next/i }).click();
+		}
+		await expect(page.getByText("Step 6 of 6")).toBeVisible();
+		await expect(page.getByText("Interactive Zetaris Evidence Explorer")).toBeVisible();
 
 		// Click Skip Introduction
 		await page.getByRole("button", { name: /Skip Introduction/i }).click();
-		await expect(page.getByText("Step 1 of 5")).not.toBeVisible();
+		await expect(page.getByText("Step 1 of 6")).not.toBeVisible();
 	});
 
 	test("Header, brand, and layout load properly", async ({ page }) => {
@@ -112,8 +119,12 @@ test.describe("GovernMindz Mission Control Frontend", () => {
 		await expect(page.getByText("Zetaris Lightning Federated Data")).toBeVisible();
 		await expect(page.getByRole("button", { name: /Configure Credentials/i })).toBeVisible();
 
-		// Close modal
-		await page.locator("button[aria-label='Close settings']").click();
+		// The Zetaris REST API key is required for live queries and must be exposed here.
+		await page.getByRole("button", { name: /Configure Credentials/i }).click();
+		await expect(page.getByText("Live Mode Credential Configuration")).toBeVisible();
+		await expect(page.getByText("REST API Key / Token")).toBeVisible();
+		await page.getByRole("button", { name: "Close", exact: true }).click();
+		await expect(page.getByText("Live Mode Credential Configuration")).not.toBeVisible();
 	});
 
 	test("Transition to Live mode opens confirmation dialog and enables text entry", async ({ page }) => {

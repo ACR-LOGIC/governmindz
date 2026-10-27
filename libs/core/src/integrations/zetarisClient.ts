@@ -61,6 +61,24 @@ function normalizeBaseUrl(value: string): string {
 	while (trimmed.endsWith("/")) { trimmed = trimmed.slice(0, -1); } return trimmed;
 }
 
+function resolveBaseUrl(configured?: string): string {
+	const explicit = (configured ?? "").trim() || env("ZETARIS_REST_URL");
+	if (explicit) return normalizeBaseUrl(explicit);
+
+	const host = env("ZETARIS_HOST");
+	if (host) {
+		if (host.startsWith("http://") || host.startsWith("https://")) {
+			const normalized = normalizeBaseUrl(host);
+			return normalized.endsWith("/api/v1.0") ? normalized : `${normalized}/api/v1.0`;
+		}
+		const port = env("ZETARIS_PORT") || "8888";
+		const protocol = port === "443" ? "https" : "http";
+		return normalizeBaseUrl(`${protocol}://${host}:${port}/api/v1.0`);
+	}
+
+	return DEFAULT_REST_URL;
+}
+
 /**
  * Split SQL on semicolons outside quotes and comments. This mirrors the
  * onboarding runner's quote-aware splitter so a semicolon inside a string
@@ -266,7 +284,7 @@ export class ZetarisClient {
 	private readonly timeoutMs: number;
 
 	constructor(config: ZetarisConfig = {}) {
-		this.baseUrl = normalizeBaseUrl(config.restUrl ?? env("ZETARIS_REST_URL"));
+		this.baseUrl = resolveBaseUrl(config.restUrl);
 		this.apiKey = (
 			config.apiKey?.trim() ||
 			env("ZETARIS_API_KEY") ||

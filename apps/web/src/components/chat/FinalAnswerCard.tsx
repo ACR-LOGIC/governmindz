@@ -18,6 +18,7 @@ import {
 	GitFork,
 	Presentation,
 	Sparkles,
+	Database,
 } from "lucide-react";
 import type { ChatMessage, Conversation } from "../../types";
 import { ttsService } from "../../services/ttsService";
@@ -36,6 +37,7 @@ interface FinalAnswerCardProps {
 	consensusMethod?: string;
 	rounds?: number;
 	auditVerified?: boolean;
+	onExploreZetaris?: () => void;
 }
 
 export const FinalAnswerCard: React.FC<FinalAnswerCardProps> = ({
@@ -45,6 +47,7 @@ export const FinalAnswerCard: React.FC<FinalAnswerCardProps> = ({
 	consensusMethod,
 	rounds,
 	auditVerified,
+	onExploreZetaris,
 }) => {
 	const [copied, setCopied] = useState(false);
 	const [isSpeaking, setIsSpeaking] = useState(false);
@@ -204,6 +207,33 @@ export const FinalAnswerCard: React.FC<FinalAnswerCardProps> = ({
 								</li>
 							))}
 						</ul>
+					</div>
+				)}
+
+				{/* Interactive Zetaris evidence hand-off */}
+				{convData.zetarisData?.query && onExploreZetaris && (
+					<div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-gradient-to-r from-teal-950/40 via-[#121c2d] to-[#12182b] border border-teal-700/50">
+						<div className="flex items-start gap-2.5">
+							<div className="w-8 h-8 rounded-lg bg-teal-500/15 border border-teal-500/40 flex items-center justify-center text-teal-300 shrink-0">
+								<Database className="w-4 h-4" />
+							</div>
+							<div>
+								<div className="text-[11px] font-mono font-bold uppercase tracking-wider text-teal-300">
+									Zetaris Evidence Explorer
+								</div>
+								<div className="text-[11px] text-slate-400 mt-0.5">
+									Filter, sort, inspect rows, and download the captured dataset.
+								</div>
+							</div>
+						</div>
+						<button
+							type="button"
+							onClick={onExploreZetaris}
+							className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md shadow-teal-950/30 transition-all active:scale-95 shrink-0"
+						>
+							<Database className="w-3.5 h-3.5" />
+							Explore Zetaris Data
+						</button>
 					</div>
 				)}
 

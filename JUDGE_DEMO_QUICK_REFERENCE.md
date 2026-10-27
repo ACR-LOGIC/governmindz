@@ -12,6 +12,12 @@ npm run web
 
 Demo Mode is selected by default. Pick a card, then click **Start Demo**.
 
+After any demo reaches its final card, click **Explore Zetaris Data** (or open
+**Trust & Evidence**) to show the interactive evidence explorer: exact SQL,
+search, column sorting, row inspection, raw JSON, and CSV/JSON downloads. The
+same dataset is labeled as live Zetaris, deterministic scenario, or synthetic
+fallback. Full integration guide: [`Zetaris.md`](Zetaris.md).
+
 For a CLI run of the same scenario (works in PowerShell and POSIX shells):
 
 ```bash
@@ -79,7 +85,8 @@ remaining requests by policy.
 
 **Look for:** `REQ-701` gets OR 1; `REQ-704` transfers with a Telemetry Bay B
 fallback; every decision cites a policy rule and a precedent; the audit chain
-reports verified integrity.
+reports verified integrity. Click **Explore Zetaris Data** and inspect the
+`request_id`, `patient_tier`, `acuity_score`, and `policy_precedent_id` fields.
 
 **Full walkthrough:** [`TRACK_03_REASONING_GUIDED_DEMO.md`](TRACK_03_REASONING_GUIDED_DEMO.md)
 covers the complete Track 03 demo, including the data query, evidence, teams,
@@ -113,8 +120,12 @@ other two demos show the same architecture applied to Tracks 01 and 03.
 npm run typecheck
 npm test
 npm run build
+npm run zetaris:check
 npx playwright test tests/e2e/demo-scenarios.spec.ts
 ```
 
-The Playwright test launches all three demos and asserts that each reaches its
-final synthesis card without a run failure.
+`npm run zetaris:check` requires live Zetaris credentials in `.env.local`; it
+fails if the client returns synthetic fallback data. The Playwright test
+launches all three demos, asserts that each reaches its final synthesis card
+without a run failure, then exercises the Zetaris explorer (search, sort, row
+inspection, raw JSON, and CSV/JSON downloads).
