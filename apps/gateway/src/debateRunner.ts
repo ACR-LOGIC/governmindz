@@ -37,6 +37,7 @@ import { WebSearchCrew, type WebSearchCrewReport } from "@governmindz/core/agent
 import { DesignAssistant } from "@governmindz/core/documents/DesignAssistant";
 import { runCrewSafely, emptyDataCrewReport, emptyWebCrewReport } from "./crewResilience.js";
 import { ResearchCrewRunner } from "./application/ResearchCrewRunner.js";
+import { calculateInquiryScore } from "./application/InquiryScorePolicy.js";
 
 interface ZetarisToolResult {
 	columns: string[];
@@ -584,11 +585,7 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 	});
 
 	// Inquiry score heuristic (1-10): based on topic complexity + evidence size.
-	let inquiryScore = 5;
-	if (topic.length > 120) inquiryScore += 1;
-	if (zetarisResult.rows.length > 5) inquiryScore += 1;
-	if (/confidential|conflict|dispute|uncertain/i.test(topic)) inquiryScore += 2;
-	inquiryScore = Math.max(1, Math.min(10, inquiryScore));
+	const inquiryScore = calculateInquiryScore(topic, zetarisResult.rows.length);
 
 	eventSink?.({ type: "inquiry_score", score: inquiryScore });
 
