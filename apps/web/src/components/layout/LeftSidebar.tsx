@@ -54,10 +54,13 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
 
 	if (!isOpen) return null;
 
-	// Clean mode isolation: Live mode shows only live debates; Demo mode shows demo runs
-	const modeScoped = conversations.filter((c) =>
-		mode === "live" ? c.mode === "live" : c.mode === "sample" || c.mode === "demo",
-	);
+	// Clean mode isolation: Live mode shows only live debates; Demo mode shows
+	// only canonical demo examples (one entry per example, never per replay).
+	const modeScoped = conversations
+		.filter((c) => !c.id.startsWith("demo_draft_"))
+		.filter((c) =>
+			mode === "live" ? c.mode === "live" : c.mode === "sample" || c.mode === "demo",
+		);
 
 	const filtered = modeScoped.filter(
 		(c) =>

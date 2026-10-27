@@ -95,23 +95,10 @@ export class DataCrew {
 					query,
 					isSynthetic: Boolean(res.isSynthetic),
 				};
-			} catch {
-				// Robust offline fallback with documented provenance
-				rawResult = {
-					columns: ["database_name", "type", "description", "table_count"],
-					rows: [
-						["SEC_DATA", "sec_edgar_xbrl", "SEC EDGAR XBRL corporate facts", 14],
-						["OPENFDA_REST", "rest_api", "OpenFDA adverse events & labels", 2],
-						["CLINICALTRIALS_REST", "rest_api", "Registered clinical trials human subjects", 1],
-						["GLEIF_REST", "rest_api", "Global Legal Entity Identifier registry", 1],
-						["NY_TAXI", "postgres_federated", "NYC TLC trip operations & telemetry", 15],
-						["COMPANY_DNS", "rest_api", "Standard Industrial Classification hierarchy", 2],
-						["TPCDS_DB", "benchmark_parquet", "Decision support analytic benchmark", 24],
-					],
-					total: 7,
-					isSynthetic: true,
-					query: "SHOW LIGHTNING DATABASES (offline fallback)",
-				};
+			} catch (error) {
+				throw new Error(
+					`Zetaris live query failed: ${error instanceof Error ? error.message : String(error)}`,
+				);
 			}
 		} else if (this.config.scenarioData) {
 			// Sample scenario data passed in

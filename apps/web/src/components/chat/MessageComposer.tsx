@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
 	Send,
 	Sparkles,
@@ -23,8 +23,10 @@ import {
 	Compass,
 	BookOpen,
 	Monitor,
+	RefreshCw,
 } from "lucide-react";
 import { AVAILABLE_MODELS, type ModelOption } from "../../services/models";
+import { fetchModels } from "../../services/api";
 import { ttsService } from "../../services/ttsService";
 
 export interface DemoScenarioOption {
@@ -177,6 +179,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 	const [text, setText] = useState("");
 	const [activeDemoScenario, setActiveDemoScenario] = useState<string>(selectedScenarioFile);
 	const [selectedModel, setSelectedModel] = useState<string>(AVAILABLE_MODELS[0].id);
+	const [models, setModels] = useState<ModelOption[]>(AVAILABLE_MODELS);
+	const [modelsRefreshing, setModelsRefreshing] = useState(false);
+
 	const [selectedSearchModes, setSelectedSearchModes] = useState<string[]>(["web", "zetaris"]);
 	const [attachedFiles, setAttachedFiles] = useState<AttachedItem[]>([]);
 	const [voiceEnabled, setVoiceEnabled] = useState<boolean>(false);
@@ -193,6 +198,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 	const plusMenuRef = useRef<HTMLDivElement>(null);
 	const searchMenuRef = useRef<HTMLDivElement>(null);
 	const modelMenuRef = useRef<HTMLDivElement>(null);
+	const modelRequestRef = useRef(0);
 
 	// Sync local scenario with parent
 	useEffect(() => {
@@ -200,6 +206,69 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 			setActiveDemoScenario(selectedScenarioFile);
 		}
 	}, [selectedScenarioFile]);
+
+	// Load the live Nightshift model catalog. Cloud models configured inside
+	// Nightshift appear here automatically.
+	const loadModels = useCallback(async () => {
+		const requestId = ++modelRequestRef.current;
+		setModelsRefreshing(true);
+		try {
+			const items = await fetchModels();
+			if (requestId !== modelRequestRef.current) return;
+			if (items.length === 0) return;
+			const mapped: ModelOption[] = items.map((m) => ({
+				id: m.id,
+				name: m.name || m.id,
+				shortName:
+					(m.name || m.id).length > 22
+						? `${(m.name || m.id).slice(0, 20)}…`
+						: m.name || m.id,
+				provider: m.provider,
+				recommended: m.isDefault,
+			}));
+			setModels(mapped);
+			setSelectedModel((current) =>
+				mapped.some((m) => m.id === current)
+					? current
+					: mapped.find((m) => m.recommended)?.id || mapped[0].id,
+			);
+
+		} catch {
+			// Keep the current catalog when Nightshift discovery is unavailable.
+		} finally {
+			if (requestId === modelRequestRef.current) {
+				setModelsRefreshing(false);
+			}
+		}
+	}, []);
+
+	useEffect(() => {
+		void loadModels();
+	}, [loadModels]);
+
+	// Refresh when the picker opens, when credentials/health are refreshed,
+	// and on a low-frequency visibility-aware poll. Nightshift has no model
+	// change event stream, so this is the reliable discovery path.
+	useEffect(() => {
+		if (modelMenuOpen) {
+			void loadModels();
+		}
+	}, [modelMenuOpen, loadModels]);
+
+	useEffect(() => {
+		const refresh = () => {
+			if (document.visibilityState === "visible") void loadModels();
+		};
+		const interval = setInterval(refresh, 60000);
+		const onModelsRefresh = () => void loadModels();
+		document.addEventListener("visibilitychange", refresh);
+		window.addEventListener("governmindz:models-refresh", onModelsRefresh);
+		return () => {
+			clearInterval(interval);
+			document.removeEventListener("visibilitychange", refresh);
+			window.removeEventListener("governmindz:models-refresh", onModelsRefresh);
+		};
+	}, [loadModels]);
 
 	// Sync voice preference
 	useEffect(() => {
@@ -324,7 +393,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 		}
 	}, [text]);
 
-	const currentModel = AVAILABLE_MODELS.find((m) => m.id === selectedModel) || AVAILABLE_MODELS[0];
+	const currentModel = models.find((m) => m.id === selectedModel) || models[0] || AVAILABLE_MODELS[0];
 	const activeScenario = DEMO_SCENARIOS.find((s) => s.file === activeDemoScenario) || DEMO_SCENARIOS[0];
 
 	// Search button label text
@@ -368,7 +437,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 								<Sparkles className="w-3.5 h-3.5" />
 								<span className="font-bold uppercase tracking-wider">Demo Mode Scenarios</span>
 								<span className="text-slate-400 font-sans hidden sm:inline">
-									— Select a pre-configured challenge or type your own below:
+									— Deterministic sample data. Local-only history, one entry per example.
 								</span>
 							</div>
 							<div className="flex items-center gap-2">
@@ -634,12 +703,24 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 								</button>
 
 								{modelMenuOpen && (
-									<div className="absolute right-0 bottom-full mb-2 w-64 bg-[#0d1222] border border-[#232f50] rounded-2xl shadow-2xl p-2 z-50 animate-scaleUp space-y-1 text-xs">
-										<div className="px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-slate-400 border-b border-[#1b2542]">
-											Deliberation Model
+									<div className="absolute right-0 bottom-full mb-2 w-64 bg-[#0d1222] border border-[#232f50] rounded-2xl shadow-2xl p-2 z-50 animate-scaleUp text-xs">
+										<div className="flex items-center justify-between px-2 py-1 border-b border-[#1b2542]">
+											<span className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
+												Deliberation Model · {models.length}
+											</span>
+											<button
+												type="button"
+												onClick={() => void loadModels()}
+												disabled={modelsRefreshing}
+												className="p-1 rounded text-slate-400 hover:text-teal-300 hover:bg-[#18203a] transition-colors disabled:opacity-60"
+												title="Refresh models from Nightshift"
+												aria-label="Refresh Nightshift models"
+											>
+												<RefreshCw className={`w-3 h-3 ${modelsRefreshing ? "animate-spin" : ""}`} />
+											</button>
 										</div>
-
-										{AVAILABLE_MODELS.map((mod) => (
+										<div className="max-h-72 overflow-y-auto space-y-1 pt-1">
+										{models.map((mod) => (
 											<button
 												key={mod.id}
 												type="button"
@@ -664,9 +745,10 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 													</div>
 													<div className="text-[10px] text-slate-400 font-mono">{mod.provider}</div>
 												</div>
-												{selectedModel === mod.id && <Check className="w-4 h-4 text-amber-400 shrink-0" />}
+											{selectedModel === mod.id && <Check className="w-4 h-4 text-amber-400 shrink-0" />}
 											</button>
 										))}
+										</div>
 									</div>
 								)}
 							</div>

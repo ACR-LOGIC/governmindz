@@ -8,24 +8,24 @@ export interface ModelOption {
 
 export const AVAILABLE_MODELS: ModelOption[] = [
 	{
-		id: "nemotron-3.5-lightning-30b-a3b",
-		name: "NVIDIA Nemotron 30B",
-		shortName: "Nemotron 30B",
-		provider: "Meterless (Local Runtime)",
+		id: "meterless/auto",
+		name: "Meterless Auto",
+		shortName: "Meterless Auto",
+		provider: "Meterless / Nightshift",
 		recommended: true,
 	},
 	{
-		id: "gemini-3.8-flash",
-		name: "Gemini 3.8 Flash",
-		shortName: "Gemini Flash",
-		provider: "Google Gemini Cloud Route",
+		id: "meterless/fast",
+		name: "Meterless Fast",
+		shortName: "Meterless Fast",
+		provider: "Meterless / Nightshift",
 		recommended: false,
 	},
 	{
-		id: "mistral-7b-nightshift",
-		name: "Mistral 7B Instruct",
-		shortName: "Mistral 7B",
-		provider: "Nightshift Offline Queue",
+		id: "meterless/deep",
+		name: "Meterless Deep",
+		shortName: "Meterless Deep",
+		provider: "Meterless / Nightshift",
 		recommended: false,
 	},
 ];

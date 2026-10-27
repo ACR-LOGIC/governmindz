@@ -194,7 +194,7 @@ export const TrustEvidenceView: React.FC<TrustEvidenceViewProps> = ({ conversati
 						</div>
 
 						<div className="flex items-center gap-2">
-							{conversation.zetarisData?.query && (
+							{conversation.mode === "live" && conversation.zetarisData?.query && (
 								<a
 									href={`/evidence/${encodeURIComponent(conversation.id)}`}
 									target="_blank"

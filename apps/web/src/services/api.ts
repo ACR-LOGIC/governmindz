@@ -161,6 +161,41 @@ export interface PreferencesResponse {
 	tourCompleted: boolean;
 }
 
+export interface ModelCatalogItem {
+	id: string;
+	name: string;
+	provider: string;
+	isDefault?: boolean;
+}
+
+export async function fetchModels(): Promise<ModelCatalogItem[]> {
+	try {
+		const res = await fetchWithTimeout(`${BASE_URL}/api/models`);
+		if (res.ok) {
+			const payload = await res.json();
+			return Array.isArray(payload?.models) ? payload.models : [];
+		}
+	} catch (e) {
+		console.warn("Failed to fetch Meterless model catalog:", e);
+	}
+	return [];
+}
+
+export interface MeterlessDetectResult {
+	state: "online" | "unauthorized" | "offline";
+	baseUrl?: string;
+	models?: number;
+	reason?: string;
+	persisted?: boolean;
+	error?: string;
+}
+
+export async function detectMeterless(): Promise<{ ok: boolean; status: number; result: MeterlessDetectResult }> {
+	const res = await fetchWithTimeout(`${BASE_URL}/api/meterless/detect`, { method: "POST" }, 45000);
+	const result = await res.json().catch(() => ({ error: "Auto-detection returned invalid JSON" }));
+	return { ok: res.ok, status: res.status, result };
+}
+
 export async function fetchPreferences(): Promise<PreferencesResponse> {
 	try {
 		const res = await fetch(`${BASE_URL}/api/preferences`);
