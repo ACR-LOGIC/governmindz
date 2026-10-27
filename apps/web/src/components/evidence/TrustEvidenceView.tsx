@@ -194,6 +194,18 @@ export const TrustEvidenceView: React.FC<TrustEvidenceViewProps> = ({ conversati
 						</div>
 
 						<div className="flex items-center gap-2">
+							{conversation.zetarisData?.query && (
+								<a
+									href={`/evidence/${encodeURIComponent(conversation.id)}`}
+									target="_blank"
+									rel="noreferrer"
+									className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-teal-950/40 border border-teal-700/40 text-teal-300 text-[10px] font-semibold hover:bg-teal-900/50 transition-colors"
+									title="Open the exact captured Zetaris dataset with its SHA-256 evidence hash"
+								>
+									<ExternalLink className="w-3 h-3" />
+									Verify raw evidence
+								</a>
+							)}
 							<span className="text-[10px] font-mono px-2.5 py-1 rounded-full bg-emerald-950/40 border border-emerald-700/40 text-emerald-300 font-semibold">
 								{zetaris.total} sources discovered
 							</span>

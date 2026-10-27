@@ -756,6 +756,8 @@ export const App: React.FC = () => {
 						columns: ev.columns,
 						rows: ev.rows,
 						total: ev.total || ev.rows?.length || 0,
+						isSynthetic: ev.isSynthetic,
+						evidenceSource: ev.evidenceSource,
 					};
 					appendAgentReasoning(
 						"FactChecker",

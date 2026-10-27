@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/governmindz-title.png" alt="GOVERNMINDZ" width="100%"></p>
+<p align="center"><img src="assets/governmindz-logo.png" alt="GOVERNMINDZ" width="240"></p>
 
 # GOVERNMINDZ
 

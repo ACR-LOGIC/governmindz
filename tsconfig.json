@@ -28,6 +28,7 @@
 		"libs/**/test/**/*.ts",
 		"apps/**/src/**/*.ts",
 		"apps/**/src/**/*.tsx",
+		"apps/web/server.ts",
 		"src/types/environment.d.ts"
 	]
 }

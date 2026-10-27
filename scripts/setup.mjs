@@ -19,17 +19,21 @@ if (!fs.existsSync(envLocalPath)) {
 	}
 }
 
-// 2. Check and populate AUDIT_TRAIL_SECRET if empty
+// 2. Check and populate AUDIT_TRAIL_SECRET if empty or too short
 let envContent = fs.readFileSync(envLocalPath, "utf8");
-if (!envContent.includes("AUDIT_TRAIL_SECRET=") || envContent.includes("AUDIT_TRAIL_SECRET=\n") || envContent.includes("AUDIT_TRAIL_SECRET=\r\n") || !envContent.match(/AUDIT_TRAIL_SECRET=[a-fA-F0-9]{32,}/)) {
+const match = envContent.match(/^\s*AUDIT_TRAIL_SECRET\s*=\s*(.*)$/m);
+const existingSecret = (match?.[1] || "").trim();
+if (existingSecret.length < 16) {
 	const secret = randomBytes(32).toString("hex");
-	if (envContent.includes("AUDIT_TRAIL_SECRET=")) {
-		envContent = envContent.replace(/AUDIT_TRAIL_SECRET=.*\r?\n/, `AUDIT_TRAIL_SECRET=${secret}\n`);
+	if (match) {
+		envContent = envContent.replace(/^\s*AUDIT_TRAIL_SECRET\s*=.*$/m, `AUDIT_TRAIL_SECRET=${secret}`);
 	} else {
-		envContent += `\nAUDIT_TRAIL_SECRET=${secret}\n`;
+		envContent += `${envContent.endsWith("\n") ? "" : "\n"}AUDIT_TRAIL_SECRET=${secret}\n`;
 	}
 	fs.writeFileSync(envLocalPath, envContent, "utf8");
 	console.log("Generated and populated secure AUDIT_TRAIL_SECRET in .env.local");
+} else {
+	console.log("AUDIT_TRAIL_SECRET already configured");
 }
 
 console.log("\nSetup complete!");

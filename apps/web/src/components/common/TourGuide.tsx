@@ -287,9 +287,11 @@ export const TourGuide: React.FC<TourGuideProps> = ({ isOpen, onClose, onFinish 
 					{/* Header bar */}
 					<div className="flex items-center justify-between border-b border-[#1b2542] pb-3">
 						<div className="flex items-center gap-2.5">
-							<div className="p-2 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-400 shadow-sm shadow-amber-500/10">
-								<Compass className="w-4 h-4" />
-							</div>
+							<img
+								src="/governmindz-logo.png"
+								alt="GovernMindz logo"
+								className="h-9 w-9 rounded-full object-cover ring-1 ring-amber-500/40 shadow-sm shadow-amber-500/10"
+							/>
 							<div>
 								<span className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold block">
 									{currentStep.badge}

@@ -332,7 +332,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
 					<SettingsIcon className="w-4 h-4" />
 					<span>System Settings</span>
 				</button>
-				<span className="font-mono text-[10px] text-slate-400">v0.1.0-hackathon</span>
+				<span className="font-mono text-[10px] text-slate-400">v0.1.0</span>
 			</div>
 		</aside>
 	);

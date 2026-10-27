@@ -216,6 +216,8 @@ export interface ZetarisData {
 	columns: string[];
 	rows: unknown[][];
 	total: number;
+	isSynthetic?: boolean;
+	evidenceSource?: string;
 }
 
 export interface WorkflowTimelineEvent {

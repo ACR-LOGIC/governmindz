@@ -40,6 +40,10 @@ declare module "node:crypto" {
 declare module "node:fs" {
 	export function existsSync(path: string): boolean;
 	export function readFileSync(path: string, encoding?: string): string;
+	export function readFile(
+		path: string,
+		callback: (err: any, data: any) => void,
+	): void;
 	export function readdirSync(path: string): string[];
 	export function statSync(path: string): { isDirectory(): boolean; size: number; [key: string]: any };
 	export function mkdirSync(
@@ -79,6 +83,9 @@ declare module "node:path" {
 	export function dirname(p: string): string;
 	export function join(...paths: string[]): string;
 	export function resolve(...paths: string[]): string;
+	export function basename(p: string, ext?: string): string;
+	export function extname(p: string): string;
+	export const sep: string;
 }
 
 declare module "node:url" {
@@ -88,11 +95,17 @@ declare module "node:url" {
 declare module "node:http" {
 	export interface IncomingMessage {
 		headers: Record<string, string | string[] | undefined>;
+		method?: string;
+		url?: string;
 		on(event: string, listener: (chunk?: any) => void): void;
 	}
 	export interface ServerResponse {
 		writeHead(statusCode: number, headers?: Record<string, string>): void;
-		end(body?: string): void;
+		write(chunk: any): boolean;
+		end(body?: any): void;
+		setHeader(name: string, value: string | number | string[]): void;
+		headersSent: boolean;
+		destroyed: boolean;
 	}
 	export interface Server {
 		listen(port: number, host: string, callback?: () => void): void;

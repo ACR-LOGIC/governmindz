@@ -4,6 +4,9 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>GOVERNMINDZ — Explainable Multi-Agent Debate</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+<link rel="icon" type="image/png" sizes="64x64" href="/favicon-64.png" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -129,9 +132,12 @@ select,input{background:var(--panel);border:1px solid var(--border);color:var(--
 </head>
 <body>
 <header>
-  <div class="brand">
-    <div class="title display">GOVERNMINDZ</div>
-    <div class="sub">Explainable multi-agent debate</div>
+  <div class="brand" style="display:flex;align-items:center;gap:10px">
+    <img src="/governmindz-logo.png" alt="GovernMindz logo" style="width:38px;height:38px;border-radius:999px;box-shadow:0 0 18px rgba(59,130,246,.45);" />
+    <div>
+      <div class="title display">GOVERNMINDZ</div>
+      <div class="sub">Explainable multi-agent debate</div>
+    </div>
   </div>
   <span class="pill"><span class="dot idle" id="dotMeterless"></span>Meterless</span>
   <span class="pill"><span class="dot idle" id="dotZetaris"></span>Zetaris</span>
@@ -169,7 +175,12 @@ select,input{background:var(--panel);border:1px solid var(--border);color:var(--
     <div class="block" id="aboutBlock" style="display:none">
       <h3>About</h3>
       <div style="font-size:12px;color:var(--muted);line-height:1.7">
-        Track 02 — The Agent That Can Explain Why. Role-separated seats debate over federated evidence, reach confidence-aware consensus, and emit a signed hash-chained audit trail a reviewer can verify.
+        GovernMindz is a local-first, governed multi-agent decision workspace. Parallel Data and Web crews gather
+        verifiable evidence, role-separated agents debate and challenge every claim, and the Supervisor releases
+        validated deliverables backed by a tamper-evident audit chain and clickable Zetaris evidence snapshots.
+        <br /><br />
+        <b style="color:var(--text)">Creator:</b> Andres Chavez Ramirez — solo creator.<br />
+        <b style="color:var(--text)">Sponsors:</b> Zetaris Lightning, Meterless Runtime, NVIDIA Nemotron.
       </div>
     </div>
   </aside>

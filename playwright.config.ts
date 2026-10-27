@@ -28,13 +28,13 @@ export default defineConfig({
 		{
 			command: "node --env-file=.env.local --import tsx apps/web/server.ts",
 			url: "http://127.0.0.1:8787/api/models",
-			reuseExistingServer: false,
+			reuseExistingServer: !process.env.CI,
 			timeout: 30000,
 		},
 		{
 			command: "npx vite --host 127.0.0.1 --port 5173",
 			url: "http://127.0.0.1:5173",
-			reuseExistingServer: false,
+			reuseExistingServer: !process.env.CI,
 			timeout: 30000,
 		},
 	],
