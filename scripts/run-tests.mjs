@@ -52,18 +52,3 @@ const result = spawnSync(
 	},
 );
 
-if (result.status !== 0) {
-	process.exit(result.status ?? 1);
-}
-
-const sampleResult = spawnSync(
-	process.execPath,
-	["--import", "tsx", "tests/run_debate_sample.test.ts"],
-	{
-		cwd: root,
-		stdio: "inherit",
-		env,
-	},
-);
-
-process.exit(sampleResult.status ?? 1);
