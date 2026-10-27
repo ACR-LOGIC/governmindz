@@ -32,6 +32,7 @@ const testFiles = [
 	"tests/debate_seat_factory.test.ts",
 	"tests/document_evidence_ingestion_service.test.ts",
 	"tests/zetaris_evidence_preparation_service.test.ts",
+	"tests/debate_support_agent_factory.test.ts",
 	"tests/crew_barrier_types.test.ts",
 	"tests/crew_barrier.test.ts",
 	"tests/audio_stream_controls.test.ts",
