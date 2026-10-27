@@ -114,13 +114,20 @@ export const Header: React.FC<HeaderProps> = ({
 					{leftSidebarOpen ? <PanelLeftClose className="w-5 h-5" /> : <PanelLeftOpen className="w-5 h-5" />}
 				</button>
 
-				<div className="flex items-baseline gap-2">
-					<span className="font-display font-bold text-lg tracking-tight text-[#f4b942]">
-						GovernMindz
-					</span>
-					<span className="hidden sm:inline-block text-[10px] font-mono tracking-widest uppercase text-slate-400">
-						Mission Control
-					</span>
+				<div className="flex items-center gap-2.5">
+					<img
+						src="/governmindz-logo.png"
+						alt="GovernMindz logo"
+						className="h-8 w-8 rounded-full object-cover ring-1 ring-amber-400/40 shadow-[0_0_16px_rgba(59,130,246,0.35)]"
+					/>
+					<div className="flex items-baseline gap-2">
+						<span className="font-display font-bold text-lg tracking-tight text-[#f4b942]">
+							GovernMindz
+						</span>
+						<span className="hidden sm:inline-block text-[10px] font-mono tracking-widest uppercase text-slate-400">
+							Mission Control
+						</span>
+					</div>
 				</div>
 			</div>
 

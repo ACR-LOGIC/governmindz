@@ -104,7 +104,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 				{/* Header */}
 				<div className="px-6 py-4 border-b border-[#1e2842] flex items-center justify-between bg-[#0f1424]">
 					<div className="flex items-center gap-2.5">
-						<SettingsIcon className="w-5 h-5 text-teal-400" />
+						<img
+							src="/governmindz-logo.png"
+							alt="GovernMindz logo"
+							className="h-8 w-8 rounded-full object-cover ring-1 ring-teal-400/40"
+						/>
 						<h3 className="font-display font-bold text-lg text-slate-100">
 							GovernMindz System Settings
 						</h3>
@@ -128,7 +132,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 							{ id: "audio", label: "Voice & Audio", icon: Volume2 },
 							{ id: "models", label: "Models & Providers", icon: Cpu },
 							{ id: "data", label: "Privacy & Data", icon: ShieldCheck },
-							{ id: "about", label: "About & Architecture", icon: Info },
+							{ id: "about", label: "About GovernMindz", icon: Info },
 						].map((tab) => {
 							const Icon = tab.icon;
 							const isActive = activeTab === tab.id;
@@ -472,29 +476,66 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
 						{activeTab === "about" && (
 							<div className="space-y-4 leading-relaxed">
-								<h4 className="font-bold text-sm text-slate-100 mb-2">GovernMindz Mission Control</h4>
-
-								<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842] space-y-2">
-									<div className="font-semibold text-amber-300">Open Agent Hackathon 2026</div>
-									<div className="text-[11px] text-slate-400">
-										Track 02: <b>The Agent That Can Explain Why</b>
+								<div className="flex items-center gap-3">
+									<img
+										src="/governmindz-logo.png"
+										alt="GovernMindz logo"
+										className="h-16 w-16 rounded-2xl object-cover ring-1 ring-amber-400/40 shadow-[0_0_24px_rgba(59,130,246,0.35)]"
+									/>
+									<div>
+										<h4 className="font-display font-bold text-base text-slate-100">GovernMindz</h4>
+										<p className="text-[11px] font-mono uppercase tracking-wider text-teal-300">
+											Governed multi-agent deliberation
+										</p>
 									</div>
-									<p className="text-xs text-slate-300">
-										GovernMindz combines role-separated multi-agent deliberation with Zetaris
-										Lightning federated query verification, Meterless local runtime inference, and
-										genesis-anchored HMAC-SHA256 audit chaining.
-									</p>
+								</div>
+
+								<p className="text-xs text-slate-300">
+									GovernMindz is a local-first decision workspace for high-stakes data questions. Independent
+									Data and Web research crews gather evidence in parallel, a role-separated council debates
+									and challenges every claim, and a supervisor releases only deliverables that pass physical
+									validation and a tamper-evident audit gate. Every Zetaris dataset used is captured as a
+									verifiable evidence snapshot, so anyone can inspect the exact rows behind a decision.
+								</p>
+
+								<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842] space-y-1">
+									<div className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold">
+										Creator
+									</div>
+									<div className="font-semibold text-slate-100">Andres Chavez Ramirez</div>
+									<div className="text-[11px] text-slate-400">
+										Solo creator — product vision, architecture, and engineering
+									</div>
+								</div>
+
+								<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842] space-y-3">
+									<div className="text-[10px] font-mono uppercase tracking-wider text-teal-400 font-bold">
+										Sponsors &amp; Technology Partners
+									</div>
+									<div className="grid gap-2 sm:grid-cols-3">
+										<div className="rounded-lg bg-[#0a0e1a] border border-[#1e2842] px-3 py-2">
+											<div className="font-semibold text-slate-100">Zetaris Lightning</div>
+											<div className="text-[10px] text-slate-400">Federated evidence fabric</div>
+										</div>
+										<div className="rounded-lg bg-[#0a0e1a] border border-[#1e2842] px-3 py-2">
+											<div className="font-semibold text-slate-100">Meterless</div>
+											<div className="text-[10px] text-slate-400">Local inference runtime</div>
+										</div>
+										<div className="rounded-lg bg-[#0a0e1a] border border-[#1e2842] px-3 py-2">
+											<div className="font-semibold text-slate-100">NVIDIA Nemotron</div>
+											<div className="text-[10px] text-slate-400">Reasoning model</div>
+										</div>
+									</div>
 								</div>
 
 								<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842] space-y-2 font-mono text-[11px]">
-									<div className="text-slate-400">Architecture Components:</div>
+									<div className="text-slate-400">How a decision is produced:</div>
 									<ul className="list-disc list-inside space-y-1 text-slate-300">
-										<li>12-State Deterministic WorkflowStateMachine</li>
-										<li>InquiryScorer & ContextAgent Complexity Analysis</li>
-										<li>FactChecker & CloudArchitect Deliberative Seating</li>
-										<li>RivalChallenger & ThinkerAgent Autonomous Interventions</li>
-										<li>Synthesizer Consensus Arbiter</li>
-										<li>Tamper-Evident SHA-256 Hash Chain Ledger</li>
+										<li>Parallel Data Crew + Web Crew evidence gathering</li>
+										<li>Barrier-synchronized findings with provenance</li>
+										<li>Adversarial debate: Hater, Fact Checker, Thinker, Synthesizer</li>
+										<li>Validated PDF / PPTX / CSV / SVG deliverables</li>
+										<li>HMAC-SHA256 audit ledger + verifiable Zetaris evidence snapshot</li>
 									</ul>
 								</div>
 							</div>

@@ -72,7 +72,15 @@ export interface RunOutput {
 	mode: "sample" | "live";
 	topic: string;
 	scenarioId?: string;
-	zetaris: { query: string; columns: string[]; rows: unknown[][]; total: number };
+	zetaris: {
+		query: string;
+		columns: string[];
+		rows: unknown[][];
+		total: number;
+		isSynthetic?: boolean;
+		evidenceSource?: string;
+		circuitBreakerState?: string;
+	};
 	result: DebateResult;
 	auditEvents: AuditEvent[];
 	auditIntegrity: boolean;
@@ -197,6 +205,8 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 			columns: scenario.zetaris.columns,
 			rows: scenario.zetaris.rows,
 			total: scenario.zetaris.total ?? scenario.zetaris.rows.length,
+			isSynthetic: true,
+			evidenceSource: "sample_scenario",
 		};
 		scenarioId = scenario.id;
 	} else {
@@ -230,6 +240,10 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 		zetarisResult = result;
 		topic = params.topicOverride?.trim() || process.env.GOVERNMINDZ_TOPIC?.trim() || DEFAULT_TOPIC;
 	}
+
+	const evidenceVerificationUrl = params.conversationId
+		? `/evidence/${encodeURIComponent(params.conversationId)}`
+		: null;
 
 	// 1. Establish Deliverable Contract
 	const contract = classifyDeliverable(topic);
@@ -774,6 +788,11 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 				evidence: [
 					...dataCrewReport.findings.flatMap((f) => f.evidence),
 					...webCrewReport.findings.map((f) => `[Citation] ${f.title}: ${f.claim}`),
+					...(evidenceVerificationUrl
+						? [
+								`[Zetaris Verification] ${zetarisQuery} — ${zetarisResult.rows.length} rows captured. Verify the exact dataset and SHA-256 hash: ${evidenceVerificationUrl}`,
+							]
+						: []),
 				],
 				caveats: [
 					...new Set([
@@ -804,6 +823,9 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 
 	const primaryLinkMarkdown = `[View or download the ${contract.primaryOutputType}](${validatedPrimary.viewUrl})`;
 	const evidenceLinkMarkdown = `[Supporting evidence export](${evidenceExport.downloadUrl})`;
+	const evidenceVerificationMarkdown = evidenceVerificationUrl
+		? `[Verify raw Zetaris evidence](${evidenceVerificationUrl})`
+		: "";
 
 	let additionalLinks = "";
 	if (additionalArtifacts.length > 0) {
@@ -845,6 +867,12 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 		...(dissentSources.length > 0
 			? ["", `**Recorded dissent:** ${dissentSources.join(", ")}.`]
 			: []),
+		...(evidenceVerificationUrl
+			? [
+					"",
+					`**${evidenceVerificationMarkdown}** - Inspect the exact Zetaris rows and SHA-256 integrity hash behind this decision.`,
+				]
+			: []),
 		`Optional: **${evidenceLinkMarkdown}** - Supplementary research data and cryptographic proof (kept separate from primary deliverable).`,
 	].filter(Boolean).join("\n");
 
@@ -870,6 +898,7 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 				"Cryptographic audit trail verified",
 				"Deliverable Contract satisfied",
 				`Primary artifact validated: ${validatedPrimary.filename}`,
+				...(evidenceVerificationUrl ? [`Zetaris evidence snapshot: ${evidenceVerificationUrl}`] : []),
 			],
 			caveats: [
 				...new Set([
@@ -917,6 +946,7 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 		supervisorResponse: supervisorSummary,
 		primaryUrl: validatedPrimary.viewUrl,
 		evidenceUrl: evidenceExport.downloadUrl,
+		zetarisEvidenceUrl: evidenceVerificationUrl,
 	});
 
 	// H-MEM: mine this debate into hierarchical memory for future runs.
@@ -959,6 +989,9 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 			columns: zetarisResult.columns,
 			rows: zetarisResult.rows,
 			total: zetarisResult.total ?? zetarisResult.rows.length,
+			isSynthetic: zetarisResult.isSynthetic,
+			evidenceSource: zetarisResult.evidenceSource,
+			circuitBreakerState: zetarisResult.circuitBreakerState,
 		},
 		result: resultDebate,
 		auditEvents,

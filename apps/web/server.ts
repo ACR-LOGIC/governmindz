@@ -2,7 +2,7 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import Database from "better-sqlite3";
 import { runDebate } from "../gateway/src/debateRunner.js";
 import { auditTrail } from "@governmindz/core/engine/AuditTrailEmitter";
@@ -14,6 +14,14 @@ import { zetarisQueryHandler } from "../gateway/src/tools/zetaris.tools.js";
 import { executeWebSearch } from "../gateway/src/tools/webSearch.tools.js";
 import { getConfigStatus, saveSecureConfig, loadLocalEnvIfPresent } from "../gateway/src/services/cryptoConfig.js";
 loadLocalEnvIfPresent();
+
+function getEffectiveAuditSecret(secretOverride?: string): string {
+	const secret = (secretOverride ?? process.env.AUDIT_TRAIL_SECRET ?? "").trim();
+	if (!secret || secret.length < 16) {
+		throw new Error("AUDIT_TRAIL_SECRET is missing or too short; audit verification is disabled.");
+	}
+	return secret;
+}
 
 function validateConfig(): string[] {
 	const recommended = ["METERLESS_BASE_URL", "METERLESS_API_KEY", "ZETARIS_ORG_ID", "ZETARIS_API_KEY"];
@@ -88,6 +96,18 @@ db.exec(`
 		credibility_score REAL,
 		weight_multiplier REAL,
 		updated_at INTEGER
+	);
+
+	CREATE TABLE IF NOT EXISTS evidence_snapshots (
+		conversation_id TEXT PRIMARY KEY,
+		query TEXT NOT NULL,
+		columns_json TEXT NOT NULL,
+		rows_json TEXT NOT NULL,
+		total INTEGER NOT NULL,
+		source TEXT,
+		is_synthetic INTEGER NOT NULL DEFAULT 0,
+		content_hash TEXT NOT NULL,
+		created_at INTEGER NOT NULL
 	);
 `);
 
@@ -271,6 +291,116 @@ function updateConversationTitle(id: string, title: string) {
 function removeConversation(id: string) {
 	const stmt = db.prepare("DELETE FROM conversations WHERE id = ?");
 	stmt.run(id);
+	try {
+		db.prepare("DELETE FROM evidence_snapshots WHERE conversation_id = ?").run(id);
+	} catch {
+		// evidence table may not exist in older databases; ignore
+	}
+}
+
+// ============================================================
+// Verifiable Zetaris Evidence Snapshots
+// ============================================================
+interface EvidenceSnapshot {
+	conversationId: string;
+	query: string;
+	columns: string[];
+	rows: unknown[][];
+	total: number;
+	source: string;
+	isSynthetic: boolean;
+	contentHash: string;
+	createdAt: number;
+}
+
+function computeEvidenceHash(payload: {
+	query: string;
+	columns: string[];
+	rows: unknown[][];
+	total: number;
+}): string {
+	return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+}
+
+function saveEvidenceSnapshot(
+	conversationId: string,
+	zetaris: { query?: string; columns?: unknown[]; rows?: unknown[][]; total?: number; isSynthetic?: boolean; evidenceSource?: string },
+): EvidenceSnapshot | null {
+	if (!conversationId || !zetaris?.query || !Array.isArray(zetaris.rows)) return null;
+	const canonical = {
+		query: String(zetaris.query),
+		columns: Array.isArray(zetaris.columns) ? zetaris.columns.map(String) : [],
+		rows: zetaris.rows,
+		total: Number(zetaris.total ?? zetaris.rows.length),
+	};
+	const contentHash = computeEvidenceHash(canonical);
+	const createdAt = Date.now();
+	const source = String(zetaris.evidenceSource || (zetaris.isSynthetic ? "synthetic_fallback" : "zetaris_lightning"));
+	db.prepare(`
+		INSERT INTO evidence_snapshots
+			(conversation_id, query, columns_json, rows_json, total, source, is_synthetic, content_hash, created_at)
+		VALUES
+			(@conversation_id, @query, @columns_json, @rows_json, @total, @source, @is_synthetic, @content_hash, @created_at)
+		ON CONFLICT(conversation_id) DO UPDATE SET
+			query = excluded.query,
+			columns_json = excluded.columns_json,
+			rows_json = excluded.rows_json,
+			total = excluded.total,
+			source = excluded.source,
+			is_synthetic = excluded.is_synthetic,
+			content_hash = excluded.content_hash,
+			created_at = excluded.created_at
+	`).run({
+		conversation_id: conversationId,
+		query: canonical.query,
+		columns_json: JSON.stringify(canonical.columns),
+		rows_json: JSON.stringify(canonical.rows),
+		total: canonical.total,
+		source,
+		is_synthetic: zetaris.isSynthetic ? 1 : 0,
+		content_hash: contentHash,
+		created_at: createdAt,
+	});
+	return {
+		conversationId,
+		...canonical,
+		source,
+		isSynthetic: Boolean(zetaris.isSynthetic),
+		contentHash,
+		createdAt,
+	};
+}
+
+function getEvidenceSnapshot(conversationId: string): EvidenceSnapshot | null {
+	const row = db.prepare("SELECT * FROM evidence_snapshots WHERE conversation_id = ?").get(conversationId) as any;
+	if (row) {
+		return {
+			conversationId: row.conversation_id,
+			query: row.query,
+			columns: JSON.parse(row.columns_json),
+			rows: JSON.parse(row.rows_json),
+			total: row.total,
+			source: row.source,
+			isSynthetic: Boolean(row.is_synthetic),
+			contentHash: row.content_hash,
+			createdAt: row.created_at,
+		};
+	}
+	// Backfill snapshots for conversations created before evidence capture existed.
+	const conv = getConversationById(conversationId);
+	if (conv?.zetarisData?.query && Array.isArray(conv.zetarisData.rows)) {
+		return saveEvidenceSnapshot(conversationId, conv.zetarisData);
+	}
+	return null;
+}
+
+function escapeHtml(value: unknown): string {
+	return String(value ?? "")
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#39;");
 }
 
 // ============================================================
@@ -342,6 +472,49 @@ function serveStatic(req: http.IncomingMessage, res: http.ServerResponse) {
 			".ico": "image/x-icon",
 		};
 		res.writeHead(200, { "Content-Type": types[ext] || "application/octet-stream" });
+		res.end(data);
+	});
+}
+
+const ARTIFACTS_DIR = path.resolve(process.cwd(), "data", "artifacts");
+
+function serveArtifact(req: http.IncomingMessage, res: http.ServerResponse, filename: string) {
+	const safeName = path.basename(decodeURIComponent(filename || ""));
+	if (!safeName || safeName === "." || safeName === "..") {
+		sendJson(res, 400, { error: "invalid artifact name" });
+		return;
+	}
+	const filePath = path.join(ARTIFACTS_DIR, safeName);
+	if (!filePath.startsWith(ARTIFACTS_DIR + path.sep)) {
+		sendJson(res, 403, { error: "forbidden" });
+		return;
+	}
+	const parsedUrl = new URL(req.url || "/", "http://localhost");
+	const download = parsedUrl.searchParams.get("download") === "true";
+
+	fs.readFile(filePath, (err, data) => {
+		if (err) {
+			sendJson(res, 404, { error: "artifact not found" });
+			return;
+		}
+		const ext = path.extname(filePath).toLowerCase();
+		const types: Record<string, string> = {
+			".pdf": "application/pdf",
+			".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+			".csv": "text/csv; charset=utf-8",
+			".svg": "image/svg+xml",
+			".json": "application/json; charset=utf-8",
+			".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+			".txt": "text/plain; charset=utf-8",
+		};
+		const headers: Record<string, string> = {
+			"Content-Type": types[ext] || "application/octet-stream",
+			"Cache-Control": "no-store",
+		};
+		if (download) {
+			headers["Content-Disposition"] = `attachment; filename="${safeName.replace(/"/g, "")}"`;
+		}
+		res.writeHead(200, headers);
 		res.end(data);
 	});
 }
@@ -457,6 +630,9 @@ async function handleRun(req: http.IncomingMessage, res: http.ServerResponse) {
 
 				// Update database persistence if conversation exists
 				if (run.conversationId) {
+					if (out.zetaris) {
+						saveEvidenceSnapshot(run.conversationId, out.zetaris);
+					}
 					const existing = getConversationById(run.conversationId);
 					if (existing) {
 						existing.status = "completed";
@@ -469,6 +645,15 @@ async function handleRun(req: http.IncomingMessage, res: http.ServerResponse) {
 						existing.supervisorDecision = out.supervisorDecision || null;
 						existing.dataCrewReport = out.dataCrewReport || null;
 						existing.webCrewReport = out.webCrewReport || null;
+						if (!existing.messages || existing.messages.length === 0) {
+							existing.messages = Array.isArray(out.result?.transcript) ? out.result.transcript : [];
+						}
+						if (!existing.auditEvents || existing.auditEvents.length === 0) {
+							existing.auditEvents = out.auditEvents || [];
+						}
+						if (!existing.zetarisData && out.zetaris) {
+							existing.zetarisData = out.zetaris;
+						}
 						existing.updatedAt = Date.now();
 						upsertConversation(existing);
 					}
@@ -521,6 +706,14 @@ async function handleRun(req: http.IncomingMessage, res: http.ServerResponse) {
 			} catch (err) {
 				run.error = err instanceof Error ? err.message : String(err);
 				run.done = true;
+				if (run.conversationId) {
+					const existing = getConversationById(run.conversationId);
+					if (existing) {
+						existing.status = "error";
+						existing.updatedAt = Date.now();
+						upsertConversation(existing);
+					}
+				}
 				const errEv = { type: "error", message: run.error };
 				run.events.push(errEv);
 				for (const r of run.listeners) {
@@ -969,6 +1162,160 @@ function handleAuditCertificate(req: http.IncomingMessage, res: http.ServerRespo
 	}
 }
 
+function handleEvidenceJson(req: http.IncomingMessage, res: http.ServerResponse, id: string, canonicalOnly: boolean) {
+	if (req.method !== "GET") {
+		res.writeHead(405);
+		res.end();
+		return;
+	}
+	const snapshot = getEvidenceSnapshot(id);
+	if (!snapshot) {
+		sendJson(res, 404, { error: "Evidence snapshot not found for this conversation" });
+		return;
+	}
+	const canonical = {
+		query: snapshot.query,
+		columns: snapshot.columns,
+		rows: snapshot.rows,
+		total: snapshot.total,
+	};
+	if (canonicalOnly) {
+		res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+		res.end(JSON.stringify(canonical));
+		return;
+	}
+	sendJson(res, 200, {
+		...snapshot,
+		verification: {
+			algorithm: "SHA-256",
+			canonicalization: "JSON.stringify({query,columns,rows,total})",
+			contentHash: snapshot.contentHash,
+			canonicalUrl: `/api/evidence/${encodeURIComponent(id)}/canonical`,
+		},
+		links: {
+			self: `/api/evidence/${encodeURIComponent(id)}`,
+			humanReadable: `/evidence/${encodeURIComponent(id)}`,
+		},
+	});
+}
+
+function serveEvidencePage(req: http.IncomingMessage, res: http.ServerResponse, id: string) {
+	if (req.method !== "GET") {
+		res.writeHead(405);
+		res.end();
+		return;
+	}
+	const snapshot = getEvidenceSnapshot(id);
+	if (!snapshot) {
+		res.writeHead(404, { "Content-Type": "text/html; charset=utf-8" });
+		res.end(`<!doctype html><html><body style="background:#0a0e1a;color:#e8ecf7;font-family:system-ui;padding:48px">
+			<h1>Evidence snapshot not found</h1>
+			<p>No captured Zetaris dataset exists for conversation <code>${escapeHtml(id)}</code>.</p>
+			</body></html>`);
+		return;
+	}
+
+	const rowsHtml = snapshot.rows
+		.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`)
+		.join("");
+	const headersHtml = snapshot.columns.map((col) => `<th>${escapeHtml(col)}</th>`).join("");
+	const capturedAt = new Date(snapshot.createdAt).toISOString();
+	const sourceLabel =
+		snapshot.source === "sample_scenario"
+			? "Sample scenario dataset (deterministic demo)"
+			: snapshot.isSynthetic
+				? "Synthetic fallback (live Zetaris unavailable)"
+				: "Live Zetaris Lightning query";
+
+	const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Zetaris Evidence — GovernMindz</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+<style>
+	:root { color-scheme: dark; }
+	* { box-sizing: border-box; }
+	body { margin:0; background:#0a0e1a; color:#e8ecf7; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+	.wrap { max-width:1100px; margin:0 auto; padding:32px 20px 64px; }
+	.brand { display:flex; align-items:center; gap:12px; margin-bottom:28px; }
+	.brand img { width:44px; height:44px; border-radius:999px; box-shadow:0 0 20px rgba(59,130,246,.4); }
+	.brand h1 { font-size:18px; margin:0; letter-spacing:.02em; }
+	.brand small { color:#8b96b3; display:block; font-size:11px; margin-top:2px; }
+	.card { background:#111827; border:1px solid #1e2842; border-radius:16px; padding:20px; margin-bottom:18px; }
+	.card h2 { font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:#5eead4; margin:0 0 12px; }
+	.meta { display:grid; gap:8px; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); font-size:12px; color:#aab4d0; }
+	.meta b { color:#e8ecf7; display:block; font-size:13px; margin-top:2px; word-break:break-word; }
+	pre { background:#070b14; border:1px solid #1e2842; border-radius:10px; padding:14px; overflow:auto; color:#fbbf24; font-size:12px; }
+	table { width:100%; border-collapse:collapse; font-size:12px; }
+	th { text-align:left; background:#18203a; color:#9fb0d0; padding:10px 12px; font-size:10px; text-transform:uppercase; letter-spacing:.06em; }
+	td { padding:10px 12px; border-top:1px solid #1e2842; color:#dbe3f5; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+	tr:hover td { background:#141d33; }
+	.hash { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size:12px; word-break:break-all; color:#f4b942; }
+	.actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+	.btn { display:inline-flex; align-items:center; gap:6px; padding:8px 12px; border-radius:8px; border:1px solid #2c385c; background:#18203a; color:#5eead4; text-decoration:none; font-size:11px; font-weight:700; }
+	.btn:hover { background:#252e4d; }
+	.note { color:#8b96b3; font-size:11px; line-height:1.6; }
+</style>
+</head>
+<body>
+	<div class="wrap">
+		<div class="brand">
+			<img src="/governmindz-logo.png" alt="GovernMindz logo" />
+			<div>
+				<h1>Verifiable Zetaris Evidence</h1>
+				<small>Captured dataset behind the final GovernMindz decision</small>
+			</div>
+		</div>
+
+		<div class="card">
+			<h2>Snapshot</h2>
+			<div class="meta">
+				<div>Conversation<b>${escapeHtml(snapshot.conversationId)}</b></div>
+				<div>Captured at<b>${escapeHtml(capturedAt)}</b></div>
+				<div>Source<b>${escapeHtml(sourceLabel)}</b></div>
+				<div>Rows<b>${escapeHtml(snapshot.total)} (${snapshot.rows.length} rendered)</b></div>
+			</div>
+		</div>
+
+		<div class="card">
+			<h2>Exact SQL query</h2>
+			<pre id="sql">${escapeHtml(snapshot.query)}</pre>
+			<div class="actions">
+				<button class="btn" onclick="navigator.clipboard.writeText(document.getElementById('sql').textContent)">Copy SQL</button>
+				<a class="btn" href="/api/evidence/${encodeURIComponent(id)}/canonical" target="_blank" rel="noreferrer">Canonical JSON (hash input)</a>
+				<a class="btn" href="/api/evidence/${encodeURIComponent(id)}" target="_blank" rel="noreferrer">Download JSON</a>
+			</div>
+			<p class="note">Run this exact read-only statement in your own Zetaris Lightning client to reproduce the dataset. GovernMindz blocks writes, DDL, and multi-statement SQL before dispatch.</p>
+		</div>
+
+		<div class="card">
+			<h2>Captured result set</h2>
+			<div style="overflow:auto; border:1px solid #1e2842; border-radius:10px;">
+				<table>
+					<thead><tr>${headersHtml}</tr></thead>
+					<tbody>${rowsHtml || `<tr><td>No rows returned</td></tr>`}</tbody>
+				</table>
+			</div>
+		</div>
+
+		<div class="card">
+			<h2>Integrity proof</h2>
+			<p class="note">SHA-256 over the canonical JSON payload <code>JSON.stringify({query,columns,rows,total})</code>:</p>
+			<div class="hash" id="hash">${escapeHtml(snapshot.contentHash)}</div>
+			<div class="actions">
+				<button class="btn" onclick="navigator.clipboard.writeText(document.getElementById('hash').textContent.trim())">Copy hash</button>
+			</div>
+			<p class="note">To independently verify, download the canonical JSON, compute its SHA-256, and compare it with the hash above. Any change to the query, columns, or captured rows produces a different hash.</p>
+		</div>
+	</div>
+</body>
+</html>`;
+	res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+	res.end(html);
+}
+
 const server = http.createServer((req, res) => {
 	const parsedUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 	const pathname = parsedUrl.pathname;
@@ -1007,6 +1354,17 @@ const server = http.createServer((req, res) => {
 	} else if (pathname.startsWith("/api/audit/certificate/")) {
 		const id = pathname.slice("/api/audit/certificate/".length);
 		handleAuditCertificate(req, res, id);
+	} else if (pathname.startsWith("/api/evidence/")) {
+		let rest = pathname.slice("/api/evidence/".length);
+		const canonical = rest.endsWith("/canonical");
+		if (canonical) rest = rest.slice(0, -"/canonical".length);
+		handleEvidenceJson(req, res, decodeURIComponent(rest), canonical);
+	} else if (pathname.startsWith("/evidence/")) {
+		const id = decodeURIComponent(pathname.slice("/evidence/".length));
+		serveEvidencePage(req, res, id);
+	} else if (pathname.startsWith("/api/artifacts/")) {
+		const filename = pathname.slice("/api/artifacts/".length);
+		serveArtifact(req, res, filename);
 	} else {
 		serveStatic(req, res);
 	}
