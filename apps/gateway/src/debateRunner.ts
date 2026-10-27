@@ -31,6 +31,7 @@ import { isConversationalInquiry } from "./application/ConversationalInquiryPoli
 import { emitCouncilAssignments } from "./application/CouncilAssignmentEmitter.js";
 import { buildWebCitationContext } from "./application/WebCitationContextBuilder.js";
 import { DebateSeatFactory } from "./services/DebateSeatFactory.js";
+import { DocumentEvidenceIngestionService } from "./services/DocumentEvidenceIngestionService.js";
 
 interface ZetarisToolResult {
 	columns: string[];
@@ -97,6 +98,10 @@ const debateSeatFactory = new DebateSeatFactory({
 	loadPrompt: (name) => PromptRegistry.load(name),
 	createSampleClient: (seatId, replies, delayMs) => new SampleSeatClient(seatId, replies, delayMs),
 	createMeterlessClient: (provider, model) => new MeterlessSeatClient(provider, model),
+});
+
+const documentEvidenceIngestionService = new DocumentEvidenceIngestionService({
+	createService: () => new DocumentIngestionService(),
 });
 
 const researchCrewRunner = new ResearchCrewRunner({
@@ -342,37 +347,18 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 	});
 
 	// Multi-Format Document Evidence Ingestion (PDF, CSV, XLSX)
-	let documentEvidenceContext = "";
-	if (params.attachments && params.attachments.length > 0) {
-		const docService = new DocumentIngestionService();
-		for (const att of params.attachments) {
-			try {
-				const parsed = await docService.ingest({
-					id: att.id,
-					filename: att.name,
-					dataUrl: att.dataUrl,
-					content: att.content,
-					filePath: att.filePath,
-					mimeType: att.type,
-					size: att.size,
-				});
-				eventSink?.({
-					type: "document_ingested",
-					documentId: parsed.documentId,
-					filename: parsed.filename,
-					format: parsed.format,
-					chunksCount: parsed.totalChunks,
-					sha256: parsed.sha256,
-				});
-			} catch (docErr) {
-				console.warn("Failed to ingest document:", String(att?.name), docErr);
-			}
-		}
-
-		if (docService.getAllChunks().length > 0) {
-			documentEvidenceContext = "\n" + docService.formatEvidenceContext();
-		}
-	}
+	const documentEvidenceContext = await documentEvidenceIngestionService.ingest(
+		params.attachments?.map((attachment) => ({
+			id: attachment.id,
+			filename: attachment.name,
+			dataUrl: attachment.dataUrl,
+			content: attachment.content,
+			filePath: attachment.filePath,
+			mimeType: attachment.type,
+			size: attachment.size,
+		})),
+		eventSink,
+	);
 
 	// Incorporate Web Search Crew citations into context
 	const webCitationContext = buildWebCitationContext(webCrewReport);
