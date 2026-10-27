@@ -29,6 +29,7 @@ import { calculateInquiryScore } from "./application/InquiryScorePolicy.js";
 import { collectDissentSources } from "./application/DissentSourceCollector.js";
 import { isConversationalInquiry } from "./application/ConversationalInquiryPolicy.js";
 import { emitCouncilAssignments } from "./application/CouncilAssignmentEmitter.js";
+import { buildWebCitationContext } from "./application/WebCitationContextBuilder.js";
 
 interface ZetarisToolResult {
 	columns: string[];
@@ -393,20 +394,7 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 	}
 
 	// Incorporate Web Search Crew citations into context
-	let webCitationContext = "";
-	if (webCrewReport.findings.length > 0) {
-		const allCits = webCrewReport.findings.flatMap((f) => f.citations);
-		if (allCits.length > 0) {
-			webCitationContext = [
-				"",
-				"External Web Research & Verified Standards (Web Search Crew):",
-				...allCits.map(
-					(r, idx: number) =>
-						`[Web Citation ${idx + 1}] "${r.title}" (${r.source}, URL: ${r.url}) [Status: ${r.status}]`,
-				),
-			].join("\n");
-		}
-	}
+	const webCitationContext = buildWebCitationContext(webCrewReport);
 
 	let combinedEvidenceContext = evidenceContext;
 	if (documentEvidenceContext) {

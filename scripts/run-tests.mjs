@@ -28,6 +28,7 @@ const testFiles = [
 	"tests/dissent_source_collector.test.ts",
 	"tests/conversational_inquiry_policy.test.ts",
 	"tests/council_assignment_emitter.test.ts",
+	"tests/web_citation_context_builder.test.ts",
 	"tests/crew_barrier_types.test.ts",
 	"tests/crew_barrier.test.ts",
 	"tests/audio_stream_controls.test.ts",
