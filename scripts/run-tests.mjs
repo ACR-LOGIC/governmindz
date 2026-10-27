@@ -29,6 +29,7 @@ const testFiles = [
 	"tests/conversational_inquiry_policy.test.ts",
 	"tests/council_assignment_emitter.test.ts",
 	"tests/web_citation_context_builder.test.ts",
+	"tests/debate_seat_factory.test.ts",
 	"tests/crew_barrier_types.test.ts",
 	"tests/crew_barrier.test.ts",
 	"tests/audio_stream_controls.test.ts",

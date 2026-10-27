@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { AgentSeat, type SeatConfig } from "@governmindz/core/debate/AgentSeat";
+import { type AgentSeat } from "@governmindz/core/debate/AgentSeat";
 import { buildMessageContractEnvelope } from "@governmindz/core/debate/AgentMessage";
 import { RivalChallenger } from "@governmindz/core/memory/RivalChallenger";
 import { ThinkerAgent } from "@governmindz/core/memory/ThinkerAgent";
@@ -30,6 +30,7 @@ import { collectDissentSources } from "./application/DissentSourceCollector.js";
 import { isConversationalInquiry } from "./application/ConversationalInquiryPolicy.js";
 import { emitCouncilAssignments } from "./application/CouncilAssignmentEmitter.js";
 import { buildWebCitationContext } from "./application/WebCitationContextBuilder.js";
+import { DebateSeatFactory } from "./services/DebateSeatFactory.js";
 
 interface ZetarisToolResult {
 	columns: string[];
@@ -92,6 +93,12 @@ const DEFAULT_TOPIC =
 
 const hmem = new HMemService();
 
+const debateSeatFactory = new DebateSeatFactory({
+	loadPrompt: (name) => PromptRegistry.load(name),
+	createSampleClient: (seatId, replies, delayMs) => new SampleSeatClient(seatId, replies, delayMs),
+	createMeterlessClient: (provider, model) => new MeterlessSeatClient(provider, model),
+});
+
 const researchCrewRunner = new ResearchCrewRunner({
 	createDataCrew: (config) => new DataCrew(config),
 	createWebCrew: (config) => new WebSearchCrew(config),
@@ -99,32 +106,6 @@ const researchCrewRunner = new ResearchCrewRunner({
 	emptyDataCrewReport,
 	emptyWebCrewReport,
 });
-
-function buildSeats(
-	provider: MeterlessProvider | null,
-	scenario?: SampleScenario,
-): AgentSeat[] {
-	const seatModel = process.env.METERLESS_SEAT_MODEL?.trim() || undefined;
-	const configs: SeatConfig[] = [
-		{ seatId: "FactChecker", role: "fact_checker", provider: "meterless", systemPrompt: PromptRegistry.load("fact_checker") },
-		{ seatId: "CloudArchitect", role: "cloud-architect", provider: "meterless", systemPrompt: PromptRegistry.load("architect") },
-		{ seatId: "Synthesizer", role: "synthesizer", provider: "meterless", systemPrompt: PromptRegistry.load("synthesizer") },
-	];
-	return configs.map((config) => {
-		if (scenario) {
-			const delay = process.env.NODE_ENV === "test" ? 0 : 2000;
-			return new AgentSeat(config, new SampleSeatClient(config.seatId, scenario.seats[config.seatId] ?? [], delay));
-		}
-		if (!provider) throw new Error("Meterless provider is required outside sample mode.");
-		const llm = new MeterlessSeatClient(provider, seatModel);
-		return new AgentSeat(config, {
-			complete: async (system: string, prompt: string) => {
-				const result = await llm.complete(system, prompt);
-				return result;
-			},
-		});
-	});
-}
 
 function createDebateLoop(
 	seats: AgentSeat[],
@@ -416,7 +397,12 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 		}
 	}
 
-	const seats = buildSeats(provider, scenario);
+	const seats = debateSeatFactory.create({
+		provider,
+		scenario,
+		seatModel: process.env.METERLESS_SEAT_MODEL?.trim() || undefined,
+		sampleDelayMs: process.env.NODE_ENV === "test" ? 0 : 2000,
+	});
 
 	// Rival Challenger & Thinker LLM clients: real in live mode, intelligent in sample mode.
 	let challengerClient: { complete: (s: string, p: string) => Promise<{ content: string; confidence: number }> };
