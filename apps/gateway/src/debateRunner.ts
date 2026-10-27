@@ -192,6 +192,10 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 	const eventSink = params.eventSink;
 	const isSample = params.mode === "sample";
 
+	// Each run gets its own genesis-anchored audit chain. This keeps demo runs
+	// cryptographically isolated from live runs and prevents cross-run leakage.
+	auditTrail.reset();
+
 	let topic: string;
 	let zetarisResult: ZetarisToolResult;
 	let scenario: SampleScenario | undefined;
@@ -218,24 +222,11 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 				{ callerRole: "analyst", correlationId: randomUUID() },
 			)) as ZetarisToolResult;
 		} catch (offlineErr) {
-			result = {
-				columns: ["database_name", "type", "description", "table_count"],
-				rows: [
-					["SEC_DATA", "sec_edgar_xbrl", "SEC EDGAR XBRL company facts", 14],
-					["OPENFDA_REST", "rest_api", "OpenFDA drug labeling & adverse events", 2],
-					["CLINICALTRIALS_REST", "rest_api", "ClinicalTrials.gov registered human research", 1],
-					["GLEIF_REST", "rest_api", "Global Legal Entity Identifier registry", 1],
-					["POKEAPI_REST", "rest_api", "RESTful nested JSON structure benchmark", 2],
-					["NY_TAXI", "postgres_federated", "NYC TLC trip operations and customer PII", 15],
-					["COMPANY_DNS", "rest_api", "Standard Industrial Classification hierarchy", 2],
-					["TPCDS_DB", "benchmark_parquet", "TPC-DS decision support benchmark", 24],
-				],
-				total: 8,
-				isSynthetic: true,
-				circuitBreakerState: "OPEN",
-				evidenceSource: "synthetic_fallback",
-				fallbackReason: (offlineErr as Error)?.message ?? "Zetaris offline",
-			};
+			const reason = offlineErr instanceof Error ? offlineErr.message : String(offlineErr);
+			throw new Error(
+				`Live mode aborted: Zetaris Lightning query failed (${reason}). ` +
+					"Live runs never substitute synthetic or demo data. Check ZETARIS_REST_URL, ZETARIS_ORG_ID, ZETARIS_API_KEY, and that the Zetaris service is running.",
+			);
 		}
 		zetarisResult = result;
 		topic = params.topicOverride?.trim() || process.env.GOVERNMINDZ_TOPIC?.trim() || DEFAULT_TOPIC;
@@ -425,6 +416,13 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 	const dataCrewReport = dataOutcome.report;
 	const webCrewReport = webOutcome.report;
 
+	if (!isSample && dataOutcome.failed) {
+		throw new Error(
+			`Live mode aborted: Zetaris Data Crew failed (${dataOutcome.error || "unknown error"}). ` +
+				"No synthetic fallback is permitted in live mode.",
+		);
+	}
+
 	// Emit initial pre-cue: inform FactChecker that research results are compiling
 	eventSink?.({
 		type: "agent_pre_cue",
@@ -501,12 +499,14 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 		? formatZetarisResult(scenario!.zetaris, 50)
 		: formatZetarisResult(zetarisResult as any, 50);
 
-	if (zetarisResult.isSynthetic) {
-		zetarisContext = `[Circuit Breaker: ${zetarisResult.circuitBreakerState ?? "OPEN"}] [Evidence Source: ${zetarisResult.evidenceSource ?? "synthetic_fallback"}] (Offline Fallback Schema)\n${zetarisContext}`;
+	if (isSample) {
+		zetarisContext = `[Demo Scenario: deterministic sample dataset — not live Zetaris data]\n${zetarisContext}`;
+	} else if (zetarisResult.isSynthetic) {
+		zetarisContext = `[Circuit Breaker: ${zetarisResult.circuitBreakerState ?? "OPEN"}] [Evidence Source: ${zetarisResult.evidenceSource ?? "synthetic_fallback"}]\n${zetarisContext}`;
 	}
 
-	const memoryRetrieved = hmem.retrieve(topic, 5);
-	const evidenceContext = memoryRetrieved.context
+	const memoryRetrieved = isSample ? null : hmem.retrieve(topic, 5);
+	const evidenceContext = memoryRetrieved?.context
 		? `${zetarisContext}\n\n${memoryRetrieved.context}`
 		: zetarisContext;
 
@@ -950,21 +950,24 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 	});
 
 	// H-MEM: mine this debate into hierarchical memory for future runs.
-	try {
-		hmem.mine({
-			sessionId: resultDebate.session_id,
-			topic,
-			finalAnswer: synthPosition,
-			seatPositions: Object.entries(resultDebate.seat_votes || {}).map(
-				([seatId, v]) => ({
-					seatId,
-					position: v.position,
-					confidence: v.confidence,
-				}),
-			),
-		});
-	} catch {
-		// degrade gracefully
+	// Demo/sample runs are intentionally excluded so they cannot influence live retrieval.
+	if (!isSample) {
+		try {
+			hmem.mine({
+				sessionId: resultDebate.session_id,
+				topic,
+				finalAnswer: synthPosition,
+				seatPositions: Object.entries(resultDebate.seat_votes || {}).map(
+					([seatId, v]) => ({
+						seatId,
+						position: v.position,
+						confidence: v.confidence,
+					}),
+				),
+			});
+		} catch {
+			// degrade gracefully
+		}
 	}
 
 	eventSink?.({

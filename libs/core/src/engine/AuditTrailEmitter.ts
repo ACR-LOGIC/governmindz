@@ -200,6 +200,15 @@ export class AuditTrailEmitter {
 	}
 
 	/**
+	 * Starts a fresh, genesis-anchored chain for the next run.
+	 * Listeners are preserved so active SSE subscribers keep receiving events.
+	 */
+	reset(): void {
+		this.log = [];
+		this.headHash = this.hashGenesis();
+	}
+
+	/**
 	 * Public emit for external orchestration workflows.
 	 */
 	emitEvent(params: Omit<AuditEvent, "id" | "previous_hash" | "hash" | "signature">): void {

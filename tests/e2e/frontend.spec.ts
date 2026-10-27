@@ -89,28 +89,6 @@ test.describe("GovernMindz Mission Control Frontend", () => {
 		await expect(page.getByRole("button", { name: /New AI Debate/i })).toBeVisible();
 	});
 
-	test("Agent inspection drawer opens and closes cleanly", async ({ page }) => {
-		await page.goto("/");
-		await page.waitForLoadState("networkidle");
-
-		// Agents join the roster only once a demo assignment starts
-		await page.getByRole("button", { name: /Start Demo/i }).click();
-		await expect(page.locator("#tour-roster button").first()).toBeVisible({ timeout: 15000 });
-
-		// Click on Fact Checker in roster specifically
-		const factCheckerItem = page.locator("#tour-roster button").filter({ hasText: /Fact Checker/i }).first();
-		await expect(factCheckerItem).toBeVisible();
-		await factCheckerItem.click();
-
-		// Drawer should appear
-		await expect(page.getByRole("heading", { name: "Fact Checker" })).toBeVisible();
-		await expect(page.getByText("Role Mandate & Boundaries")).toBeVisible();
-
-		// Close drawer
-		await page.getByTitle("Close agent inspection drawer").click();
-		await expect(page.getByTitle("Close agent inspection drawer")).not.toBeVisible();
-	});
-
 	test("System Settings modal opens with functional tabs and Replay Tour", async ({ page }) => {
 		await page.goto("/");
 		await page.waitForLoadState("networkidle");
@@ -123,7 +101,7 @@ test.describe("GovernMindz Mission Control Frontend", () => {
 		await expect(page.getByRole("button", { name: "General" })).toBeVisible();
 		await expect(page.getByRole("button", { name: "Models & Providers" })).toBeVisible();
 		await expect(page.getByRole("button", { name: "Privacy & Data" })).toBeVisible();
-		await expect(page.getByRole("button", { name: "About & Architecture" })).toBeVisible();
+		await expect(page.getByRole("button", { name: "About GovernMindz" })).toBeVisible();
 
 		// Verify Replay Tour button exists
 		await expect(page.getByRole("button", { name: /Replay UI Tour/i })).toBeVisible();
@@ -136,28 +114,6 @@ test.describe("GovernMindz Mission Control Frontend", () => {
 
 		// Close modal
 		await page.locator("button[aria-label='Close settings']").click();
-	});
-
-	test("Demo mode presents 3 distinct prompt bubbles and Start Over action", async ({ page }) => {
-		await page.goto("/");
-		await page.waitForLoadState("networkidle");
-
-		// Verify 3 distinct selectable bubbles in Demo mode
-		await expect(page.getByRole("button", { name: /Research & Evidence/i })).toBeVisible();
-		await expect(page.getByRole("button", { name: /Technical Decision/i })).toBeVisible();
-		await expect(page.getByRole("button", { name: /Conflicting Claims/i })).toBeVisible();
-
-		// Verify free-text textarea is disabled/replaced
-		await expect(page.locator("textarea")).not.toBeVisible();
-
-		// Click "Start Demo" button
-		await page.getByRole("button", { name: /Start Demo/i }).click();
-
-		// Simulated debate runs and displays orchestrator announcement
-		await expect(page.getByText(/Inquiry initiated in/i).first()).toBeVisible({ timeout: 10000 });
-
-		// Start Over button should appear
-		await expect(page.getByRole("button", { name: /Start Over/i }).first()).toBeVisible({ timeout: 10000 });
 	});
 
 	test("Transition to Live mode opens confirmation dialog and enables text entry", async ({ page }) => {

@@ -234,17 +234,21 @@ npm start
 
 ## Operating Modes
 
-GovernMindz runs in two distinct operational modes:
+GovernMindz runs in two distinct operational modes. For the complete Meterless
+Nightshift integration guide—token discovery, model roster refresh, failure
+handling, and unused Meterless capabilities—see [`docs/METERLESS.md`](docs/METERLESS.md).
 
 ### 1. Demo Mode (Zero Credentials Required)
 - **Out-of-the-Box Execution:** Operates immediately upon first launch without any API keys, tokens, or cloud configuration.
 - **Deterministic Precedents:** Executes deterministic Zetaris catalog queries, parallel crew research, and adversarial debate loops over cached governance benchmarks.
-- **Safe Experimentation:** Evaluates complex multi-agent reasoning, barrier synchronization, and deliverable validation safely offline.
+- **Local-Only History:** Demo conversations never reach the server. Replaying an example clears the chat and keeps exactly one local history entry per example.
+- **Safe Experimentation:** Evaluates complex multi-agent reasoning, barrier synchronization, and deliverable validation safely offline without affecting live memory or credibility.
 
 ### 2. Live Mode (Connected Infrastructure)
+- **Fail-Closed Preflight:** Live mode refuses to start unless both Zetaris and Meterless Nightshift are configured and actually reachable. Missing or invalid credentials produce an explicit error; synthetic data is never substituted.
 - **Zetaris Lightning Integration:** Queries live federated data tables across PostgreSQL, BigQuery, Parquet, and REST silos through read-only SQL gates (`assertReadOnlySql()`).
-- **Meterless Runtime:** Connects to local Meterless inference engines (`http://127.0.0.1:8088/v1`), invoking NVIDIA Nemotron 3.5 Lightning 30B models.
-- **AES-256-GCM Credential Vault:** Secure modal in the web interface encrypts Zetaris and Meterless credentials at rest into `.env.local`. Sensitive keys are automatically redacted from error traces and logs.
+- **Meterless Nightshift Runtime:** Connects to the local Nightshift gateway (`http://127.0.0.1:8088/v1`). Cloud provider keys are entered inside Nightshift; every model it exposes is discovered automatically by GovernMindz.
+- **AES-256-GCM Credential Vault:** Secure modal in the web interface encrypts Zetaris and Nightshift credentials at rest into `.env.local`. Sensitive keys are automatically redacted from error traces and logs.
 
 ---
 
@@ -255,7 +259,7 @@ GovernMindz runs in two distinct operational modes:
 | **`npm run web`** | Start full-stack Mission Control web server (`http://127.0.0.1:8787`) | Win / Linux / Mac | Localhost |
 | **`npm run dev`** | Launch Vite frontend with Hot Module Replacement (`http://127.0.0.1:5173`) | Win / Linux / Mac | Localhost |
 | **`npm run build`** | Compile production client bundle (`apps/web/dist`) | Win / Linux / Mac | None |
-| **`npm test`** | Run full automated test suite (**138 / 138 passing**) | Win / Linux / Mac | None |
+| **`npm test`** | Run full automated test suite (**114 / 114 passing**) | Win / Linux / Mac | None |
 | **`npm run typecheck`** | Run strict TypeScript validation (`tsc --noEmit`) | Win / Linux / Mac | None |
 | **`npm run demo:sample`** | Run standalone CLI multi-agent debate scenario | Win / Linux / Mac | None |
 | **`npm run samples`** | Execute all benchmark scenarios and generate traces | Win / Linux / Mac | None |
@@ -274,7 +278,7 @@ The test suite runs natively across Windows, Linux, and macOS via Node.js's buil
 npm test
 ```
 
-### Complete Test Coverage (**138 / 138 Passing**):
+### Complete Test Coverage (**114 / 114 Passing**):
 1. **Cryptographic Audit Chain Verifier Tests (8/8):** RFC-6962 / NIST SP 800-92 proof certificates, genesis anchor validation, corrupted block localization, broken link detection, and HMAC signature verification.
 2. **Parallel Crew Barrier Synchronization Tests (7/7):** Authoritative crew roster management, barrier locking while crews work, soft timeout transitions to `wrapping_up`, divergence detection, and release idempotency.
 3. **Crew Barrier Types & State Tests (7/7):** Type contracts, timestamp-ordered message appending, duplicate message prevention, and readiness predicates.

@@ -60,6 +60,84 @@ function getParticipatingAgentProfiles(conv: Conversation | null): AgentProfile[
 	);
 }
 
+const DEMO_HISTORY_KEY = "governmindz_demo_history_v1";
+
+function demoConversationId(scenarioFile: string): string {
+	const scenarioId = scenarioFile.replace(/\.json$/, "").replace(/[^a-zA-Z0-9_-]/g, "_");
+	return `demo_${scenarioId}`;
+}
+
+function loadDemoHistory(): Conversation[] {
+	try {
+		const raw = localStorage.getItem(DEMO_HISTORY_KEY);
+		if (!raw) return [];
+		const parsed = JSON.parse(raw);
+		if (!Array.isArray(parsed)) return [];
+		const byScenario = new Map<string, Conversation>();
+		for (const entry of parsed as Conversation[]) {
+			if (!entry || typeof entry !== "object" || entry.mode === "live") continue;
+			if (!entry.id?.startsWith("demo_") || entry.id.startsWith("demo_draft_")) continue;
+			const key = entry.scenarioId || entry.id;
+			const existing = byScenario.get(key);
+			if (!existing || (entry.updatedAt || 0) > (existing.updatedAt || 0)) {
+				byScenario.set(key, { ...entry, mode: "sample" });
+			}
+		}
+		return Array.from(byScenario.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+	} catch {
+		return [];
+	}
+}
+
+function writeDemoHistory(list: Conversation[]): void {
+	try {
+		const byScenario = new Map<string, Conversation>();
+		for (const entry of list) {
+			if (!entry || entry.mode === "live") continue;
+			if (!entry.id?.startsWith("demo_") || entry.id.startsWith("demo_draft_")) continue;
+			const key = entry.scenarioId || entry.id;
+			const existing = byScenario.get(key);
+			if (!existing || (entry.updatedAt || 0) > (existing.updatedAt || 0)) {
+				byScenario.set(key, entry);
+			}
+		}
+		const deduped = Array.from(byScenario.values())
+			.sort((a, b) => b.updatedAt - a.updatedAt);
+		localStorage.setItem(DEMO_HISTORY_KEY, JSON.stringify(deduped));
+	} catch {
+		// localStorage unavailable: demo history stays in memory only
+	}
+}
+
+function upsertDemoHistory(conv: Conversation): void {
+	if (!conv.scenarioId || conv.mode === "live" || conv.id.startsWith("demo_draft_")) return;
+	const list = loadDemoHistory().filter((c) => (c.scenarioId || c.id) !== conv.scenarioId);
+	writeDemoHistory([conv, ...list]);
+}
+
+function removeDemoHistory(conv: Conversation): void {
+	const list = loadDemoHistory().filter((c) => (c.scenarioId || c.id) !== (conv.scenarioId || conv.id));
+	writeDemoHistory(list);
+}
+
+function createDraftConversation(mode: "live" | "sample"): Conversation {
+	const councilAssignments = assignHumanCouncil();
+	return {
+		id: mode === "live" ? `conv_${Date.now()}` : `demo_draft_${Date.now()}`,
+		title: mode === "live" ? `AI Debate #${Date.now().toString().slice(-4)}` : "Choose a demo scenario",
+		createdAt: Date.now(),
+		updatedAt: Date.now(),
+		topic: "",
+		mode,
+		scenarioId: "",
+		messages: [],
+		auditEvents: [],
+		status: "idle",
+		workflowEvents: [],
+		agentAssignments: councilAssignments,
+	};
+}
+
 export const App: React.FC = () => {
 	const [activeTab, setActiveTab] = useState<ActiveTab>("chat");
 	const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
@@ -140,6 +218,16 @@ export const App: React.FC = () => {
 		setTimeout(() => setToastMsg(null), 3500);
 	}, []);
 
+	// Live conversations persist on the server. Demo conversations are local-only
+	// and keep exactly one canonical history entry per demo example.
+	const persistConversation = useCallback((conv: Conversation) => {
+		if (conv.mode === "live") {
+			void saveConversation(conv);
+			return;
+		}
+		upsertDemoHistory(conv);
+	}, []);
+
 	// Soft deadline periodic check for active research crews
 	useEffect(() => {
 		if (!activeCrewRound || activeCrewRound.barrierReleased) return;
@@ -187,7 +275,7 @@ export const App: React.FC = () => {
 						messages: [...curr.messages, summaryMsg],
 						updatedAt: Date.now(),
 					};
-					saveConversation(updated);
+					persistConversation(updated);
 					return prev.map((c) => (c.id === conversationId ? updated : c));
 				});
 
@@ -207,7 +295,7 @@ export const App: React.FC = () => {
 				showToast("Failed to post combined crew summary. Crew state preserved for retry.");
 			}
 		},
-		[showToast],
+		[showToast, persistConversation],
 	);
 
 	// Active conversation lookup
@@ -234,51 +322,13 @@ export const App: React.FC = () => {
 			console.warn("Scenario load error:", e);
 		}
 
-		try {
-			const convs = await fetchConversations();
-			if (convs && convs.length > 0) {
-				setConversations((prev) => {
-					// If a new conversation was created before fetch resolved, keep it at top
-					if (prev.length > 0 && prev[0].messages.length === 0 && !convs.find((c) => c.id === prev[0].id)) {
-						return [prev[0], ...convs];
-					}
-					return convs;
-				});
-				setActiveConversationId(activeIdRef.current || convs[0].id);
-			} else {
-				// Create initial default conversation with rotated human council
-				const defaultAssigns = assignHumanCouncil();
-				const defaultConv: Conversation = {
-					id: `conv_${Date.now()}`,
-					title: "Regulatory Compliance & Risk Ranking",
-					createdAt: Date.now(),
-					updatedAt: Date.now(),
-					topic:
-						"Our organization received acquisition offers from 7 Fortune 500 companies (Apple, IBM, Oracle, Walmart, Target, Ford, Tesla). Before we accept any partnership, we need to assess regulatory compliance risk. Use Zetaris to cross-reference: (1) SEC financial data (revenue volatility, reporting consistency), (2) GLEIF legal entity status (LEI active/inactive), (3) COMPANY_DNS industry classification. Which company poses the HIGHEST compliance risk, and why? Rank all 7 companies by governance risk.",
-					mode: "sample",
-					scenarioId: "01-regulatory-risk",
-					messages: [],
-					auditEvents: [],
-					status: "idle",
-					workflowEvents: [],
-					agentAssignments: defaultAssigns,
-				};
-				setConversations([defaultConv]);
-				setActiveConversationId(defaultConv.id);
-			}
-		} catch (e) {
-			console.warn("Conversation load error:", e);
-		}
-
+		let preferredMode: "live" | "sample" = "sample";
 		try {
 			const prefs = await fetchPreferences();
 			const localPref = localStorage.getItem("governmindz_launch_preference");
 			const savedPref = localPref || prefs.futureLaunchPreference || "demo";
-			if (savedPref === "live") {
-				setMode("live");
-			} else {
-				setMode("sample");
-			}
+			preferredMode = savedPref === "live" ? "live" : "sample";
+			setMode(preferredMode);
 
 			const localTour = localStorage.getItem("governmindz_tour_completed");
 			const tourDone = localTour !== null ? localTour === "true" : prefs.tourCompleted;
@@ -287,6 +337,47 @@ export const App: React.FC = () => {
 			}
 		} catch (e) {
 			console.warn("Preferences load error:", e);
+			preferredMode =
+				localStorage.getItem("governmindz_launch_preference") === "live" ||
+				localStorage.getItem("governmindz_mode_preference") === "live"
+					? "live"
+					: "sample";
+			setMode(preferredMode);
+		}
+
+		try {
+			const serverConvs = ((await fetchConversations()) || []).filter((c) => c.mode === "live");
+			const demoConvs = loadDemoHistory();
+			let combined: Conversation[] = [...serverConvs, ...demoConvs].sort(
+				(a, b) => (b.updatedAt || 0) - (a.updatedAt || 0),
+			);
+
+			let active: Conversation | null = null;
+			if (preferredMode === "live") {
+				active = combined.find((c) => c.mode === "live") || null;
+				if (!active) {
+					const draft = createDraftConversation("live");
+					combined = [draft, ...combined];
+					active = draft;
+					saveConversation(draft);
+				}
+			} else {
+				active =
+					combined.find((c) => c.mode !== "live" && !c.id.startsWith("demo_draft_")) || null;
+				if (!active) {
+					const draft = createDraftConversation("sample");
+					combined = [draft, ...combined];
+					active = draft;
+				}
+			}
+
+			setConversations(combined);
+			setActiveConversationId(active.id);
+		} catch (e) {
+			console.warn("Conversation load error:", e);
+			const draft = createDraftConversation(preferredMode);
+			setConversations([draft]);
+			setActiveConversationId(draft.id);
 		}
 	}, []);
 
@@ -308,6 +399,7 @@ export const App: React.FC = () => {
 			setIsBusy(true);
 			const h = await fetchHealth();
 			setHealth(h);
+			window.dispatchEvent(new Event("governmindz:models-refresh"));
 			showToast(`Meterless: ${h.meterless?.state || "offline"} · Zetaris: ${h.zetaris?.ok ? "connected" : "disconnected"}`);
 		} catch {
 			showToast("Connectivity check failed");
@@ -316,10 +408,42 @@ export const App: React.FC = () => {
 		}
 	};
 
+	// Switch the active conversation when the execution mode changes so demo
+	// and live histories never share the same chat pane.
+	const activateModeConversation = (nextMode: "live" | "sample") => {
+		const current = conversations.find((c) => c.id === activeIdRef.current);
+		if (current && (nextMode === "live") === (current.mode === "live")) return;
+		const candidate = conversations.find((c) =>
+			nextMode === "live"
+				? c.mode === "live"
+				: c.mode !== "live" && !c.id.startsWith("demo_draft_"),
+		);
+		if (candidate) {
+			setActiveConversationId(candidate.id);
+			return;
+		}
+		const draft = createDraftConversation(nextMode);
+		setConversations((prev) => [draft, ...prev]);
+		setActiveConversationId(draft.id);
+		if (nextMode === "live") saveConversation(draft);
+	};
+
 	// Toggle execution mode
 	const handleToggleMode = () => {
+		if (isBusy) {
+			showToast("Wait for the current run to finish before switching modes.");
+			return;
+		}
+		demoQueueRef.current?.reset();
+		exitCoordinator.forceExit();
+		setHoldingMessage(null);
+		if (holdingTimerRef.current) {
+			clearTimeout(holdingTimerRef.current);
+			holdingTimerRef.current = null;
+		}
 		if (mode === "live") {
 			setMode("sample");
+			activateModeConversation("sample");
 			showToast("Switched to Demo Mode (Keyless Simulation)");
 			savePreferences({ launchMode: "demo" });
 			localStorage.setItem("governmindz_mode_preference", "demo");
@@ -330,7 +454,14 @@ export const App: React.FC = () => {
 
 	// Confirm Live Mode transition
 	const handleConfirmLiveMode = (futureLaunchPref: "demo" | "live") => {
+		if (isBusy) {
+			showToast("Wait for the current run to finish before switching modes.");
+			setLiveConfirmModalOpen(false);
+			return;
+		}
+		demoQueueRef.current?.reset();
 		setMode("live");
+		activateModeConversation("live");
 		setLiveConfirmModalOpen(false);
 		localStorage.setItem("governmindz_mode_preference", "live");
 		localStorage.setItem("governmindz_launch_preference", futureLaunchPref);
@@ -346,40 +477,56 @@ export const App: React.FC = () => {
 		}
 	};
 
-	// Start Demo scenario directly
+	// Start Demo scenario directly. Each demo example owns exactly one history
+	// entry; replaying it clears the previous chat and starts a fresh run.
 	const handleStartDemoScenario = async (scenarioFile: string, question: string) => {
-		setSelectedScenario(scenarioFile);
-
-		// If active conversation doesn't exist or already has completed messages, start a fresh conversation for this demo scenario!
-		if (!activeConv || activeConv.messages.length > 0) {
-			const councilAssignments = assignHumanCouncil();
-			const matchedScenario = DEMO_SCENARIOS.find((s) => s.file === scenarioFile);
-			const title = matchedScenario ? matchedScenario.title : `Demo: ${scenarioFile.replace(".json", "")}`;
-			const newConv: Conversation = {
-				id: `conv_${Date.now()}`,
-				title,
-				createdAt: Date.now(),
-				updatedAt: Date.now(),
-				topic: question,
-				mode: "sample",
-				scenarioId: scenarioFile.replace(".json", ""),
-				messages: [],
-				auditEvents: [],
-				status: "idle",
-				workflowEvents: [],
-				agentAssignments: councilAssignments,
-			};
-			setConversations((prev) => [newConv, ...prev]);
-			setActiveConversationId(newConv.id);
-			saveConversation(newConv);
-			await handleSendMessageWithConv(newConv, question, scenarioFile);
+		if (isBusy) {
+			showToast("A demo is already running. Wait for it to finish or press Start Over.");
 			return;
 		}
 
-		await handleSendMessageWithConv(activeConv, question, scenarioFile);
+		exitCoordinator.forceExit();
+		demoQueueRef.current?.reset();
+		if (holdingTimerRef.current) {
+			clearTimeout(holdingTimerRef.current);
+			holdingTimerRef.current = null;
+		}
+		setHoldingMessage(null);
+		setSelectedScenario(scenarioFile);
+
+		const scenarioId = scenarioFile.replace(/\.json$/, "");
+		const matchedScenario = DEMO_SCENARIOS.find((s) => s.file === scenarioFile);
+		const demoId = demoConversationId(scenarioFile);
+		const demoConv: Conversation = {
+			id: demoId,
+			title: matchedScenario ? matchedScenario.title : `Demo: ${scenarioId}`,
+			createdAt: Date.now(),
+			updatedAt: Date.now(),
+			topic: question,
+			mode: "sample",
+			scenarioId,
+			messages: [],
+			auditEvents: [],
+			status: "idle",
+			workflowEvents: [],
+			agentAssignments: assignHumanCouncil(),
+		};
+
+		setConversations((prev) => [
+			demoConv,
+			...prev.filter((c) => c.id !== demoId && !c.id.startsWith("demo_draft_")),
+		]);
+		setActiveConversationId(demoId);
+		upsertDemoHistory(demoConv);
+		setChartData({ FactChecker: [], CloudArchitect: [], Synthesizer: [] });
+		setActiveCrewRound(null);
+		setIsCrewClosing(false);
+		setActiveTab("chat");
+
+		await handleSendMessageWithConv(demoConv, question, scenarioFile);
 	};
 
-	// Start Over in Demo mode
+	// Start Over in Demo mode: begin a blank local draft; history entries stay intact.
 	const handleStartOver = () => {
 		exitCoordinator.forceExit();
 		demoQueueRef.current?.reset();
@@ -388,7 +535,12 @@ export const App: React.FC = () => {
 			holdingTimerRef.current = null;
 		}
 		setHoldingMessage(null);
-		handleNewConversation();
+		const draft = createDraftConversation("sample");
+		setConversations((prev) => [draft, ...prev.filter((c) => !c.id.startsWith("demo_draft_"))]);
+		setActiveConversationId(draft.id);
+		setChartData({ FactChecker: [], CloudArchitect: [], Synthesizer: [] });
+		setActiveCrewRound(null);
+		setIsCrewClosing(false);
 		showToast("Demo restarted. Choose a scenario to begin.");
 	};
 
@@ -400,26 +552,37 @@ export const App: React.FC = () => {
 		showToast("Tour completed! Enjoy exploring GovernMindz.");
 	};
 
+	const handleSelectConversation = (id: string) => {
+		if (isBusy) {
+			showToast("Wait for the current run to finish before switching conversations.");
+			return;
+		}
+		if (id !== activeIdRef.current) {
+			demoQueueRef.current?.reset();
+			exitCoordinator.forceExit();
+			setHoldingMessage(null);
+		}
+		setActiveConversationId(id);
+	};
+
 	// Create New Conversation
 	const handleNewConversation = () => {
+		if (isBusy) {
+			showToast("Wait for the current run to finish before starting a new conversation.");
+			return;
+		}
 		exitCoordinator.forceExit();
-		const councilAssignments = assignHumanCouncil();
+		demoQueueRef.current?.reset();
+		if (mode !== "live") {
+			const draft = createDraftConversation("sample");
+			setConversations((prev) => [draft, ...prev.filter((c) => !c.id.startsWith("demo_draft_"))]);
+			setActiveConversationId(draft.id);
+			setChartData({ FactChecker: [], CloudArchitect: [], Synthesizer: [] });
+			setActiveTab("chat");
+			return;
+		}
 
-		const newConv: Conversation = {
-			id: `conv_${Date.now()}`,
-			title: `AI Debate #${conversations.length + 1}`,
-			createdAt: Date.now(),
-			updatedAt: Date.now(),
-			topic: "",
-			mode,
-			scenarioId: selectedScenario.replace(".json", ""),
-			messages: [],
-			auditEvents: [],
-			status: "idle",
-			workflowEvents: [],
-			agentAssignments: councilAssignments,
-		};
-
+		const newConv = createDraftConversation("live");
 		const updated = [newConv, ...conversations];
 		setConversations(updated);
 		setActiveConversationId(newConv.id);
@@ -430,18 +593,38 @@ export const App: React.FC = () => {
 
 	// Rename Conversation
 	const handleRenameConversation = (id: string, title: string) => {
+		const target = conversations.find((c) => c.id === id);
 		const updated = conversations.map((c) => (c.id === id ? { ...c, title, updatedAt: Date.now() } : c));
 		setConversations(updated);
-		renameConversation(id, title);
+		if (target && target.mode === "live") {
+			renameConversation(id, title);
+		} else if (target) {
+			persistConversation(updated.find((c) => c.id === id)!);
+		}
 	};
 
 	// Delete Conversation
 	const handleDeleteConversation = (id: string) => {
+		if (isBusy) {
+			showToast("Wait for the current run to finish before deleting a conversation.");
+			return;
+		}
+		const target = conversations.find((c) => c.id === id);
 		const updated = conversations.filter((c) => c.id !== id);
 		setConversations(updated);
-		deleteConversation(id);
+		if (target && target.mode === "live") {
+			deleteConversation(id);
+		} else if (target) {
+			removeDemoHistory(target);
+		}
 		if (activeId === id) {
-			setActiveConversationId(updated[0]?.id || null);
+			const next =
+				updated.find((c) =>
+					mode === "live"
+						? c.mode === "live"
+						: c.mode !== "live" && !c.id.startsWith("demo_draft_"),
+				) || null;
+			setActiveConversationId(next?.id || null);
 		}
 	};
 
@@ -477,22 +660,24 @@ export const App: React.FC = () => {
 			const resolvedSeat = seatId || targetMsg?.fromSeat || "unknown";
 
 			if (rating) {
-				submitFeedback({
-					conversationId: activeId,
-					messageId,
-					seatId: resolvedSeat,
-					rating,
-					round: targetMsg?.round,
-				}).catch((err) => {
-					console.warn("Failed to submit message feedback to backend:", err);
-				});
+				if (curr.mode === "live") {
+					submitFeedback({
+						conversationId: activeId,
+						messageId,
+						seatId: resolvedSeat,
+						rating,
+						round: targetMsg?.round,
+					}).catch((err) => {
+						console.warn("Failed to submit message feedback to backend:", err);
+					});
+				}
 			}
 
 			const updatedMessages = curr.messages.map((m) =>
 				m.id === messageId ? { ...m, userRating: rating } : m,
 			);
 			const updated = { ...curr, messages: updatedMessages, updatedAt: Date.now() };
-			saveConversation(updated);
+			persistConversation(updated);
 			return prev.map((c) => (c.id === activeId ? updated : c));
 		});
 		if (rating) {
@@ -529,7 +714,7 @@ export const App: React.FC = () => {
 			};
 			setConversations((prev) => [convToUse!, ...prev]);
 			setActiveConversationId(convToUse.id);
-			saveConversation(convToUse);
+			persistConversation(convToUse);
 		}
 
 		await handleSendMessageWithConv(convToUse, userTopic, scenarioOverride, options);
@@ -627,7 +812,7 @@ export const App: React.FC = () => {
 				mode,
 				scenario: scenarioToUse,
 				topic: topicToRun,
-				conversationId: targetConv.id,
+				conversationId: mode === "live" ? targetConv.id : undefined,
 				searchModes: options?.searchModes,
 				model: options?.model,
 				attachments: options?.attachments,
@@ -666,7 +851,20 @@ export const App: React.FC = () => {
 				holdingTimerRef.current = null;
 			}
 			setHoldingMessage(null);
+			setConversations((prev) => {
+				const updated = prev.map((c) =>
+					c.id === targetConv.id
+						? { ...c, status: "error" as const, updatedAt: Date.now() }
+						: c,
+				);
+				const current = updated.find((c) => c.id === targetConv.id);
+				if (current) persistConversation(current);
+				return updated;
+			});
 			showToast(`Run failed: ${err.message}`);
+			if (mode === "live") {
+				setLiveConfigModalOpen(true);
+			}
 			setIsBusy(false);
 		}
 	};
@@ -923,11 +1121,11 @@ export const App: React.FC = () => {
 					exitCoordinator.requestExit();
 				}
 
-				saveConversation(updated);
+				persistConversation(updated);
 				return prev.map((c) => (c.id === conversationId ? updated : c));
 			});
 		},
-		[arrivalManager, updateAgentStatus, appendAgentReasoning, showToast, triggerBarrierRelease],
+		[arrivalManager, updateAgentStatus, appendAgentReasoning, showToast, triggerBarrierRelease, persistConversation],
 	);
 
 	// Initialize Demo presentation queue
@@ -1016,7 +1214,7 @@ export const App: React.FC = () => {
 					updatedAt: Date.now(),
 				};
 				setConversations((prev) => prev.map((c) => (c.id === activeConv.id ? updated : c)));
-				saveConversation(updated);
+				persistConversation(updated);
 			}
 		}
 	};
@@ -1048,7 +1246,7 @@ export const App: React.FC = () => {
 				<LeftSidebar
 					conversations={conversations}
 					activeConversationId={activeId}
-					onSelectConversation={(id) => setActiveConversationId(id)}
+					onSelectConversation={handleSelectConversation}
 					onNewConversation={handleNewConversation}
 					onRenameConversation={handleRenameConversation}
 					onDeleteConversation={handleDeleteConversation}
@@ -1158,6 +1356,7 @@ export const App: React.FC = () => {
 				}}
 				onReplayTour={() => setTourOpen(true)}
 				onOpenCredentials={() => setLiveConfigModalOpen(true)}
+				onRefreshHealth={handleRefreshHealth}
 			/>
 
 			{/* Guided Onboarding UI Tour */}

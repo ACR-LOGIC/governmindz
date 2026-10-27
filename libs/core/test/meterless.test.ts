@@ -17,6 +17,7 @@ import { ProviderFactory } from "../src/providers/ProviderFactory.js";
 import {
 	METERLESS_TOKEN_KEY,
 	MeterlessTokenStore,
+	resolveMeterlessRuntimeDirs,
 } from "../src/providers/MeterlessTokenStore.js";
 
 async function withServer(
@@ -124,6 +125,26 @@ test("reads proxy-token and stores the runtime token under the contract key", ()
 	assert.equal(imported[METERLESS_TOKEN_KEY], "imported-runtime-token");
 	rmSync(stateDir, { recursive: true, force: true });
 	rmSync(runtimeOnlyDir, { recursive: true, force: true });
+});
+
+test("discovers Nightshift proxy-token locations, preferring an explicit state dir", () => {
+	const explicit = join(tmpdir(), `meterless-explicit-${randomUUID()}`);
+	const dirs = resolveMeterlessRuntimeDirs(explicit);
+	assert.ok(dirs.length > 0);
+	assert.equal(dirs[0], explicit);
+
+	const joined = dirs.join("\n").toLowerCase();
+	switch (process.platform) {
+		case "win32":
+			assert.match(joined, /ai\.meterless\.runtime/);
+			break;
+		case "darwin":
+			assert.match(joined, /ai\.meterless\.runtime/);
+			break;
+		default:
+			assert.match(joined, /\/var\/lib\/meterless/);
+			break;
+	}
 });
 
 test("flattens string, typed-part, and fallback content", () => {

@@ -7,7 +7,12 @@ import Database from "better-sqlite3";
 import { runDebate } from "../gateway/src/debateRunner.js";
 import { auditTrail } from "@governmindz/core/engine/AuditTrailEmitter";
 import { AuditChainVerifier } from "@governmindz/core/engine/AuditChainVerifier";
-import { credibilityManager, type AgentCredibilityRecord } from "@governmindz/core/kernel/CredibilityManager";
+import {
+	credibilityManager,
+	computeCredibilityMetrics,
+	COLD_START_PRIORS,
+	type AgentCredibilityRecord,
+} from "@governmindz/core/kernel/CredibilityManager";
 import { HMemService } from "@governmindz/core/memory/HMemService";
 import { MeterlessProvider } from "@governmindz/core/providers/MeterlessProvider";
 import { zetarisQueryHandler } from "../gateway/src/tools/zetaris.tools.js";
@@ -111,6 +116,61 @@ db.exec(`
 	);
 `);
 
+// Demo runs are local-only. Purge any legacy demo/sample rows so server
+// storage and audit/evidence lookups contain live runs exclusively.
+try {
+	db.prepare("DELETE FROM evidence_snapshots WHERE conversation_id NOT IN (SELECT id FROM conversations WHERE mode = 'live')").run();
+	const purged = db.prepare("DELETE FROM conversations WHERE mode <> 'live'").run();
+	if (purged.changes > 0) {
+		console.log(`[GovernMindz] Purged ${purged.changes} legacy demo conversation(s); demo history is local-only.`);
+	}
+} catch (err) {
+	console.warn("[GovernMindz] Demo history cleanup skipped:", err);
+}
+
+// Feedback is a live-only signal. Remove legacy demo feedback and recompute
+// credibility exclusively from live conversations so demo ratings cannot
+// influence live agent weights.
+try {
+	db.prepare(
+		"DELETE FROM message_feedback WHERE conversation_id NOT IN (SELECT id FROM conversations WHERE mode = 'live')",
+	).run();
+	const feedbackRows = db
+		.prepare("SELECT seat_id, rating, COUNT(*) AS count FROM message_feedback GROUP BY seat_id, rating")
+		.all() as Array<{ seat_id: string; rating: string; count: number }>;
+	const bySeat = new Map<string, { up: number; down: number; total: number }>();
+	for (const row of feedbackRows) {
+		const entry = bySeat.get(row.seat_id) || { up: 0, down: 0, total: 0 };
+		entry.total += Number(row.count);
+		if (row.rating === "up") entry.up += Number(row.count);
+		if (row.rating === "down") entry.down += Number(row.count);
+		bySeat.set(row.seat_id, entry);
+	}
+	db.prepare("DELETE FROM agent_credibility").run();
+	const insertCredibility = db.prepare(`
+		INSERT INTO agent_credibility
+			(seat_id, alpha, beta, sample_count, credibility_score, weight_multiplier, updated_at)
+		VALUES
+			(@seat_id, @alpha, @beta, @sample_count, @credibility_score, @weight_multiplier, @updated_at)
+	`);
+	for (const [seatId, counts] of bySeat) {
+		const alpha = COLD_START_PRIORS.alpha + counts.up;
+		const beta = COLD_START_PRIORS.beta + counts.down;
+		const metrics = computeCredibilityMetrics(alpha, beta);
+		insertCredibility.run({
+			seat_id: seatId,
+			alpha,
+			beta,
+			sample_count: counts.total,
+			credibility_score: metrics.credibilityScore,
+			weight_multiplier: metrics.weightMultiplier,
+			updated_at: Date.now(),
+		});
+	}
+} catch (err) {
+	console.warn("[GovernMindz] Feedback isolation cleanup skipped:", err);
+}
+
 const hmem = new HMemService();
 
 function initCredibilityFromDb(): void {
@@ -151,7 +211,7 @@ function setPreference(key: string, value: string): void {
 }
 
 function getAllConversations() {
-	const stmt = db.prepare("SELECT * FROM conversations ORDER BY updated_at DESC");
+	const stmt = db.prepare("SELECT * FROM conversations WHERE mode = 'live' ORDER BY updated_at DESC");
 	const rows = stmt.all() as any[];
 	return rows.map((r) => {
 		try {
@@ -372,6 +432,8 @@ function saveEvidenceSnapshot(
 }
 
 function getEvidenceSnapshot(conversationId: string): EvidenceSnapshot | null {
+	const conv = getConversationById(conversationId);
+	if (!conv || conv.mode !== "live") return null;
 	const row = db.prepare("SELECT * FROM evidence_snapshots WHERE conversation_id = ?").get(conversationId) as any;
 	if (row) {
 		return {
@@ -387,8 +449,7 @@ function getEvidenceSnapshot(conversationId: string): EvidenceSnapshot | null {
 		};
 	}
 	// Backfill snapshots for conversations created before evidence capture existed.
-	const conv = getConversationById(conversationId);
-	if (conv?.zetarisData?.query && Array.isArray(conv.zetarisData.rows)) {
+	if (conv.zetarisData?.query && Array.isArray(conv.zetarisData.rows)) {
 		return saveEvidenceSnapshot(conversationId, conv.zetarisData);
 	}
 	return null;
@@ -574,6 +635,52 @@ async function handleRun(req: http.IncomingMessage, res: http.ServerResponse) {
 				return;
 			}
 		}
+
+		const isLive = params.mode === "live";
+		if (params.conversationId) {
+			const conv = getConversationById(params.conversationId);
+			if (conv && (conv.mode === "live") !== isLive) {
+				sendJson(res, 400, {
+					error: "Mode mismatch: demo conversations cannot run in live mode and live conversations cannot run in demo mode.",
+				});
+				return;
+			}
+		}
+
+		// Live mode must prove both providers are actually reachable before any
+		// agent output is generated. Never start a live run that would silently
+		// fall back to demo or synthetic data.
+		if (isLive) {
+			const provider = new MeterlessProvider();
+			const meterless = await provider.status();
+			if (meterless.state !== "online") {
+				sendJson(res, 503, {
+					error: `Live mode unavailable: Meterless is ${meterless.state}${meterless.reason ? ` (${meterless.reason})` : ""}. Configure the Nightshift endpoint and token in Settings.`,
+				});
+				return;
+			}
+			const hasZetaris = Boolean(
+				(process.env.ZETARIS_HOST || process.env.ZETARIS_REST_URL || process.env.ZETARIS_JDBC_URL)?.trim(),
+			);
+			if (!hasZetaris) {
+				sendJson(res, 503, {
+					error: "Live mode unavailable: Zetaris credentials are missing. Configure ZETARIS_REST_URL and ZETARIS_API_KEY in Settings.",
+				});
+				return;
+			}
+			try {
+				await zetarisQueryHandler(
+					{ query: "SELECT 1", limit: 1 },
+					{ callerRole: "analyst", correlationId: randomUUID() },
+				);
+			} catch (err: any) {
+				sendJson(res, 503, {
+					error: `Live mode unavailable: Zetaris connection failed (${err?.message || "unknown error"}). No synthetic fallback is used in live mode.`,
+				});
+				return;
+			}
+		}
+
 		const runId = randomUUID();
 		const run: RunRecord = {
 			id: runId,
@@ -581,7 +688,7 @@ async function handleRun(req: http.IncomingMessage, res: http.ServerResponse) {
 			listeners: new Set(),
 			done: false,
 			result: null,
-			conversationId: params.conversationId,
+			conversationId: isLive ? params.conversationId : undefined,
 		};
 		runs.set(runId, run);
 		activeRun = runId;
@@ -853,23 +960,106 @@ function handleScenarios(_req: http.IncomingMessage, res: http.ServerResponse) {
 	sendJson(res, 200, out);
 }
 
-function handleModels(_req: http.IncomingMessage, res: http.ServerResponse) {
-	sendJson(res, 200, {
-		models: [
-			{
-				id: "nemotron-3.5-lightning-30b-a3b",
-				name: "NVIDIA Nemotron 3.5 Lightning 30B",
-				provider: "meterless",
-				isDefault: true,
-			},
-			{
-				id: "gemini-3.8-flash",
-				name: "Gemini 3.8 Flash (Cloud Fallback)",
-				provider: "google",
-				isDefault: false,
-			},
-		],
-	});
+async function handleMeterlessDetect(req: http.IncomingMessage, res: http.ServerResponse) {
+	if (req.method !== "POST") {
+		res.writeHead(405);
+		res.end();
+		return;
+	}
+	try {
+		const provider = new MeterlessProvider();
+		const status = await provider.autoDetect();
+		if (!status) {
+			sendJson(res, 404, {
+				error:
+					"No Nightshift endpoint found on 127.0.0.1/localhost ports 8088, 8090, 8787, or 11434. Start Nightshift or set METERLESS_BASE_URL.",
+			});
+			return;
+		}
+		if (status.state === "online") {
+			process.env.METERLESS_BASE_URL = status.baseUrl;
+			try {
+				saveSecureConfig({ meterlessHost: status.baseUrl });
+			} catch {
+				// Detection still succeeded in memory even if persistence fails.
+			}
+		}
+		sendJson(res, status.state === "online" ? 200 : 409, {
+			state: status.state,
+			baseUrl: status.baseUrl,
+			models: status.models?.length ?? 0,
+			reason: status.reason,
+			persisted: status.state === "online",
+		});
+	} catch (err: any) {
+		sendJson(res, 500, { error: err?.message || "Nightshift auto-detection failed" });
+	}
+}
+
+async function handleModels(_req: http.IncomingMessage, res: http.ServerResponse) {
+	const fallback = [
+		{
+			id: "meterless/auto",
+			name: "Meterless Auto",
+			provider: "meterless",
+			isDefault: true,
+		},
+		{
+			id: "meterless/fast",
+			name: "Meterless Fast",
+			provider: "meterless",
+			isDefault: false,
+		},
+	];
+	try {
+		const provider = new MeterlessProvider();
+		const status = await provider.status();
+		const ids = (status.models || []).filter(Boolean);
+		if (ids.length === 0) {
+			sendJson(res, 200, { models: fallback, state: status.state, source: "fallback" });
+			return;
+		}
+		const seen = new Set<string>();
+		const models = ids.map((id) => {
+			seen.add(id);
+			const leaf = id.split("/").pop() || id;
+			const prettyLeaf = leaf.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+			const providerLabel = id.startsWith("meterless/")
+				? "meterless"
+				: id.startsWith("nvidia/")
+					? "nvidia (via Nightshift)"
+					: id.startsWith("openai/") || id.startsWith("gpt-")
+						? "openai (via Nightshift)"
+						: id.startsWith("claude-") || id.startsWith("anthropic/")
+							? "anthropic (via Nightshift)"
+							: id.startsWith("gemini-")
+								? "google (via Nightshift)"
+								: "nightshift cloud";
+			return {
+				id,
+				name: id.startsWith("meterless/") ? `Meterless ${prettyLeaf}` : prettyLeaf,
+				provider: providerLabel,
+				isDefault: id === "meterless/auto",
+			};
+		});
+		for (const f of fallback) {
+			if (!seen.has(f.id)) models.push(f);
+		}
+		models.sort((a, b) => Number(b.isDefault) - Number(a.isDefault));
+		sendJson(res, 200, {
+			models,
+			state: status.state,
+			source: "nightshift",
+			baseUrl: status.baseUrl,
+		});
+	} catch (err: any) {
+		sendJson(res, 200, {
+			models: fallback,
+			state: "offline",
+			source: "fallback",
+			error: err?.message || "Meterless model discovery failed",
+		});
+	}
 }
 
 function handleConversations(req: http.IncomingMessage, res: http.ServerResponse) {
@@ -885,6 +1075,12 @@ function handleConversations(req: http.IncomingMessage, res: http.ServerResponse
 		req.on("end", () => {
 			try {
 				const conv = JSON.parse(body);
+				if (conv?.mode !== "live") {
+					sendJson(res, 400, {
+						error: "Demo conversations are local-only and are not stored on the server.",
+					});
+					return;
+				}
 				upsertConversation(conv);
 				sendJson(res, 200, { success: true });
 			} catch {
@@ -899,12 +1095,12 @@ function handleConversations(req: http.IncomingMessage, res: http.ServerResponse
 }
 
 function handleSingleConversation(req: http.IncomingMessage, res: http.ServerResponse, id: string) {
+	const conv = getConversationById(id);
+	if (!conv || conv.mode !== "live") {
+		sendJson(res, 404, { error: "Live conversation not found" });
+		return;
+	}
 	if (req.method === "GET") {
-		const conv = getConversationById(id);
-		if (!conv) {
-			sendJson(res, 404, { error: "Conversation not found" });
-			return;
-		}
 		sendJson(res, 200, conv);
 		return;
 	}
@@ -1047,6 +1243,14 @@ function handleFeedback(req: http.IncomingMessage, res: http.ServerResponse) {
 				return;
 			}
 
+			const feedbackConversation = getConversationById(conversationId);
+			if (!feedbackConversation || feedbackConversation.mode !== "live") {
+				sendJson(res, 400, {
+					error: "Feedback is only recorded for live conversations. Demo feedback stays local.",
+				});
+				return;
+			}
+
 			// 1. Insert into message_feedback table
 			const insertStmt = db.prepare(`
 				INSERT INTO message_feedback (conversation_id, message_id, seat_id, rating, round, comment, created_at)
@@ -1120,7 +1324,11 @@ function handleAuditVerify(req: http.IncomingMessage, res: http.ServerResponse) 
 
 			if (!Array.isArray(events) && conversationId) {
 				const conv = getConversationById(conversationId);
-				if (conv && Array.isArray(conv.auditEvents)) {
+				if (!conv || conv.mode !== "live") {
+					sendJson(res, 400, { error: "Audit chains are only served for live conversations." });
+					return;
+				}
+				if (Array.isArray(conv.auditEvents)) {
 					events = conv.auditEvents;
 				}
 			}
@@ -1147,8 +1355,8 @@ function handleAuditCertificate(req: http.IncomingMessage, res: http.ServerRespo
 
 	try {
 		const conv = getConversationById(id);
-		if (!conv) {
-			sendJson(res, 404, { error: "Conversation not found" });
+		if (!conv || conv.mode !== "live") {
+			sendJson(res, 404, { error: "Live conversation not found" });
 			return;
 		}
 
@@ -1326,6 +1534,8 @@ const server = http.createServer((req, res) => {
 		handleScenarios(req, res);
 	} else if (pathname === "/api/models") {
 		handleModels(req, res);
+	} else if (pathname === "/api/meterless/detect") {
+		handleMeterlessDetect(req, res);
 	} else if (pathname === "/api/conversations") {
 		handleConversations(req, res);
 	} else if (pathname.startsWith("/api/conversations/")) {
@@ -1333,7 +1543,10 @@ const server = http.createServer((req, res) => {
 		handleSingleConversation(req, res, id);
 	} else if (pathname === "/api/run") {
 		handleRun(req, res);
-	} else if (pathname.startsWith("/api/run/") && pathname.endsWith("/sse")) {
+	} else if (
+		pathname.startsWith("/api/run/") &&
+		(pathname.endsWith("/sse") || pathname.endsWith("/events"))
+	) {
 		const parts = pathname.split("/");
 		const runId = parts[3];
 		handleSSE(req, res, runId);

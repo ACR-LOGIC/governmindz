@@ -13,8 +13,13 @@ import {
 	VolumeX,
 	Play,
 	Sparkles,
+	ExternalLink,
+	Copy,
+	Check,
+	RefreshCw,
 } from "lucide-react";
 import type { Conversation, HealthStatus } from "../../types";
+import { detectMeterless } from "../../services/api";
 import { ttsService, type AgentVoiceRegistryEntry } from "../../services/ttsService";
 import { AgentAvatar } from "../common/AgentAvatar";
 
@@ -26,9 +31,136 @@ interface SettingsModalProps {
 	onClearAll: () => void;
 	onReplayTour?: () => void;
 	onOpenCredentials?: () => void;
+	onRefreshHealth?: () => void;
 }
 
 type TabType = "general" | "audio" | "models" | "data" | "about";
+
+const CONFIG_PROMPTS = [
+	{
+		id: "zetaris",
+		title: "1. Configure Zetaris Lightning",
+		description: "Connect a read-only Zetaris endpoint and verify the exact governance query.",
+		prompt: `You are configuring Zetaris Lightning for the GovernMindz local app.
+
+Official references:
+- https://www.zetaris.com/
+- https://kbase.zetaris.com/knowledge/zetaris-overview
+- https://kbase.zetaris.com/knowledge/data-security-in-zetaris
+- https://cloud.enterprise.zetaris.com/register
+
+Goal: a working, read-only Zetaris connection for GovernMindz live mode.
+
+1. Determine whether Zetaris Lightning is already reachable at ZETARIS_REST_URL (expected http://localhost:8888/api/v1.0). Do not guess credentials.
+2. Help me collect ZETARIS_REST_URL, ZETARIS_ORG_ID, ZETARIS_API_KEY, ZETARIS_API_AUTH, ZETARIS_PORT, and ZETARIS_DATABASE.
+3. Create or identify a read-only account/role. It must be able to SELECT and SHOW metadata only. Do not use an admin account.
+4. Verify with read-only SQL: SHOW LIGHTNING DATABASES, then SHOW TABLES FROM SEC_DATA.
+5. Write the final values into .env.local (never commit it) and run:
+   curl -s http://127.0.0.1:8787/api/health
+   Confirm zetaris.ok=true and missingCapabilities does not list ZETARIS_*.
+6. If any step fails, show the exact HTTP status and error, check host/port/TLS, org id, API key, and whether the Zetaris service is running. Never fabricate data or claim a connection succeeded without a successful query.`,
+	},
+	{
+		id: "meterless",
+		title: "2. Configure Meterless Nightshift",
+		description: "Start the local AI hotspot, add cloud provider keys in Nightshift, and connect GovernMindz.",
+		prompt: `You are configuring Meterless Nightshift as the AI provider for GovernMindz.
+
+Official references:
+- https://meterless.ai/
+- https://meterless.ai/how-it-works.html
+- https://meterless.ai/cli.html
+- https://meterless.ai/nightshift-getting-started.md
+
+Important: Nightshift exposes one OpenAI-compatible endpoint (normally http://127.0.0.1:8088/v1) and a local bearer token. Cloud provider keys (OpenAI, Anthropic, Google, NVIDIA, OpenRouter) are entered by the human inside the Nightshift app. Client apps must not receive those provider keys. GovernMindz stores only the Nightshift URL and Nightshift token.
+
+1. Install and start Nightshift for my OS. Wait until the endpoint answers.
+2. Locate the runtime token without printing it:
+   - Windows: %LOCALAPPDATA%\\ai.meterless.runtime\\proxy-token
+   - DGX: /var/lib/meterless/ (token file 0600)
+   - macOS M5+: ~/Library/Application Support/ai.meterless.runtime/
+3. In the Nightshift cockpit, add any cloud provider keys I want. Confirm the models I want are enabled.
+4. Set in .env.local:
+   METERLESS_BASE_URL=http://127.0.0.1:8088/v1
+   METERLESS_API_KEY=<Nightshift runtime token>
+   METERLESS_MODEL=meterless/auto
+   METERLESS_SEAT_MODEL=meterless/fast
+5. Run:
+   curl -s http://127.0.0.1:8787/api/models
+   curl -s http://127.0.0.1:8787/api/health
+   Confirm meterless.state=online, configured=true, and the cloud models I enabled appear in /api/models.
+6. Send one real completion through GovernMindz or POST /v1/chat/completions. If unauthorized, refresh the token. Never print the token and never claim success without an online status and a real completion.`,
+	},
+	{
+		id: "governmindz",
+		title: "3. Verify GovernMindz end-to-end",
+		description: "Run the full local setup and prove live mode uses real Zetaris and Nightshift data.",
+		prompt: `You are the setup operator for the GovernMindz repository on this machine.
+
+Goal: a working live-mode install with no demo or synthetic fallback.
+
+1. Copy .env.example to .env.local if missing. Generate AUDIT_TRAIL_SECRET with 32 random bytes in hex.
+2. Confirm Zetaris and Meterless values are present and valid using the two provider prompts.
+3. Run:
+   npm install
+   npm run typecheck
+   npm test
+   npm run build
+   npm start
+4. Open http://127.0.0.1:8787. Switch to Live Mode only when /api/health reports:
+   meterless.state=online
+   zetaris.ok=true
+   missingCapabilities=[]
+5. Run one live query and verify:
+   - the Zetaris result is real (isSynthetic=false, evidenceSource=live_zetaris),
+   - the Supervisor message contains a /evidence/<conversationId> link,
+   - the evidence page shows the exact SQL and rows and its SHA-256 matches the canonical JSON,
+   - the audit chain verifies.
+6. If any credential is missing or wrong, stop and report the exact failing check. Never substitute demo data in live mode, never fabricate a successful connection, and never report success without a real Zetaris query and a real Meterless completion.`,
+	},
+];
+
+const PromptCard: React.FC<{ title: string; description: string; prompt: string; id: string }> = ({
+	title,
+	description,
+	prompt,
+	id,
+}) => {
+	const [copied, setCopied] = useState(false);
+
+	const handleCopy = async () => {
+		try {
+			await navigator.clipboard.writeText(prompt);
+			setCopied(true);
+			setTimeout(() => setCopied(false), 2000);
+		} catch {
+			// clipboard permission denied: leave button unchanged
+		}
+	};
+
+	return (
+		<div className="p-4 rounded-xl bg-[#0a0e1a] border border-[#1e2842] space-y-2">
+			<div className="flex items-start justify-between gap-3">
+				<div>
+					<div className="font-semibold text-slate-100 text-xs">{title}</div>
+					<div className="text-[11px] text-slate-400 mt-0.5">{description}</div>
+				</div>
+				<button
+					type="button"
+					onClick={handleCopy}
+					className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 font-semibold text-[11px] border border-teal-500/40 transition-colors"
+					aria-label={`Copy prompt ${id}`}
+				>
+					{copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+					{copied ? "Copied" : "Copy prompt"}
+				</button>
+			</div>
+			<pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-lg bg-[#070b14] border border-[#1e2842] p-2.5 text-[10.5px] leading-relaxed text-slate-300 font-mono">
+				{prompt}
+			</pre>
+		</div>
+	);
+};
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
 	isOpen,
@@ -38,10 +170,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 	onClearAll,
 	onReplayTour,
 	onOpenCredentials,
+	onRefreshHealth,
 }) => {
 	const [activeTab, setActiveTab] = useState<TabType>("general");
 	const [defaultMode, setDefaultMode] = useState<"live" | "sample">("sample");
 	const [autoScroll, setAutoScroll] = useState(true);
+	const [detecting, setDetecting] = useState(false);
+	const [detectMessage, setDetectMessage] = useState<string | null>(null);
 
 	// TTS state
 	const [ttsEnabled, setTtsEnabled] = useState(ttsService.isMasterEnabled());
@@ -96,6 +231,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 		a.download = `governmindz-debate-${activeConversation.id}.json`;
 		a.click();
 		URL.revokeObjectURL(url);
+	};
+
+	const handleDetectMeterless = async () => {
+		setDetecting(true);
+		setDetectMessage(null);
+		try {
+			const { ok, result } = await detectMeterless();
+			if (result.state === "online") {
+				setDetectMessage(
+					`Nightshift found at ${result.baseUrl} · ${result.models ?? 0} models${result.persisted ? " · saved" : ""}`,
+				);
+				window.dispatchEvent(new Event("governmindz:models-refresh"));
+				onRefreshHealth?.();
+			} else if (result.state === "unauthorized") {
+				setDetectMessage(
+					`Nightshift found at ${result.baseUrl}, but the token was rejected. Open Configure Credentials and paste the current token.`,
+				);
+			} else if (!ok) {
+				setDetectMessage(result.error || result.reason || "Nightshift auto-detection failed.");
+			} else {
+				setDetectMessage("Nightshift responded but no Meterless lane is available.");
+			}
+		} catch (err: any) {
+			setDetectMessage(err?.message || "Nightshift auto-detection failed.");
+		} finally {
+			setDetecting(false);
+		}
 	};
 
 	return (
@@ -370,28 +532,53 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
 						{activeTab === "models" && (
 							<div className="space-y-4">
-								<div className="flex items-center justify-between">
+								<div className="flex items-center justify-between gap-2">
 									<h4 className="font-bold text-sm text-slate-100">Inference & Data Providers</h4>
-									{onOpenCredentials && (
+									<div className="flex items-center gap-2">
 										<button
 											type="button"
-											onClick={() => {
-												onClose();
-												onOpenCredentials();
-											}}
-											className="px-3 py-1.5 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 font-semibold text-xs border border-teal-500/40 transition-colors"
+											onClick={handleDetectMeterless}
+											disabled={detecting}
+											className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#18203a] hover:bg-[#252e4d] text-slate-200 font-semibold text-xs border border-[#2c385c] transition-colors disabled:opacity-60"
+											title="Scan localhost for a running Nightshift endpoint"
 										>
-											Configure Credentials
+											<RefreshCw className={`w-3 h-3 ${detecting ? "animate-spin" : ""}`} />
+											{detecting ? "Detecting…" : "Auto-detect Nightshift"}
 										</button>
-									)}
+										{onOpenCredentials && (
+											<button
+												type="button"
+												onClick={() => {
+													onClose();
+													onOpenCredentials();
+												}}
+												className="px-3 py-1.5 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 font-semibold text-xs border border-teal-500/40 transition-colors"
+											>
+												Configure Credentials
+											</button>
+										)}
+									</div>
 								</div>
+								{detectMessage && (
+									<div className="text-[11px] text-slate-300 rounded-lg border border-[#2c385c] bg-[#12182b] px-3 py-2">
+										{detectMessage}
+									</div>
+								)}
 
 								{/* Meterless status */}
 								<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842] space-y-2">
 									<div className="flex items-center justify-between">
 										<div className="flex items-center gap-2 font-semibold text-slate-200">
 											<Cpu className="w-4 h-4 text-sky-400" />
-											<span>Meterless Model Runtime</span>
+											<a
+												href="https://meterless.ai/"
+												target="_blank"
+												rel="noreferrer"
+												className="inline-flex items-center gap-1 hover:text-sky-300 underline decoration-sky-500/40 underline-offset-2"
+											>
+												Meterless Model Runtime
+												<ExternalLink className="w-3 h-3" />
+											</a>
 										</div>
 										<span
 											className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase ${
@@ -404,8 +591,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 										</span>
 									</div>
 									<p className="text-[11px] text-slate-400">
-										OpenAI-compatible inference runtime using NVIDIA Nemotron
-										(`nvidia/nemotron-3.5-lightning-30b-a3b`).
+										OpenAI-compatible inference runtime. Nightshift is the single local gateway:
+										cloud provider keys are entered inside Nightshift, and every model it exposes
+										appears automatically in GovernMindz's model picker.
+									</p>
+									<p className="text-[10.5px] text-amber-300/90 leading-relaxed">
+										Do not paste OpenAI, Anthropic, Google, or NVIDIA provider keys into GovernMindz.
+										Add them in the Nightshift cockpit; GovernMindz only needs the Nightshift base URL
+										and runtime token.
 									</p>
 								</div>
 
@@ -414,7 +607,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 									<div className="flex items-center justify-between">
 										<div className="flex items-center gap-2 font-semibold text-slate-200">
 											<Database className="w-4 h-4 text-emerald-400" />
-											<span>Zetaris Lightning Federated Data</span>
+											<a
+												href="https://www.zetaris.com/"
+												target="_blank"
+												rel="noreferrer"
+												className="inline-flex items-center gap-1 hover:text-emerald-300 underline decoration-emerald-500/40 underline-offset-2"
+											>
+												Zetaris Lightning Federated Data
+												<ExternalLink className="w-3 h-3" />
+											</a>
 										</div>
 										<span
 											className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase ${
@@ -430,6 +631,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 										Semantic federated database integration guarded by read-only SQL assertions and
 										policy gating.
 									</p>
+								</div>
+
+								<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842] space-y-3">
+									<div>
+										<div className="font-semibold text-slate-100 text-xs">
+											Setup prompts for your local AI agent
+										</div>
+										<p className="text-[11px] text-slate-400 mt-1">
+											Copy any prompt below into Claude Code, Cursor, Codex, or another local agent.
+											Each prompt verifies real connectivity and refuses to invent credentials or data.
+										</p>
+									</div>
+									{CONFIG_PROMPTS.map((item) => (
+										<PromptCard
+											key={item.id}
+											id={item.id}
+											title={item.title}
+											description={item.description}
+											prompt={item.prompt}
+										/>
+									))}
 								</div>
 							</div>
 						)}

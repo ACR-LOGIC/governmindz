@@ -51,9 +51,60 @@ export function resolveMeterlessStateDir(explicit?: string): string {
 	}
 }
 
+/**
+ * Directories where a running Nightshift runtime may keep its `proxy-token`.
+ * Meterless/Nightshift has used several locations across editions, so the
+ * token store checks all known candidates before giving up.
+ */
+export function resolveMeterlessRuntimeDirs(explicit?: string): string[] {
+	const candidates: string[] = [];
+	const configured = firstNonEmpty(explicit, env("METERLESS_STATE_DIR"));
+	if (configured) candidates.push(resolve(configured));
+
+	const home = firstNonEmpty(env("USERPROFILE"), env("HOME"), homedir());
+	switch (process.platform) {
+		case "win32": {
+			const localAppData = firstNonEmpty(
+				env("LOCALAPPDATA"),
+				join(home, "AppData", "Local"),
+			);
+			candidates.push(
+				join(localAppData, "ai.meterless.runtime"),
+				join(localAppData, "Meterless"),
+			);
+			break;
+		}
+		case "darwin":
+			candidates.push(
+				join(home, "Library", "Application Support", "ai.meterless.runtime"),
+				join(home, "Library", "Application Support", "Meterless"),
+			);
+			break;
+		default:
+			candidates.push(
+				"/var/lib/meterless",
+				join(
+					firstNonEmpty(env("XDG_STATE_HOME"), join(home, ".local", "state")),
+					"meterless",
+				),
+				join(home, ".local", "state", "meterless"),
+			);
+			break;
+	}
+
+	const seen = new Set<string>();
+	return candidates.filter((dir) => {
+		const key = process.platform === "win32" ? dir.toLowerCase() : dir;
+		if (seen.has(key)) return false;
+		seen.add(key);
+		return true;
+	});
+}
+
 export class MeterlessTokenStore {
 	readonly stateDir: string;
 	readonly storagePath: string;
+	private readonly runtimeDirs: string[];
 	private readonly storage: MeterlessKeyValueStore | undefined;
 
 	constructor(options: {
@@ -62,6 +113,7 @@ export class MeterlessTokenStore {
 	} = {}) {
 		this.stateDir = resolveMeterlessStateDir(options.stateDir);
 		this.storagePath = join(this.stateDir, "meterless-provider.json");
+		this.runtimeDirs = resolveMeterlessRuntimeDirs(options.stateDir);
 		this.storage = options.storage ?? browserStorage();
 	}
 
@@ -96,13 +148,17 @@ export class MeterlessTokenStore {
 	}
 
 	readRuntimeToken(): string {
-		const path = join(this.stateDir, "proxy-token");
-		try {
-			if (!existsSync(path)) return "";
-			return readFileSync(path, "utf8").replace(/^\uFEFF/, "").trim();
-		} catch {
-			return "";
+		for (const dir of this.runtimeDirs) {
+			const path = join(dir, "proxy-token");
+			try {
+				if (!existsSync(path)) continue;
+				const token = readFileSync(path, "utf8").replace(/^\uFEFF/, "").trim();
+				if (token) return token;
+			} catch {
+				// Try the next candidate directory.
+			}
 		}
+		return "";
 	}
 
 	private readRecord(): MeterlessStoreRecord {
