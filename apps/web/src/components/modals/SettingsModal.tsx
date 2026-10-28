@@ -16,10 +16,19 @@ import {
 	Copy,
 	Check,
 	RefreshCw,
+	Bell,
+	Webhook,
+	Palette,
+	Plus,
+	Send,
 } from "lucide-react";
 import type { Conversation, HealthStatus } from "../../types";
 import { detectMeterless } from "../../services/api";
 import { ttsService, type AgentVoiceRegistryEntry } from "../../services/ttsService";
+import { notificationService } from "../../services/notificationService";
+import type { NotificationPrefs } from "../../services/notificationService";
+import { webhookService } from "../../services/webhookService";
+import type { WebhookConfig, WebhookDelivery, WebhookEvent } from "../../types";
 import { AgentAvatar } from "../common/AgentAvatar";
 
 interface SettingsModalProps {
@@ -33,7 +42,15 @@ interface SettingsModalProps {
 	onRefreshHealth?: () => void;
 }
 
-type TabType = "general" | "audio" | "models" | "data" | "about";
+type TabType =
+	| "general"
+	| "notifications"
+	| "webhooks"
+	| "audio"
+	| "models"
+	| "data"
+	| "appearance"
+	| "about";
 
 const CONFIG_PROMPTS = [
 	{
@@ -177,7 +194,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 	const [detecting, setDetecting] = useState(false);
 	const [detectMessage, setDetectMessage] = useState<string | null>(null);
 
-	// TTS state
+	const [webhooks, setWebhooks] = useState<WebhookConfig[]>([]);
+	const [deliveries, setDeliveries] = useState<WebhookDelivery[]>([]);
+	const [selectedWebhookId, setSelectedWebhookId] = useState<string | null>(null);
+	const [whName, setWhName] = useState("");
+	const [whUrl, setWhUrl] = useState("");
+	const [whSecret, setWhSecret] = useState("");
+	const [whEvents, setWhEvents] = useState<WebhookEvent[]>(["run.completed"]);
+
 	const [ttsEnabled, setTtsEnabled] = useState(ttsService.isMasterEnabled());
 	const [ttsMuted, setTtsMuted] = useState(ttsService.isMuted());
 	const [voiceRegistry, setVoiceRegistry] = useState<AgentVoiceRegistryEntry[]>([]);
@@ -199,7 +223,76 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 		return unsub;
 	}, [isOpen]);
 
-	if (!isOpen) return null;
+	useEffect(() => {
+		if (!isOpen) return;
+		const unsubWebhooks = webhookService.subscribe((list) => {
+			setWebhooks(list);
+			setSelectedWebhookId((prev) => (prev && list.some((w) => w.id === prev) ? prev : (list[0]?.id ?? null)));
+		});
+		const unsubDeliveries = webhookService.subscribeDeliveries((list) => {
+			setDeliveries(list);
+		});
+		return () => {
+			unsubWebhooks();
+			unsubDeliveries();
+		};
+	}, [isOpen]);
+
+	const handleSaveWebhook = () => {
+		if (!whUrl.trim()) return;
+		const existing = selectedWebhookId ? webhookService.get(selectedWebhookId) : undefined;
+		if (existing) {
+			webhookService.update(existing.id, {
+				name: whName.trim() || existing.name,
+				url: whUrl.trim(),
+				secret: whSecret || existing.secret,
+				events: whEvents,
+				active: existing.active,
+			});
+		} else {
+			webhookService.add({
+				name: whName.trim() || "GovernMindz Webhook",
+				url: whUrl.trim(),
+				secret: whSecret,
+				events: whEvents,
+				active: true,
+			});
+		}
+		setWhName("");
+		setWhUrl("");
+		setWhSecret("");
+		setWhEvents(["run.completed"]);
+		setSelectedWebhookId(null);
+	};
+
+	const handleDeleteWebhook = (id: string) => {
+		webhookService.remove(id);
+		if (selectedWebhookId === id) setSelectedWebhookId(null);
+	};
+
+	const handleSendTestWebhook = (id: string) => {
+		const wh = webhookService.get(id);
+		if (!wh) return;
+		const event: WebhookEvent = wh.events[0] || "run.completed";
+		const delivery = webhookService.deliverNow(id, event);
+		if (delivery.status === "failed") {
+			notificationService.add({
+				type: "webhook_delivery",
+				title: "Webhook delivery failed",
+				body: `${wh.name} failed for ${event}`,
+				source: id,
+			});
+		}
+	};
+
+	const handleToggleMasterNotifications = (val: boolean) => {
+		notificationService.updatePrefs({ enabled: val });
+	};
+
+	const handleToggleNotificationPref = (key: keyof NotificationPrefs, val: boolean) => {
+		const prefs = notificationService.getPrefs();
+		notificationService.updatePrefs({ ...prefs, [key]: val });
+	};
 
 	const handleToggleMasterTts = (val: boolean) => {
 		setTtsEnabled(val);
@@ -260,9 +353,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 		}
 	};
 
+	if (!isOpen) return null;
+
 	return (
-		<div className="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
-			<div className="w-full max-w-2xl bg-[#0c101e] border border-[#1e2842] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+		<div className="fixed inset-0 z-50 overflow-y-auto bg-black/75 backdrop-blur-[24px] flex items-center justify-center p-4 animate-fadeIn">
+			<div className="w-full max-w-2xl bg-[#0c101e]/90 border border-[#1e2842]/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] glass-panel">
 				{/* Header */}
 				<div className="px-6 py-4 border-b border-[#1e2842] flex items-center justify-between bg-[#0f1424]">
 					<div className="flex items-center gap-2.5">
@@ -291,9 +386,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 					<div className="w-full sm:w-48 bg-[#0a0e1a] border-r border-[#1e2842] p-3 space-y-1 shrink-0">
 						{[
 							{ id: "general", label: "General", icon: Sliders },
+							{ id: "notifications", label: "Notifications", icon: Bell },
+							{ id: "webhooks", label: "Webhooks", icon: Webhook },
 							{ id: "audio", label: "Voice & Audio", icon: Volume2 },
 							{ id: "models", label: "Models & Providers", icon: Cpu },
 							{ id: "data", label: "Privacy & Data", icon: ShieldCheck },
+							{ id: "appearance", label: "Appearance", icon: Palette },
 							{ id: "about", label: "About GovernMindz", icon: Info },
 						].map((tab) => {
 							const Icon = tab.icon;
@@ -321,7 +419,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 						{activeTab === "general" && (
 							<div className="space-y-4">
 								<h4 className="font-bold text-sm text-slate-100 mb-2">General Preferences</h4>
-
 								<div className="flex items-center justify-between p-3 rounded-xl bg-[#12182b] border border-[#1e2842]">
 									<div>
 										<div className="font-semibold text-slate-200">Default Execution Mode</div>
@@ -338,7 +435,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 										<option value="live">Live (Zetaris + Meterless)</option>
 									</select>
 								</div>
-
 								<div className="flex items-center justify-between p-3 rounded-xl bg-[#12182b] border border-[#1e2842]">
 									<div>
 										<div className="font-semibold text-slate-200">Interactive Product Tour</div>
@@ -359,7 +455,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 										</button>
 									)}
 								</div>
-
 								<div className="flex items-center justify-between p-3 rounded-xl bg-[#12182b] border border-[#1e2842]">
 									<div>
 										<div className="font-semibold text-slate-200">Automatic Smooth Scroll</div>
@@ -377,133 +472,337 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 							</div>
 						)}
 
-						{/* Voice & Audio Section */}
-						{activeTab === "audio" && (
+						{activeTab === "notifications" && (
 							<div className="space-y-4">
-								<div className="flex items-center justify-between">
-									<h4 className="font-bold text-sm text-slate-100">Voice & Audio Settings</h4>
-									<span className="text-[11px] font-mono px-2 py-0.5 rounded bg-teal-950/60 border border-teal-800 text-teal-300">
-										Multi-Agent TTS Registry
+								<h4 className="font-bold text-sm text-slate-100">Notifications &amp; Alerts</h4>
+								<div className="p-3 rounded-xl bg-[#12182b] border border-[#1e2842] space-y-3">
+									<label className="flex items-center justify-between gap-3 p-3 rounded-xl bg-[#12182b] border border-[#1e2842]">
+										<div>
+											<div className="font-semibold text-slate-200">Master notifications</div>
+											<div className="text-[11px] text-slate-400">Enable or disable all GovernMindz alerts.</div>
+										</div>
+										<input
+											type="checkbox"
+											checked={notificationService.getPrefs().enabled}
+											onChange={(e) => handleToggleMasterNotifications(e.target.checked)}
+											className="w-4 h-4 accent-teal-500 rounded"
+										/>
+									</label>
+									<label className="flex items-center justify-between gap-3 p-3 rounded-xl bg-[#12182b] border border-[#1e2842]">
+										<div>
+											<div className="font-semibold text-slate-200">Run completed</div>
+											<div className="text-[11px] text-slate-400">Notify when a deliberation run finishes and the audit gate verifies.</div>
+										</div>
+										<input
+											type="checkbox"
+											checked={notificationService.getPrefs().runComplete}
+											onChange={(e) => handleToggleNotificationPref("runComplete", e.target.checked)}
+											className="w-4 h-4 accent-teal-500 rounded"
+										/>
+									</label>
+									<label className="flex items-center justify-between gap-3 p-3 rounded-xl bg-[#12182b] border border-[#1e2842]">
+										<div>
+											<div className="font-semibold text-slate-200">Run failed</div>
+											<div className="text-[11px] text-slate-400">Notify when a deliberation run errors.</div>
+										</div>
+										<input
+											type="checkbox"
+											checked={notificationService.getPrefs().runError}
+											onChange={(e) => handleToggleNotificationPref("runError", e.target.checked)}
+											className="w-4 h-4 accent-rose-500 rounded"
+										/>
+									</label>
+									<label className="flex items-center justify-between gap-3 p-3 rounded-xl bg-[#12182b] border border-[#1e2842]">
+										<div>
+											<div className="font-semibold text-slate-200">Webhook delivery</div>
+											<div className="text-[11px] text-slate-400">Notify when a webhook delivery fails.</div>
+										</div>
+										<input
+											type="checkbox"
+											checked={notificationService.getPrefs().webhookDelivery}
+											onChange={(e) => handleToggleNotificationPref("webhookDelivery", e.target.checked)}
+											className="w-4 h-4 accent-purple-500 rounded"
+										/>
+									</label>
+									<label className="flex items-center justify-between gap-3 p-3 rounded-xl bg-[#12182b] border border-[#1e2842]">
+										<div>
+											<div className="font-semibold text-slate-200">System events</div>
+											<div className="text-[11px] text-slate-400">Notify about app-level system events.</div>
+										</div>
+										<input
+											type="checkbox"
+											checked={notificationService.getPrefs().system}
+											onChange={(e) => handleToggleNotificationPref("system", e.target.checked)}
+											className="w-4 h-4 accent-sky-500 rounded"
+										/>
+									</label>
+								</div>
+							</div>
+						)}
+
+						{activeTab === "webhooks" && (
+							<div className="space-y-4">
+								<div className="flex items-center justify-between gap-2">
+									<h4 className="font-bold text-sm text-slate-100">Webhooks &amp; Integrations</h4>
+									<span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950/60 border border-amber-800 text-amber-300">
+										{webhookService.getStats().totalDeliveries} deliveries
 									</span>
 								</div>
 
-								{/* Master Audio Controls */}
-								<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-									<div className="p-3.5 rounded-xl bg-[#12182b] border border-[#1e2842] flex items-center justify-between">
-										<div>
-											<div className="font-semibold text-slate-200 flex items-center gap-1.5">
-												<Volume2 className="w-4 h-4 text-amber-400" />
-												<span>Voice Playback</span>
-											</div>
-											<div className="text-[11px] text-slate-400">
-												Enable text-to-speech for agents
-											</div>
-										</div>
+								<div className="p-3 rounded-xl bg-[#12182b] border border-[#1e2842] space-y-3">
+									<div className="font-semibold text-slate-100 text-xs">Create or update a webhook</div>
+									<div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
 										<input
-											type="checkbox"
-											checked={ttsEnabled}
-											onChange={(e) => handleToggleMasterTts(e.target.checked)}
-											className="w-4 h-4 accent-teal-500 rounded"
+											value={whName}
+											onChange={(e) => setWhName(e.target.value)}
+											placeholder="Webhook name"
+											className="bg-[#0a0e1a] border border-[#1e2842] rounded-lg px-2.5 py-1.5 text-xs text-slate-200 placeholder:text-slate-500"
+										/>
+										<input
+											value={whUrl}
+											onChange={(e) => setWhUrl(e.target.value)}
+											placeholder="https://example.com/hook"
+											className="bg-[#0a0e1a] border border-[#1e2842] rounded-lg px-2.5 py-1.5 text-xs text-slate-200 placeholder:text-slate-500"
+										/>
+										<input
+											value={whSecret}
+											onChange={(e) => setWhSecret(e.target.value)}
+											placeholder="Signing secret (optional)"
+											className="bg-[#0a0e1a] border border-[#1e2842] rounded-lg px-2.5 py-1.5 text-xs text-slate-200 placeholder:text-slate-500 sm:col-span-2"
 										/>
 									</div>
-
-									<div className="p-3.5 rounded-xl bg-[#12182b] border border-[#1e2842] flex items-center justify-between">
-										<div>
-											<div className="font-semibold text-slate-200 flex items-center gap-1.5">
-												<VolumeX className="w-4 h-4 text-rose-400" />
-												<span>Mute All Audio</span>
-											</div>
-											<div className="text-[11px] text-slate-400">
-												Silences ongoing speech
-											</div>
-										</div>
-										<input
-											type="checkbox"
-											checked={ttsMuted}
-											onChange={(e) => handleToggleMute(e.target.checked)}
-											className="w-4 h-4 accent-rose-500 rounded"
-										/>
+									<div className="flex flex-wrap gap-2">
+{( 
+											[
+												"run.started",
+												"run.completed",
+												"run.failed",
+												"message.created",
+												"audit.verified",
+												"webhook.delivery_failed",
+											] as WebhookEvent[]
+).map((ev) => ( 
+ 
+											<button
+												key={ev}
+												type="button"
+												onClick={() => setWhEvents((prev) => (prev.includes(ev) ? prev.filter((p) => p !== ev) : [...prev, ev]))}
+												className={`px-2.5 py-1 rounded-lg text-[10px] font-mono border transition-colors ${
+													whEvents.includes(ev)
+														? "bg-amber-500/10 border-amber-500/50 text-amber-300"
+														: "bg-[#0a0e1a] border-[#1e2842] text-slate-400"
+												}`}
+											>
+												{ev}
+											</button>
+										))}
 									</div>
+									<button
+										type="button"
+										onClick={handleSaveWebhook}
+										className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-semibold text-xs border border-amber-500/40 transition-colors"
+									>
+										<Plus className="w-3.5 h-3.5" />
+										Save webhook
+									</button>
 								</div>
 
-								{/* Agent Voice Registry Showcase */}
-								<div className="space-y-3 pt-2">
-									<div className="text-xs font-mono uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-										<Sparkles className="w-3.5 h-3.5 text-amber-400" />
-										<span>Agent Coworker Voice Profiles & Previews:</span>
-									</div>
-
-									<div className="space-y-2.5">
-										{voiceRegistry.map((agent) => {
-											const isSpeaking = speakingSeat === agent.seatId;
+								{webhooks.length > 0 && (
+									<div className="space-y-2">
+										{webhooks.map((w) => {
+											const stats = webhookService.getStats(w.id);
 											return (
-												<div
-													key={agent.seatId}
-													className={`p-3 rounded-xl bg-[#12182b] border transition-all flex items-center justify-between gap-3 ${
-														isSpeaking
-															? "border-amber-400/80 ring-1 ring-amber-400/40 bg-[#18203a]"
-															: "border-[#1e2842] hover:border-[#2c385c]"
-													}`}
-												>
-													<div className="flex items-center gap-3 min-w-0">
-														<AgentAvatar
-															seatId={agent.seatId}
-															avatarId={agent.avatarId}
-															humanName={agent.displayName}
-															size="sm"
-															showStatusPip={true}
-															status={isSpeaking ? "analyzing" : "completed"}
-														/>
-														<div className="min-w-0 truncate">
-															<div className="font-bold text-slate-200 text-xs flex items-center gap-1.5">
-																<span>{agent.displayName}</span>
-																<span className="text-[11px] text-slate-400 font-normal">
-																	· {agent.role}
-																</span>
-															</div>
-															<div className="text-[10.5px] text-slate-400 truncate font-sans">
-																{agent.personality}
-															</div>
-															<div className="flex flex-wrap items-center gap-2.5 mt-2 text-[10px] text-slate-300">
-																<label className="flex items-center gap-1.5 bg-[#18203a] px-2 py-0.5 rounded border border-[#263254]">
-																	<span className="text-slate-400 font-mono text-[9px]">Pitch:</span>
-																	<input
-																		type="range"
-																		min="0.5"
-																		max="1.5"
-																		step="0.05"
-																		value={agent.pitch}
-																		onChange={(e) => {
-																			ttsService.updateVoiceRegistryEntry(agent.seatId, { pitch: parseFloat(e.target.value) });
-																			setVoiceRegistry(ttsService.getVoiceRegistry());
-																		}}
-																		className="w-14 h-1 accent-teal-400 bg-slate-700 rounded cursor-pointer"
-																	/>
-																	<span className="font-mono text-teal-300 w-7 text-right text-[9px]">{agent.pitch.toFixed(2)}x</span>
-																</label>
-																<label className="flex items-center gap-1.5 bg-[#18203a] px-2 py-0.5 rounded border border-[#263254]">
-																	<span className="text-slate-400 font-mono text-[9px]">Speed:</span>
-																	<input
-																		type="range"
-																		min="0.75"
-																		max="1.35"
-																		step="0.05"
-																		value={agent.rate}
-																		onChange={(e) => {
-																			ttsService.updateVoiceRegistryEntry(agent.seatId, { rate: parseFloat(e.target.value) });
-																			setVoiceRegistry(ttsService.getVoiceRegistry());
-																		}}
-																		className="w-14 h-1 accent-amber-400 bg-slate-700 rounded cursor-pointer"
-																	/>
-																	<span className="font-mono text-amber-300 w-7 text-right text-[9px]">{agent.rate.toFixed(2)}x</span>
-																</label>
-																<span className="bg-[#18203a] px-1.5 py-0.5 rounded border border-[#263254] font-mono text-[9px] text-slate-400">
-																	{agent.lang}
-																</span>
-															</div>
+												<div key={w.id} className="p-3 rounded-xl bg-[#12182b] border border-[#1e2842] space-y-2">
+													<div className="flex items-center justify-between gap-2">
+														<div className="min-w-0">
+															<div className="font-semibold text-slate-100 text-xs truncate">{w.name}</div>
+															<div className="text-[10.5px] text-slate-400 truncate">{w.url}</div>
+														</div>
+														<div className="flex items-center gap-1.5 shrink-0">
+											<button
+												type="button"
+												onClick={() => handleSendTestWebhook(w.id)}
+												className="px-2.5 py-1 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 font-semibold text-[10px] border border-teal-500/40 transition-colors"
+											>
+												<Send className="w-3 h-3" />
+												Test
+											</button>
+											<button
+												type="button"
+												onClick={() => webhookService.update(w.id, { active: !w.active })}
+												className="px-2.5 py-1 rounded-lg bg-[#18203a] hover:bg-[#252e4d] text-slate-200 font-semibold text-[10px] border border-[#2c385c] transition-colors"
+											>
+												{w.active ? "Disable" : "Enable"}
+											</button>
+											<button
+												type="button"
+												onClick={() => handleDeleteWebhook(w.id)}
+												className="px-2.5 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-950 text-rose-200 font-semibold text-[10px] border border-rose-800 transition-colors"
+											>
+												Delete
+											</button>
+										</div>
+									</div>
+								</div>
+								);
+							})}
+						</div>
+					)}
+							</div>
+						)}
+
+					{activeTab === "appearance" && (
+						<div className="space-y-4">
+							<h4 className="font-bold text-sm text-slate-100">Appearance</h4>
+							<div className="p-3 rounded-xl bg-[#12182b] border border-[#1e2842] space-y-3">
+								<div className="font-semibold text-slate-100 text-xs">Accent color</div>
+								<div className="flex flex-wrap gap-2">
+{( 
+										[
+											{ id: "gold", label: "Gold" },
+											{ id: "teal", label: "Teal" },
+											{ id: "emerald", label: "Emerald" },
+											{ id: "sky", label: "Sky" },
+										]
+).map((c) => ( 
+ 
+										<button
+											key={c.id}
+											type="button"
+											onClick={() => {
+												const root = document.documentElement;
+												root.style.setProperty("--accent-gold", "#f4b942");
+												root.style.setProperty("--accent-teal", "#5eead4");
+												root.style.setProperty("--accent-emerald", "#34d399");
+												root.style.setProperty("--accent-sky", "#0ea5e9");
+												root.setAttribute("data-accent", c.id);
+											}}
+											className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold border transition-colors ${
+												document.documentElement.getAttribute("data-accent") === c.id
+													? "bg-amber-500/15 border-amber-500/60 text-amber-300"
+													: "bg-[#0a0e1a] border-[#1e2842] text-slate-400 hover:text-slate-200"
+											}`}
+										>
+											{c.label}
+										</button>
+									))}
+								</div>
+								<p className="text-[11px] text-slate-400">Accent choices apply instantly and persist for this browser.</p>
+							</div>
+						</div>
+					)}
+
+					{/* Voice & Audio Section */}
+					{activeTab === "audio" && (
+						<div className="space-y-4">
+							<div className="flex items-center justify-between">
+								<h4 className="font-bold text-sm text-slate-100">Voice &amp; Audio Settings</h4>
+								<span className="text-[11px] font-mono px-2 py-0.5 rounded bg-teal-950/60 border border-teal-800 text-teal-300">
+									Multi-Agent TTS Registry
+								</span>
+							</div>
+							<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+								<div className="p-3.5 rounded-xl bg-[#12182b] border border-[#1e2842] flex items-center justify-between">
+									<div>
+										<div className="font-semibold text-slate-200 flex items-center gap-1.5">
+											<Volume2 className="w-4 h-4 text-amber-400" />
+											<span>Voice Playback</span>
+										</div>
+										<div className="text-[11px] text-slate-400">Enable text-to-speech for agents</div>
+									</div>
+									<input
+										type="checkbox"
+										checked={ttsEnabled}
+										onChange={(e) => handleToggleMasterTts(e.target.checked)}
+										className="w-4 h-4 accent-teal-500 rounded"
+									/>
+								</div>
+								<div className="p-3.5 rounded-xl bg-[#12182b] border border-[#1e2842] flex items-center justify-between">
+									<div>
+										<div className="font-semibold text-slate-200 flex items-center gap-1.5">
+											<VolumeX className="w-4 h-4 text-rose-400" />
+											<span>Mute All Audio</span>
+										</div>
+										<div className="text-[11px] text-slate-400">Silences ongoing speech</div>
+									</div>
+									<input
+										type="checkbox"
+										checked={ttsMuted}
+										onChange={(e) => handleToggleMute(e.target.checked)}
+										className="w-4 h-4 accent-rose-500 rounded"
+									/>
+								</div>
+							</div>
+							<div className="space-y-3 pt-2">
+								<div className="text-xs font-mono uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+									<Sparkles className="w-3.5 h-3.5 text-amber-400" />
+									<span>Agent Coworker Voice Profiles &amp; Previews:</span>
+								</div>
+								<div className="space-y-2.5">
+									{voiceRegistry.map((agent) => {
+										const isSpeaking = speakingSeat === agent.seatId;
+										return (
+											<div
+												key={agent.seatId}
+												className={`p-3 rounded-xl bg-[#12182b] border transition-all flex items-center justify-between gap-3 ${
+													isSpeaking
+														? "border-amber-400/80 ring-1 ring-amber-400/40 bg-[#18203a]"
+														: "border-[#1e2842] hover:border-[#2c385c]"
+												}`}
+											>
+												<div className="flex items-center gap-3 min-w-0">
+													<AgentAvatar
+														seatId={agent.seatId}
+														avatarId={agent.avatarId}
+														humanName={agent.displayName}
+														size="sm"
+														showStatusPip={true}
+														status={isSpeaking ? "analyzing" : "completed"}
+													/>
+													<div className="min-w-0 truncate">
+														<div className="font-bold text-slate-200 text-xs flex items-center gap-1.5">
+															<span>{agent.displayName}</span>
+															<span className="text-[11px] text-slate-400 font-normal">· {agent.role}</span>
+														</div>
+														<div className="text-[10.5px] text-slate-400 truncate font-sans">{agent.personality}</div>
+														<div className="flex flex-wrap items-center gap-2.5 mt-2 text-[10px] text-slate-300">
+															<label className="flex items-center gap-1.5 bg-[#18203a] px-2 py-0.5 rounded border border-[#263254]">
+																<span className="text-slate-400 font-mono text-[9px]">Pitch:</span>
+																<input
+																	type="range"
+																	min="0.5"
+																	max="1.5"
+																	step="0.05"
+																	value={agent.pitch}
+																	onChange={(e) => {
+																		ttsService.updateVoiceRegistryEntry(agent.seatId, { pitch: parseFloat(e.target.value) });
+																		setVoiceRegistry(ttsService.getVoiceRegistry());
+																	}}
+																	className="w-14 h-1 accent-teal-400 bg-slate-700 rounded cursor-pointer"
+																/>
+																<span className="font-mono text-teal-300 w-7 text-right text-[9px]">{agent.pitch.toFixed(2)}x</span>
+															</label>
+															<label className="flex items-center gap-1.5 bg-[#18203a] px-2 py-0.5 rounded border border-[#263254]">
+																<span className="text-slate-400 font-mono text-[9px]">Speed:</span>
+																<input
+																	type="range"
+																	min="0.75"
+																	max="1.35"
+																	step="0.05"
+																	value={agent.rate}
+																	onChange={(e) => {
+																		ttsService.updateVoiceRegistryEntry(agent.seatId, { rate: parseFloat(e.target.value) });
+																		setVoiceRegistry(ttsService.getVoiceRegistry());
+																	}}
+																	className="w-14 h-1 accent-amber-400 bg-slate-700 rounded cursor-pointer"
+																/>
+																<span className="font-mono text-amber-300 w-7 text-right text-[9px]">{agent.rate.toFixed(2)}x</span>
+															</label>
+															<span className="bg-[#18203a] px-1.5 py-0.5 rounded border border-[#263254] font-mono text-[9px] text-slate-400">
+																{agent.lang}
+															</span>
 														</div>
 													</div>
-
 													<div className="flex items-center gap-2 shrink-0">
 														<button
 															type="button"
@@ -523,17 +822,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 														/>
 													</div>
 												</div>
-											);
-										})}
-									</div>
+											</div>
+										);
+									})}
 								</div>
+							</div>
 							</div>
 						)}
 
 						{activeTab === "models" && (
 							<div className="space-y-4">
 								<div className="flex items-center justify-between gap-2">
-									<h4 className="font-bold text-sm text-slate-100">Inference & Data Providers</h4>
+									<h4 className="font-bold text-sm text-slate-100">Inference &amp; Data Providers</h4>
 									<div className="flex items-center gap-2">
 										<button
 											type="button"
@@ -564,8 +864,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 										{detectMessage}
 									</div>
 								)}
-
-								{/* Meterless status */}
 								<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842] space-y-2">
 									<div className="flex items-center justify-between">
 										<div className="flex items-center gap-2 font-semibold text-slate-200">
@@ -601,8 +899,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 										and runtime token.
 									</p>
 								</div>
-
-								{/* Zetaris status */}
 								<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842] space-y-2">
 									<div className="flex items-center justify-between">
 										<div className="flex items-center gap-2 font-semibold text-slate-200">
@@ -632,12 +928,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 										policy gating.
 									</p>
 								</div>
-
 								<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842] space-y-3">
 									<div>
-										<div className="font-semibold text-slate-100 text-xs">
-											Setup prompts for your local AI agent
-										</div>
+										<div className="font-semibold text-slate-100 text-xs">Setup prompts for your local AI agent</div>
 										<p className="text-[11px] text-slate-400 mt-1">
 											Copy any prompt below into Claude Code, Cursor, Codex, or another local agent.
 											Each prompt verifies real connectivity and refuses to invent credentials or data.
@@ -658,15 +951,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
 						{activeTab === "data" && (
 							<div className="space-y-4">
-								<h4 className="font-bold text-sm text-slate-100 mb-2">Storage & Cryptographic Integrity</h4>
-
+								<h4 className="font-bold text-sm text-slate-100 mb-2">Storage &amp; Cryptographic Integrity</h4>
 								<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842] space-y-3">
 									<div className="font-semibold text-slate-200">Durable Server Persistence</div>
 									<p className="text-[11px] text-slate-400 leading-relaxed">
 										Conversation history, messages, and cryptographic audit records are durably saved
-										server-side via SQLite (`audit.db` & `data/conversations.db`).
+										server-side via SQLite (`audit.db` &amp; `data/conversations.db`).
 									</p>
-
 									{activeConversation && (
 										<button
 											type="button"
@@ -678,12 +969,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 										</button>
 									)}
 								</div>
-
 								<div className="p-4 rounded-xl bg-rose-950/20 border border-rose-800/30 space-y-2">
 									<div className="font-semibold text-rose-300">Reset Local State</div>
-									<p className="text-[11px] text-slate-400">
-										Clear cached active runs and start fresh.
-									</p>
+									<p className="text-[11px] text-slate-400">Clear cached active runs and start fresh.</p>
 									<button
 										type="button"
 										onClick={onClearAll}
@@ -711,7 +999,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 										</p>
 									</div>
 								</div>
-
 								<p className="text-xs text-slate-300">
 									GovernMindz is a local-first decision workspace for high-stakes data questions. Independent
 									Data and Web research crews gather evidence in parallel, a role-separated council debates
@@ -719,7 +1006,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 									validation and a tamper-evident audit gate. Every Zetaris dataset used is captured as a
 									verifiable evidence snapshot, so anyone can inspect the exact rows behind a decision.
 								</p>
-
 								<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842] space-y-1">
 									<div className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold">
 										Creator
@@ -729,7 +1015,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 										Solo creator — product vision, architecture, and engineering
 									</div>
 								</div>
-
 								<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842] space-y-3">
 									<div className="text-[10px] font-mono uppercase tracking-wider text-teal-400 font-bold">
 										Sponsors &amp; Technology Partners
@@ -749,7 +1034,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 										</div>
 									</div>
 								</div>
-
 								<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842] space-y-2 font-mono text-[11px]">
 									<div className="text-slate-400">How a decision is produced:</div>
 									<ul className="list-disc list-inside space-y-1 text-slate-300">

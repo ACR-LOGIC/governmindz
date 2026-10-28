@@ -378,3 +378,42 @@ export interface AuditProofCertificate {
 
 export * from "./crew";
 
+export interface WebhookConfig {
+	id: string;
+	name: string;
+	url: string;
+	secret: string;
+	events: WebhookEvent[];
+	active: boolean;
+	createdAt: number;
+	updatedAt: number;
+	lastDelivery?: WebhookDelivery;
+}
+
+export type WebhookEvent =
+	| "run.started"
+	| "run.completed"
+	| "run.failed"
+	| "message.created"
+	| "audit.verified"
+	| "webhook.delivery_failed";
+
+export interface WebhookDelivery {
+	id: string;
+	webhookId: string;
+	event: WebhookEvent;
+	status: "delivered" | "failed";
+	statusCode: number | null;
+	responseBody: string | null;
+	durationMs: number;
+	timestamp: number;
+	error?: string;
+}
+
+export interface WebhookStats {
+	totalDeliveries: number;
+	successfulDeliveries: number;
+	failedDeliveries: number;
+	lastDeliveryAt: number | null;
+}
+

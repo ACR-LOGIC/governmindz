@@ -11,6 +11,9 @@
  * 3. Audio-aware pacing: coordinates with TTS playback when audio is enabled,
  *    but never freezes text if audio is slow, failed, or muted.
  * 4. Play, Pause, Resume, Reset controls with clean queue disposal.
+ * 5. Active-thinking visibility: reveals `seat_thinking` and operational cues
+ *    during the speaker transition window so users see which agent is working
+ *    before their message lands.
  */
 
 import { ttsService } from "./ttsService";
@@ -32,11 +35,11 @@ export interface DemoTimingConfig {
 }
 
 export const DEFAULT_DEMO_TIMING: DemoTimingConfig = {
-	transitionDelayMs: 500,
-	minReadingTimeMs: 1400,
-	maxReadingTimeMs: 4000,
-	wordsPerMinute: 220,
-	audioTimeoutMs: 8000,
+	transitionDelayMs: 450,
+	minReadingTimeMs: 1100,
+	maxReadingTimeMs: 2800,
+	wordsPerMinute: 240,
+	audioTimeoutMs: 6000,
 };
 
 export type DemoQueueState = "idle" | "playing" | "paused" | "completed";
@@ -141,7 +144,11 @@ export class DemoPresentationQueue {
 		if (this.state !== "paused") return;
 		this.setState("playing");
 		ttsService.resume();
-		this.scheduleNextTransition(this.currentItem, this.remainingDuration);
+		if (this.currentItem) {
+			this.scheduleNextTransition(this.currentItem, this.remainingDuration);
+		} else {
+			this.processNext();
+		}
 	}
 
 	public reset() {
@@ -173,6 +180,22 @@ export class DemoPresentationQueue {
 		}
 	}
 
+	/**
+	 * Drains non-message operational items at the head of the queue so that
+	 * `seat_thinking`, `crew`, and `pre_cue` states become visible during
+	 * the speaker transition window before the next message is revealed.
+	 */
+	private drainLeadingOperationalItems(): boolean {
+		let drainedAny = false;
+		while (this.queue.length > 0 && this.queue[0].type !== "message") {
+			const opItem = this.queue.shift()!;
+			this.currentItem = opItem;
+			this.onReveal(opItem);
+			drainedAny = true;
+		}
+		return drainedAny;
+	}
+
 	private processNext() {
 		if (this.state !== "playing") return;
 
@@ -181,10 +204,26 @@ export class DemoPresentationQueue {
 			this.currentItem = nextItem;
 			this.onReveal(nextItem);
 
-			// Operational events are not conversational turns, so drain them
-			// synchronously and only pause for the next visible message.
 			if (nextItem.type === "message") {
 				this.scheduleNextTransition(nextItem);
+				return;
+			}
+
+			// If a seat_thinking event precedes a message at the start of the run,
+			// hold briefly for transitionDelayMs so the thinking indicator is visible.
+			if (
+				nextItem.type === "seat_thinking" &&
+				this.queue.length > 0 &&
+				this.queue[0].type === "message" &&
+				this.timing.transitionDelayMs > 0
+			) {
+				const leadInMs = Math.min(this.timing.transitionDelayMs, 240);
+				this.targetDuration = leadInMs;
+				this.itemStartTime = Date.now();
+				this.currentTimer = setTimeout(() => {
+					this.currentTimer = null;
+					this.processNext();
+				}, leadInMs);
 				return;
 			}
 		}
@@ -219,7 +258,10 @@ export class DemoPresentationQueue {
 
 			// If reading time has elapsed AND audio has completed (or timed out/muted), proceed to transition
 			if (elapsed >= displayDuration && !audioStillPlaying) {
-				// Short intentional transition before next speaker reveals
+				// Reveal any pending operational/thinking cues at the start of the transition window
+				// so the user sees the next speaker's active status before their message lands.
+				this.drainLeadingOperationalItems();
+
 				this.currentTimer = setTimeout(() => {
 					this.currentTimer = null;
 					this.processNext();

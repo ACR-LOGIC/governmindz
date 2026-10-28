@@ -49,6 +49,7 @@ export const SEAT_ROLES: Record<string, string> = {
 	CredibleSourcesResearchAgent: "Credible Research",
 	ContextAgent: "Context Agent",
 	SocialCommunityResearchAgent: "Community Agent",
+	Supervisor: "Delivery Supervisor",
 };
 
 export const SEAT_JOB_TASKS: Record<string, string> = {
@@ -68,19 +69,9 @@ export const SEAT_JOB_TASKS: Record<string, string> = {
 		"Track conversation transcripts, assess historical memory precedents, and ensure context continuity.",
 	SocialCommunityResearchAgent:
 		"Assess user experience impact, stakeholder feedback, and community sentiment.",
+	Supervisor:
+		"Validate deliverable contracts, executive summaries, and cryptographic proof readiness.",
 };
-
-/**
- * Shuffles an array randomly using Fisher-Yates
- */
-function shuffle<T>(arr: T[]): T[] {
-	const copy = [...arr];
-	for (let i = copy.length - 1; i > 0; i--) {
-		const j = Math.floor(Math.random() * (i + 1));
-		[copy[i], copy[j]] = [copy[j], copy[i]];
-	}
-	return copy;
-}
 
 /**
  * Assigns unique human names, matching 3D character avatars, and focus areas
@@ -91,9 +82,10 @@ export const CANONICAL_COWORKER_IDENTITIES: Record<string, { humanName: string; 
 	Synthesizer: { humanName: "Val", avatarId: "val" },
 	RivalChallenger: { humanName: "Arturo", avatarId: "arturo" },
 	Thinker: { humanName: "Lucy", avatarId: "lucy" },
-	CredibleSourcesResearchAgent: { humanName: "Arturo", avatarId: "arturo" },
+	CredibleSourcesResearchAgent: { humanName: "Raul", avatarId: "raul" },
 	ContextAgent: { humanName: "Kenji", avatarId: "kenji" },
 	SocialCommunityResearchAgent: { humanName: "Sophia", avatarId: "sophia" },
+	Supervisor: { humanName: "Jovita", avatarId: "jovita" },
 	Orchestrator: { humanName: "Marcus", avatarId: "marcus" },
 };
 
@@ -104,8 +96,6 @@ export function assignHumanCouncil(
 		"Synthesizer",
 		"RivalChallenger",
 		"Thinker",
-		"CredibleSourcesResearchAgent",
-		"ContextAgent",
 	],
 ): Record<string, SeatAssignment> {
 	const assignments: Record<string, SeatAssignment> = {};
@@ -146,12 +136,10 @@ export function generateTaskDelegationAnnouncement(
 	// Prioritize major active seats in order
 	const orderedSeatIds = [
 		"FactChecker",
-		"CredibleSourcesResearchAgent",
 		"CloudArchitect",
 		"Synthesizer",
 		"RivalChallenger",
 		"Thinker",
-		"ContextAgent",
 		"SocialCommunityResearchAgent",
 	];
 
@@ -167,7 +155,7 @@ export function generateTaskDelegationAnnouncement(
 	}
 
 	lines.push("");
-	lines.push("The council team has synced on focus areas. Deliberation is starting...");
+	lines.push("Agents will join the roster as they enter the deliberation...");
 
 	return lines.join("\n");
 }

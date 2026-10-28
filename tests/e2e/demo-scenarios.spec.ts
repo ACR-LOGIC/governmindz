@@ -26,27 +26,64 @@ test.describe("Demo mode track scenarios", () => {
 		});
 	});
 
-	test("all three track demos complete end to end", async ({ page }) => {
+	test("all three track demos complete end to end with synchronized UI and collapsed demo options", async ({ page }) => {
 		test.setTimeout(300_000);
 
 		await page.goto("/");
 		await page.waitForLoadState("networkidle");
 
+		await expect(page.getByTestId("demo-options-panel")).toBeVisible();
 		await expect(page.getByRole("button", { name: /Track 0[123] ·/ })).toHaveCount(3);
 		await expect(page.locator("select option")).toHaveCount(3);
 		await expect(page.getByText("Regulatory Risk Analysis")).toHaveCount(0);
 		await expect(page.getByText("PII Re-identification")).toHaveCount(0);
 		await expect(page.getByText("Clinical Trials & Drug Safety")).toHaveCount(0);
 
-		for (const demo of DEMOS) {
+		for (let i = 0; i < DEMOS.length; i++) {
+			const demo = DEMOS[i];
+
+			// If coming from a previous completed demo, click Start Over to restore the 3 demo options
+			if (i > 0) {
+				await page.getByRole("button", { name: /Start Over/i }).click();
+				await expect(page.getByTestId("demo-options-panel")).toBeVisible();
+			}
+
 			await page.getByRole("button", { name: demo.card }).click();
 			await page.getByRole("button", { name: /Start Demo/i }).click();
+
+			// Demo options must collapse automatically once the demo starts, reclaiming screen space
+			await expect(page.getByTestId("demo-options-panel")).toHaveCount(0);
+			await expect(page.getByTestId("demo-compact-bar")).toBeVisible();
+
+			// Verify compact control can reopen and hide the demo options panel on demand
+			if (i === 0) {
+				await page.getByTestId("toggle-demo-options").click();
+				await expect(page.getByTestId("demo-options-panel")).toBeVisible();
+				await page.getByTestId("toggle-demo-options").click();
+				await expect(page.getByTestId("demo-options-panel")).toHaveCount(0);
+			}
 
 			await expect(page.getByText("Final Synthesized Governance Decision")).toBeVisible({
 				timeout: 120_000,
 			});
 			await expect(page.getByText(demo.finalAnswer).first()).toBeVisible();
 			await expect(page.getByText(/Run failed/)).toHaveCount(0);
+
+			// Verify that only agents who actually joined the conversation appear on the Agent Roster
+			const rosterAgentIds = await page
+				.getByTestId("roster-agent-card")
+				.evaluateAll((els) => els.map((el) => el.getAttribute("data-agent-id")));
+			const messageSeatIds = await page
+				.getByTestId("conversation-message")
+				.evaluateAll((els) => els.map((el) => el.getAttribute("data-from-seat")));
+
+			expect(rosterAgentIds.length).toBeGreaterThan(0);
+			for (const agentId of rosterAgentIds) {
+				expect(messageSeatIds).toContain(agentId);
+				expect(agentId).not.toBe("CredibleSourcesResearchAgent");
+				expect(agentId).not.toBe("ContextAgent");
+				expect(agentId).not.toBe("Orchestrator");
+			}
 		}
 
 		// The last demo is Track 03. Exercise the interactive Zetaris evidence explorer.

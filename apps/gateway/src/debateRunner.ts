@@ -147,7 +147,10 @@ function createDebateLoop(
 			transcriptCompression: { maxRecentMessages: 8, maxEvidencePerMessage: 3 },
 			maxActiveTranscriptMessages: 12,
 			summaryIntervalRounds: 2,
-			eventSink: eventSink as any,
+			eventSink: ((ev: Record<string, unknown>) => {
+				if (ev?.type === "complete") return;
+				eventSink?.(ev);
+			}) as any,
 			evidenceContext,
 			rivalChallenger,
 			thinkerAgent,
@@ -298,6 +301,8 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 		};
 	}
 
+	eventSink?.({ type: "run_start", mode: isSample ? "sample" : "live", topic, scenarioId });
+
 	// Emit Council Member task assignments & role acknowledgments
 	emitCouncilAssignments(eventSink);
 
@@ -412,8 +417,6 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 		thinkerAgent,
 		inquiryScore,
 	);
-
-	eventSink?.({ type: "run_start", mode: isSample ? "sample" : "live", topic, scenarioId });
 
 	const resultDebate = await loop.run(buildTask(topic, combinedEvidenceContext));
 
@@ -638,6 +641,7 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 		}),
 	};
 
+	eventSink?.({ type: "seat_thinking", seatId: "Supervisor", round: resultDebate.rounds });
 	resultDebate.transcript.push(orchestratorMsg);
 	eventSink?.({ type: "message", message: orchestratorMsg });
 

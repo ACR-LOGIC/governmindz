@@ -1,72 +1,60 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { Sparkles, ArrowRight, ArrowLeft, Check, X } from "lucide-react";
+import {
+	Sparkles,
+	ArrowRight,
+	ArrowLeft,
+	Check,
+	X,
+	Play,
+	KeyRound,
+	Settings,
+	Zap,
+	RefreshCw,
+	Eye,
+	CheckCircle2,
+} from "lucide-react";
 
-export interface TourStep {
-	id: string;
-	title: string;
-	description: string;
-	selector?: string;
-	badge?: string;
-}
+import {
+	TOUR_STEPS,
+	type TourHighlightItem,
+	type TourStep,
+} from "./tourSteps";
+
+export type { TourHighlightItem, TourStep };
 
 interface TourGuideProps {
 	isOpen: boolean;
 	onClose: () => void;
 	onFinish: () => void;
+	onStepChange?: (stepId: string, stepIndex: number) => void;
+	onStartDemo?: () => void;
+	onInspectAgent?: () => void;
+	onOpenSettings?: () => void;
+	onOpenCredentials?: () => void;
+	onRefreshHealth?: () => void;
+	onSwitchToLiveMode?: () => void;
+	isDemoBusy?: boolean;
+	hasMessages?: boolean;
+	zetarisOnline?: boolean;
+	meterlessOnline?: boolean;
 }
 
-const TOUR_STEPS: TourStep[] = [
-	{
-		id: "chat",
-		title: "AI Multi-Agent Group Chat",
-		description:
-			"Deliberations unfold here as specialized agents debate federated data governance. Review synthesized consensus conclusions, evidence citations, and rate agent responses.",
-		selector: "#tour-chat",
-		badge: "Step 1 of 6",
-	},
-	{
-		id: "roster",
-		title: "Active Agent Council & Live Reasoning",
-		description:
-			"Observe specialized agents with rotating human names and domain tasks. Click any agent avatar to inspect their live reasoning scratchpad and evidence matrix.",
-		selector: "#tour-roster",
-		badge: "Step 2 of 6",
-	},
-	{
-		id: "history",
-		title: "Conversation & Debate History",
-		description:
-			"Access and manage your persistent multi-agent debate history, create new debates, and switch between past governance sessions.",
-		selector: "#tour-history",
-		badge: "Step 3 of 6",
-	},
-	{
-		id: "mode",
-		title: "Demo & Live Mode Governance",
-		description:
-			"Switch between deterministic Demo mode with guided prompt scenarios and Live mode connected to real Zetaris Lightning and Meterless AI engines.",
-		selector: "#tour-mode",
-		badge: "Step 4 of 6",
-	},
-	{
-		id: "explorer",
-		title: "Execution Explorer & Tamper-Evident Audit",
-		description:
-			"Verify the full 12-state orchestration lifecycle, inspect Zetaris federated SQL queries, and validate the SHA-256 cryptographic audit trail ledger.",
-		selector: "#tour-explorer",
-		badge: "Step 5 of 6",
-	},
-	{
-		id: "zetaris",
-		title: "Interactive Zetaris Evidence Explorer",
-		description:
-			"Open Trust & Evidence after a run to inspect the exact Zetaris dataset. Search and sort rows, open record details, switch to Raw JSON, and download the full dataset as CSV or JSON.",
-		selector: "#tour-evidence",
-		badge: "Step 6 of 6",
-	},
-];
-
-export const TourGuide: React.FC<TourGuideProps> = ({ isOpen, onClose, onFinish }) => {
+export const TourGuide: React.FC<TourGuideProps> = ({
+	isOpen,
+	onClose,
+	onFinish,
+	onStepChange,
+	onStartDemo,
+	onInspectAgent,
+	onOpenSettings,
+	onOpenCredentials,
+	onRefreshHealth,
+	onSwitchToLiveMode,
+	isDemoBusy = false,
+	hasMessages = false,
+	zetarisOnline = false,
+	meterlessOnline = false,
+}) => {
 	const [currentIndex, setCurrentIndex] = useState(0);
 	const [highlightRect, setHighlightRect] = useState<DOMRect | null>(null);
 	const [windowSize, setWindowSize] = useState({
@@ -74,7 +62,20 @@ export const TourGuide: React.FC<TourGuideProps> = ({ isOpen, onClose, onFinish 
 		height: typeof window !== "undefined" ? window.innerHeight : 800,
 	});
 
-	const currentStep = useMemo(() => TOUR_STEPS[currentIndex], [currentIndex]);
+	// Reset to step 0 whenever tour is newly opened
+	useEffect(() => {
+		if (isOpen) {
+			setCurrentIndex(0);
+		}
+	}, [isOpen]);
+
+	const currentStep = useMemo(() => TOUR_STEPS[currentIndex] || TOUR_STEPS[0], [currentIndex]);
+
+	// Notify parent whenever step changes so App can drive tabs, demo run, menus, and modals
+	useEffect(() => {
+		if (!isOpen || !currentStep) return;
+		onStepChange?.(currentStep.id, currentIndex);
+	}, [isOpen, currentStep, currentIndex, onStepChange]);
 
 	// Calculate target element position and handle smooth scroll
 	const updateTargetPosition = useCallback(() => {
@@ -88,22 +89,27 @@ export const TourGuide: React.FC<TourGuideProps> = ({ isOpen, onClose, onFinish 
 		const el = document.querySelector(currentStep.selector);
 		if (el) {
 			const rect = el.getBoundingClientRect();
-			setHighlightRect(rect);
-		} else {
-			setHighlightRect(null);
+			if (rect.width > 0 && rect.height > 0) {
+				setHighlightRect(rect);
+				return;
+			}
 		}
+		setHighlightRect(null);
 	}, [isOpen, currentStep]);
 
 	// Auto scroll element into view when step changes
 	useEffect(() => {
 		if (!isOpen || !currentStep?.selector) return;
-		const el = document.querySelector(currentStep.selector);
-		if (el) {
-			el.scrollIntoView({ behavior: "smooth", block: "nearest" });
-		}
-		updateTargetPosition();
-		const t1 = setTimeout(updateTargetPosition, 80);
-		const t2 = setTimeout(updateTargetPosition, 320);
+		const runPositionUpdate = () => {
+			const el = document.querySelector(currentStep.selector!);
+			if (el) {
+				el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+			}
+			updateTargetPosition();
+		};
+		runPositionUpdate();
+		const t1 = setTimeout(runPositionUpdate, 100);
+		const t2 = setTimeout(runPositionUpdate, 350);
 		return () => {
 			clearTimeout(t1);
 			clearTimeout(t2);
@@ -143,9 +149,11 @@ export const TourGuide: React.FC<TourGuideProps> = ({ isOpen, onClose, onFinish 
 	useEffect(() => {
 		if (!isOpen) return;
 		const handleKeyDown = (e: KeyboardEvent) => {
+			const tag = (e.target as HTMLElement)?.tagName;
+			if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
 			if (e.key === "Escape") {
 				handleSkip();
-			} else if (e.key === "ArrowRight" || e.key === "Enter") {
+			} else if (e.key === "ArrowRight") {
 				handleNext();
 			} else if (e.key === "ArrowLeft") {
 				handleBack();
@@ -157,70 +165,114 @@ export const TourGuide: React.FC<TourGuideProps> = ({ isOpen, onClose, onFinish 
 
 	if (!isOpen) return null;
 
-	// Calculate popover positioning style so dialog doesn't block the highlighted element
+	// Calculate popover positioning style so dialog never blocks the highlighted UI or open modals/menus
 	const getPopoverStyle = (): React.CSSProperties => {
 		const { width: winWidth, height: winHeight } = windowSize;
-		const cardWidth = Math.min(480, winWidth - 32);
+		const cardWidth = Math.min(520, winWidth - 32);
 
-		if (!highlightRect || winWidth < 768) {
+		if (winWidth < 768) {
 			return {
 				position: "fixed",
-				bottom: "24px",
+				bottom: "16px",
 				left: "16px",
 				right: "16px",
 				maxWidth: `${cardWidth}px`,
 				margin: "0 auto",
-				zIndex: 60,
+				zIndex: 110,
 			};
 		}
 
-		// If element is in header (mode, explorer)
+		// Step 4 (composer at bottom): place tour card near top-center so bottom composer + popovers are 100% visible
+		if (currentStep.id === "composer") {
+			return {
+				position: "fixed",
+				top: "72px",
+				left: "50%",
+				transform: "translateX(-50%)",
+				width: `${cardWidth}px`,
+				zIndex: 110,
+			};
+		}
+
+		// Step 8 (outputs export menu on top-right): place tour card on bottom-left so open export menu is unobstructed
+		if (currentStep.id === "outputs") {
+			return {
+				position: "fixed",
+				bottom: "24px",
+				left: "24px",
+				width: `${cardWidth}px`,
+				zIndex: 110,
+			};
+		}
+
+		// Step 9 (credentials / settings modal in center): dock tour card to bottom-right so user can interact with the modal
+		if (currentStep.id === "settings") {
+			return {
+				position: "fixed",
+				bottom: "20px",
+				right: "20px",
+				width: `${Math.min(480, cardWidth)}px`,
+				zIndex: 110,
+			};
+		}
+
+		if (!highlightRect) {
+			return {
+				position: "fixed",
+				bottom: "24px",
+				left: "50%",
+				transform: "translateX(-50%)",
+				width: `${cardWidth}px`,
+				zIndex: 110,
+			};
+		}
+
+		// If element is in header (mode, explorer, evidence)
 		if (highlightRect.top < 120 && highlightRect.bottom < winHeight * 0.35) {
 			const idealLeft = highlightRect.left + highlightRect.width / 2 - cardWidth / 2;
 			const clampedLeft = Math.max(16, Math.min(winWidth - cardWidth - 16, idealLeft));
 			return {
 				position: "fixed",
-				top: `${Math.min(winHeight - 260, highlightRect.bottom + 16)}px`,
+				top: `${Math.min(winHeight - 420, highlightRect.bottom + 18)}px`,
 				left: `${clampedLeft}px`,
 				width: `${cardWidth}px`,
-				zIndex: 60,
+				zIndex: 110,
 			};
 		}
 
 		// If element is on the right side (roster)
 		if (highlightRect.left > winWidth * 0.55) {
-			const cardRight = winWidth - highlightRect.left + 24;
-			const idealTop = Math.max(24, Math.min(winHeight - 280, highlightRect.top + 32));
+			const cardRight = Math.max(24, winWidth - highlightRect.left + 20);
+			const idealTop = Math.max(68, Math.min(winHeight - 430, highlightRect.top + 16));
 			return {
 				position: "fixed",
 				top: `${idealTop}px`,
 				right: `${cardRight}px`,
 				width: `${cardWidth}px`,
-				zIndex: 60,
+				zIndex: 110,
 			};
 		}
 
-		// If element is on the left side (history)
+		// If element is on the left side (sidebar options / history)
 		if (highlightRect.right < winWidth * 0.45) {
-			const cardLeft = highlightRect.right + 24;
-			const idealTop = Math.max(24, Math.min(winHeight - 280, highlightRect.top + 32));
+			const cardLeft = Math.min(winWidth - cardWidth - 20, highlightRect.right + 20);
+			const idealTop = Math.max(68, Math.min(winHeight - 430, highlightRect.top));
 			return {
 				position: "fixed",
 				top: `${idealTop}px`,
 				left: `${cardLeft}px`,
 				width: `${cardWidth}px`,
-				zIndex: 60,
+				zIndex: 110,
 			};
 		}
 
-		// Large central element (chat)
+		// Large central element (chat): dock at bottom-right so chat bubbles and parallel crews are clearly visible
 		return {
 			position: "fixed",
-			bottom: "32px",
-			left: "50%",
-			transform: "translateX(-50%)",
+			bottom: "24px",
+			right: "24px",
 			width: `${cardWidth}px`,
-			zIndex: 60,
+			zIndex: 110,
 		};
 	};
 
@@ -232,8 +284,8 @@ export const TourGuide: React.FC<TourGuideProps> = ({ isOpen, onClose, onFinish 
 	const cutoutH = highlightRect ? Math.max(0, highlightRect.height + pad * 2) : 0;
 
 	return (
-		<div className="fixed inset-0 z-50 pointer-events-auto overflow-hidden">
-			{/* SVG Mask: Transparent cutout over highlighted element, darkened everywhere else */}
+		<div className="fixed inset-0 z-[100] pointer-events-none overflow-hidden">
+			{/* SVG Mask: Transparent cutout over highlighted element, softened backdrop everywhere else */}
 			<svg
 				className="fixed inset-0 w-full h-full pointer-events-none select-none"
 				xmlns="http://www.w3.org/2000/svg"
@@ -242,30 +294,27 @@ export const TourGuide: React.FC<TourGuideProps> = ({ isOpen, onClose, onFinish 
 			>
 				<defs>
 					<mask id="tour-spotlight-mask">
-						{/* Base mask: white reveals dark overlay */}
 						<rect x="0" y="0" width="100%" height="100%" fill="white" />
-						{/* Cutout hole: black conceals dark overlay so target element shines through at 100% brightness */}
 						{highlightRect && (
 							<rect
 								x={cutoutX}
 								y={cutoutY}
 								width={cutoutW}
 								height={cutoutH}
-								rx="16"
-								ry="16"
+								rx="20"
+								ry="20"
 								fill="black"
 							/>
 						)}
 					</mask>
 				</defs>
-				{/* Darkened backdrop with cutout hole */}
 				<rect
 					x="0"
 					y="0"
 					width="100%"
 					height="100%"
-					fill="#050811"
-					fillOpacity="0.78"
+					fill="#03050a"
+					fillOpacity={currentStep.id === "settings" || currentStep.id === "outputs" ? "0.5" : "0.72"}
 					mask="url(#tour-spotlight-mask)"
 				/>
 			</svg>
@@ -279,71 +328,204 @@ export const TourGuide: React.FC<TourGuideProps> = ({ isOpen, onClose, onFinish 
 						width: `${cutoutW}px`,
 						height: `${cutoutH}px`,
 					}}
-					className="fixed pointer-events-none z-50 rounded-2xl border-2 border-amber-400 shadow-[0_0_35px_rgba(245,158,11,0.45)] ring-1 ring-amber-300/40 transition-all duration-300"
+					className="fixed pointer-events-none z-[105] rounded-2xl border-2 border-amber-400/80 shadow-[0_0_40px_rgba(245,158,11,0.5)] ring-1 ring-amber-300/60 transition-all duration-400"
 				>
-					{/* Spotlight indicator badge */}
-					<div className="absolute -top-3.5 right-4 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 text-[10px] font-black uppercase tracking-wider shadow-md shadow-amber-950/40 flex items-center gap-1">
+					<div className="absolute -top-3 right-3 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 text-[10px] font-black uppercase tracking-wider shadow-lg shadow-amber-950/50 flex items-center gap-1">
 						<Sparkles className="w-2.5 h-2.5" />
-						<span>Spotlight</span>
+						<span>Guided Spotlight</span>
 					</div>
 				</div>
 			)}
 
 			{/* Tour Dialog Popover */}
-			<div style={getPopoverStyle()} className="animate-scaleUp">
-				<div className="bg-[#0d1326] border border-[#232f50] rounded-2xl shadow-2xl p-5 sm:p-6 text-slate-100 space-y-4 backdrop-blur-md">
+			<div style={getPopoverStyle()} className="pointer-events-auto animate-scaleUp">
+				<div className="bg-[#0d1326]/90 border-2 border-amber-500/60 rounded-2xl shadow-2xl p-4 sm:p-5 text-slate-100 space-y-3.5 backdrop-blur-[24px] max-h-[82vh] flex flex-col glass-panel">
 					{/* Header bar */}
-					<div className="flex items-center justify-between border-b border-[#1b2542] pb-3">
+					<div className="flex items-center justify-between border-b border-[#1b2542] pb-2.5 shrink-0">
 						<div className="flex items-center gap-2.5">
 							<img
 								src="/governmindz-logo.png"
 								alt="GovernMindz logo"
-								className="h-9 w-9 rounded-full object-cover ring-1 ring-amber-500/40 shadow-sm shadow-amber-500/10"
+								className="h-8 w-8 rounded-full object-cover ring-1 ring-amber-500/40 shadow-sm shadow-amber-500/10"
 							/>
 							<div>
-								<span className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold block">
-									{currentStep.badge}
-								</span>
-								<h3 className="text-sm font-bold text-white flex items-center gap-1.5 leading-snug">
+								<div className="flex items-center gap-2">
+									<span className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold">
+										{currentStep.badge}
+									</span>
+									<span className="text-[9px] font-mono uppercase px-1.5 py-0.2 rounded bg-teal-500/15 text-teal-300 border border-teal-500/30">
+										Interactive Guided Tour
+									</span>
+								</div>
+								<h3 className="text-sm font-bold text-white flex items-center gap-1.5 leading-snug mt-0.5">
 									{currentStep.title}
 								</h3>
 							</div>
 						</div>
 						<button
+							type="button"
 							onClick={handleSkip}
 							className="text-slate-400 hover:text-slate-200 p-1.5 rounded-lg hover:bg-[#1a233d] transition-colors"
 							title="Close tour (Esc)"
+							aria-label="Close tour"
 						>
 							<X className="w-4 h-4" />
 						</button>
 					</div>
 
-					{/* Step description */}
-					<div className="text-xs sm:text-sm text-slate-300 leading-relaxed min-h-[44px]">
-						{currentStep.description}
+					{/* Step description + detailed feature checklist */}
+					<div className="space-y-2.5 overflow-y-auto pr-1 flex-1">
+						<p className="text-xs text-slate-200 leading-relaxed">{currentStep.description}</p>
+
+						<div className="space-y-1.5">
+							{currentStep.highlights.map((item, idx) => (
+								<div
+									key={idx}
+									className="p-2 rounded-xl bg-[#121a33]/90 border border-[#1f2c52] text-[11px] leading-snug space-y-0.5"
+								>
+									<div className="font-bold text-amber-300 flex items-center gap-1.5">
+										<CheckCircle2 className="w-3 h-3 text-teal-400 shrink-0" />
+										<span>{item.label}</span>
+									</div>
+									<div className="text-slate-300 pl-4.5">{item.detail}</div>
+								</div>
+							))}
+						</div>
+
+						{/* Step-Specific Interactive Action Bar */}
+						{(currentStep.id === "chat" ||
+							currentStep.id === "roster" ||
+							currentStep.id === "settings" ||
+							currentStep.id === "ready-live") && (
+							<div className="pt-1 flex flex-wrap items-center gap-2">
+								{currentStep.id === "chat" && onStartDemo && (
+									<button
+										type="button"
+										onClick={onStartDemo}
+										disabled={isDemoBusy}
+										className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 border border-teal-500/50 text-teal-200 text-xs font-semibold transition-all disabled:opacity-60"
+									>
+										<Play className="w-3.5 h-3.5 text-teal-300 fill-current" />
+										<span>
+											{isDemoBusy
+												? "Demo Deliberation Running Live…"
+												: hasMessages
+													? "Replay Demo Deliberation"
+													: "Start Demo Deliberation Now"}
+										</span>
+									</button>
+								)}
+
+								{currentStep.id === "roster" && onInspectAgent && (
+									<button
+										type="button"
+										onClick={onInspectAgent}
+										className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 border border-teal-500/50 text-teal-200 text-xs font-semibold transition-all"
+									>
+										<Eye className="w-3.5 h-3.5 text-teal-300" />
+										<span>Inspect Agent Reasoning Scratchpad</span>
+									</button>
+								)}
+
+								{currentStep.id === "settings" && (
+									<>
+										{onOpenCredentials && (
+											<button
+												type="button"
+												onClick={onOpenCredentials}
+												className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-200 text-xs font-semibold transition-all"
+											>
+												<KeyRound className="w-3.5 h-3.5 text-amber-300" />
+												<span>Open API Keys &amp; Secrets Vault</span>
+											</button>
+										)}
+										{onOpenSettings && (
+											<button
+												type="button"
+												onClick={onOpenSettings}
+												className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#18223f] hover:bg-[#223056] border border-[#2d3e6e] text-slate-200 text-xs font-semibold transition-all"
+											>
+												<Settings className="w-3.5 h-3.5 text-teal-300" />
+												<span>View System Settings</span>
+											</button>
+										)}
+									</>
+								)}
+
+								{currentStep.id === "ready-live" && (
+									<div className="w-full space-y-2">
+										<div className="flex items-center justify-between px-3 py-2 rounded-xl bg-[#0b1528] border border-[#1e3358] text-xs">
+											<div className="flex items-center gap-3">
+												<span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-emerald-300">
+													<span
+														className={`w-2 h-2 rounded-full ${
+															meterlessOnline ? "bg-emerald-400 animate-pulse" : "bg-amber-400"
+														}`}
+													/>
+													Meterless: {meterlessOnline ? "ONLINE" : "READY"}
+												</span>
+												<span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-emerald-300">
+													<span
+														className={`w-2 h-2 rounded-full ${
+															zetarisOnline ? "bg-emerald-400 animate-pulse" : "bg-amber-400"
+														}`}
+													/>
+													Zetaris: {zetarisOnline ? "CONNECTED" : "CONFIGURED"}
+												</span>
+											</div>
+											{onRefreshHealth && (
+												<button
+													type="button"
+													onClick={onRefreshHealth}
+													className="inline-flex items-center gap-1 text-[11px] text-teal-300 hover:text-white font-semibold"
+												>
+													<RefreshCw className="w-3 h-3" />
+													<span>Verify</span>
+												</button>
+											)}
+										</div>
+										{onSwitchToLiveMode && (
+											<button
+												type="button"
+												onClick={onSwitchToLiveMode}
+												className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 text-xs font-bold shadow-md transition-all"
+											>
+												<Zap className="w-3.5 h-3.5 fill-current" />
+												<span>Switch to Live Mode Now &amp; Finish Tour</span>
+											</button>
+										)}
+									</div>
+								)}
+							</div>
+						)}
 					</div>
 
 					{/* Step Dots indicator */}
-					<div className="flex items-center justify-center gap-1.5 py-0.5">
+					<div className="flex items-center justify-center gap-1.5 py-0.5 shrink-0">
 						{TOUR_STEPS.map((step, idx) => (
 							<button
 								key={step.id}
+								type="button"
 								onClick={() => setCurrentIndex(idx)}
 								className={`h-1.5 rounded-full transition-all duration-300 ${
 									idx === currentIndex
 										? "w-6 bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.6)]"
-										: "w-1.5 bg-slate-700 hover:bg-slate-500"
+										: idx < currentIndex
+											? "w-2 bg-teal-400/70 hover:bg-teal-300"
+											: "w-1.5 bg-slate-700 hover:bg-slate-500"
 								}`}
-								title={step.title}
+								title={`${step.badge}: ${step.title}`}
+								aria-label={`Go to ${step.badge}`}
 							/>
 						))}
 					</div>
 
 					{/* Navigation action buttons */}
-					<div className="flex items-center justify-between pt-2.5 border-t border-[#1b2542]">
+					<div className="flex items-center justify-between pt-2 border-t border-[#1b2542] shrink-0">
 						<button
+							type="button"
 							onClick={handleSkip}
-							className="text-xs text-slate-400 hover:text-slate-200 px-3 py-1.5 rounded-lg hover:bg-[#161f36] transition-colors"
+							className="text-xs text-slate-400 hover:text-slate-200 px-2.5 py-1.5 rounded-lg hover:bg-[#161f36] transition-colors"
 						>
 							Skip Introduction
 						</button>
@@ -351,6 +533,7 @@ export const TourGuide: React.FC<TourGuideProps> = ({ isOpen, onClose, onFinish 
 						<div className="flex items-center gap-2">
 							{currentIndex > 0 && (
 								<button
+									type="button"
 									onClick={handleBack}
 									className="flex items-center gap-1 text-xs font-medium text-slate-300 hover:text-white px-3 py-1.5 rounded-lg bg-[#161f36] hover:bg-[#1d2948] border border-[#232f50] transition-colors"
 								>
@@ -360,6 +543,7 @@ export const TourGuide: React.FC<TourGuideProps> = ({ isOpen, onClose, onFinish 
 							)}
 
 							<button
+								type="button"
 								onClick={handleNext}
 								className="flex items-center gap-1.5 text-xs font-bold text-slate-950 px-4 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 shadow-md shadow-amber-950/40 active:scale-95 transition-all"
 							>

@@ -19,29 +19,29 @@ test.describe("GovernMindz Mission Control Frontend", () => {
 		await page.goto("/");
 		await page.waitForLoadState("networkidle");
 
-		// Verify Tour dialog appears on first launch
-		await expect(page.getByText("Step 1 of 6")).toBeVisible();
-		await expect(page.getByText("AI Multi-Agent Group Chat")).toBeVisible();
+		// Verify Tour dialog appears on first launch and starts demo
+		await expect(page.getByText("Step 1 of 10")).toBeVisible();
+		await expect(page.getByText("AI Multi-Agent Group Chat & Live Demo Launch")).toBeVisible();
 
-		// Click Next to Step 2
-		await page.getByRole("button", { name: /Next/i }).click();
-		await expect(page.getByText("Step 2 of 6")).toBeVisible();
-		await expect(page.getByText("Active Agent Council & Live Reasoning")).toBeVisible();
+		// Click Next to Step 2 (Chatboxes)
+		await page.getByRole("button", { name: /^Next$/i }).click();
+		await expect(page.getByText("Step 2 of 10")).toBeVisible();
+		await expect(page.getByText("Inside Every Chatbox — Crews, Barrier & Council Cards")).toBeVisible();
 
 		// Click Back to Step 1 (exact match to avoid matching scenario text)
 		await page.getByRole("button", { name: "Back", exact: true }).click();
-		await expect(page.getByText("Step 1 of 6")).toBeVisible();
+		await expect(page.getByText("Step 1 of 10")).toBeVisible();
 
-		// Advance to the new interactive Zetaris explorer step.
-		for (let i = 0; i < 5; i++) {
-			await page.getByRole("button", { name: /Next/i }).click();
+		// Advance through all 10 guided tour steps
+		for (let i = 0; i < 9; i++) {
+			await page.getByRole("button", { name: /^Next$/i }).click();
 		}
-		await expect(page.getByText("Step 6 of 6")).toBeVisible();
-		await expect(page.getByText("Interactive Zetaris Evidence Explorer")).toBeVisible();
+		await expect(page.getByText("Step 10 of 10")).toBeVisible();
+		await expect(page.getByText("Zetaris & Meterless Connected — Ready for Live Mode!")).toBeVisible();
 
 		// Click Skip Introduction
 		await page.getByRole("button", { name: /Skip Introduction/i }).click();
-		await expect(page.getByText("Step 1 of 6")).not.toBeVisible();
+		await expect(page.getByText("Step 1 of 10")).not.toBeVisible();
 	});
 
 	test("Header, brand, and layout load properly", async ({ page }) => {
