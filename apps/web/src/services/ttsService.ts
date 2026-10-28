@@ -6,8 +6,9 @@ export interface AgentVoiceRegistryEntry {
 	displayName: string;
 	role: string;
 	avatarId: string;
-	provider: "web-speech" | "piper" | "custom";
+	provider: "web-speech" | "piper" | "custom" | "elevenlabs";
 	voiceName: string;
+	elevenVoiceId?: string;
 	piperModel: string;
 	lang: string;
 	pitch: number;
@@ -15,6 +16,10 @@ export interface AgentVoiceRegistryEntry {
 	enabled: boolean;
 	personality: string;
 }
+
+const DEFAULT_ELEVEN_FALLBACK_VOICE = "JBFqnCBsd6RMkjVDRZzb";
+const ELEVEN_CHAT_MODEL = "eleven_flash_v2_5";
+const ELEVEN_VOICE_MAP_STORAGE_KEY = "governmindz_voice_map_v1";
 
 export const DEFAULT_VOICE_REGISTRY: Record<string, AgentVoiceRegistryEntry> = {
 	FactChecker: {
@@ -24,6 +29,7 @@ export const DEFAULT_VOICE_REGISTRY: Record<string, AgentVoiceRegistryEntry> = {
 		avatarId: "priya",
 		provider: "web-speech",
 		voiceName: "Natural Observant Female",
+		elevenVoiceId: "EXAVITQu4vr4xnSDxMaL",
 		piperModel: "en_US-lessac-high",
 		lang: "en-US",
 		pitch: 1.12,
@@ -38,6 +44,7 @@ export const DEFAULT_VOICE_REGISTRY: Record<string, AgentVoiceRegistryEntry> = {
 		avatarId: "marcus",
 		provider: "web-speech",
 		voiceName: "Composed Baritone Male",
+		elevenVoiceId: "JBFqnCBsd6RMkjVDRZzb",
 		piperModel: "en_US-ryan-medium",
 		lang: "en-US",
 		pitch: 0.88,
@@ -52,6 +59,7 @@ export const DEFAULT_VOICE_REGISTRY: Record<string, AgentVoiceRegistryEntry> = {
 		avatarId: "val",
 		provider: "web-speech",
 		voiceName: "Warm Articulate British",
+		elevenVoiceId: "XB0fDUnXU5powFXDhCwa",
 		piperModel: "en_GB-alan-medium",
 		lang: "en-GB",
 		pitch: 1.02,
@@ -66,6 +74,7 @@ export const DEFAULT_VOICE_REGISTRY: Record<string, AgentVoiceRegistryEntry> = {
 		avatarId: "arturo",
 		provider: "web-speech",
 		voiceName: "Direct Tenor Male",
+		elevenVoiceId: "onwK4e9ZLuTAKqWW03F9",
 		piperModel: "en_US-bryce-medium",
 		lang: "en-US",
 		pitch: 0.94,
@@ -80,6 +89,7 @@ export const DEFAULT_VOICE_REGISTRY: Record<string, AgentVoiceRegistryEntry> = {
 		avatarId: "lucy",
 		provider: "web-speech",
 		voiceName: "Deliberate Reflective Female",
+		elevenVoiceId: "XB0fDUnXU5powFXDhCwa",
 		piperModel: "en_US-amy-medium",
 		lang: "en-US",
 		pitch: 0.96,
@@ -136,6 +146,7 @@ export const DEFAULT_VOICE_REGISTRY: Record<string, AgentVoiceRegistryEntry> = {
 		avatarId: "raul",
 		provider: "web-speech",
 		voiceName: "Flight Director Male",
+		elevenVoiceId: "onwK4e9ZLuTAKqWW03F9",
 		piperModel: "en_US-norman-medium",
 		lang: "en-US",
 		pitch: 0.90,
@@ -166,6 +177,7 @@ export const DEFAULT_VOICE_REGISTRY: Record<string, AgentVoiceRegistryEntry> = {
 		avatarId: "priya",
 		provider: "web-speech",
 		voiceName: "Observant Fact Checker",
+		elevenVoiceId: "EXAVITQu4vr4xnSDxMaL",
 		piperModel: "en_US-lessac-high",
 		lang: "en-US",
 		pitch: 1.12,
@@ -180,6 +192,7 @@ export const DEFAULT_VOICE_REGISTRY: Record<string, AgentVoiceRegistryEntry> = {
 		avatarId: "marcus",
 		provider: "web-speech",
 		voiceName: "Composed Architect",
+		elevenVoiceId: "JBFqnCBsd6RMkjVDRZzb",
 		piperModel: "en_US-ryan-medium",
 		lang: "en-US",
 		pitch: 0.88,
@@ -222,6 +235,7 @@ export const DEFAULT_VOICE_REGISTRY: Record<string, AgentVoiceRegistryEntry> = {
 		avatarId: "val",
 		provider: "web-speech",
 		voiceName: "Warm Consensus Leader",
+		elevenVoiceId: "XB0fDUnXU5powFXDhCwa",
 		piperModel: "en_GB-alan-medium",
 		lang: "en-GB",
 		pitch: 1.02,
@@ -236,6 +250,7 @@ export const DEFAULT_VOICE_REGISTRY: Record<string, AgentVoiceRegistryEntry> = {
 		avatarId: "arturo",
 		provider: "web-speech",
 		voiceName: "Direct Challenger",
+		elevenVoiceId: "onwK4e9ZLuTAKqWW03F9",
 		piperModel: "en_US-bryce-medium",
 		lang: "en-US",
 		pitch: 0.94,
@@ -250,6 +265,7 @@ export const DEFAULT_VOICE_REGISTRY: Record<string, AgentVoiceRegistryEntry> = {
 		avatarId: "lucy",
 		provider: "web-speech",
 		voiceName: "Deep Inquisitive Female",
+		elevenVoiceId: "XB0fDUnXU5powFXDhCwa",
 		piperModel: "en_US-amy-medium",
 		lang: "en-US",
 		pitch: 0.96,
@@ -292,6 +308,7 @@ export const DEFAULT_VOICE_REGISTRY: Record<string, AgentVoiceRegistryEntry> = {
 		avatarId: "raul",
 		provider: "web-speech",
 		voiceName: "Mission Director",
+		elevenVoiceId: "onwK4e9ZLuTAKqWW03F9",
 		piperModel: "en_US-norman-medium",
 		lang: "en-US",
 		pitch: 0.90,
@@ -446,6 +463,7 @@ export const DEFAULT_VOICE_REGISTRY: Record<string, AgentVoiceRegistryEntry> = {
 		avatarId: "val",
 		provider: "web-speech",
 		voiceName: "Warm Consensus Leader",
+		elevenVoiceId: "XB0fDUnXU5powFXDhCwa",
 		piperModel: "en_GB-alan-medium",
 		lang: "en-GB",
 		pitch: 1.02,
@@ -483,6 +501,9 @@ class TTSService {
 	private isProcessingQueue = false;
 	private voiceRegistry: Map<string, AgentVoiceRegistryEntry> = new Map();
 
+	private elevenVoiceOverrides: Map<string, string> = new Map();
+	private elevenLabsAvailable: boolean | null = null;
+
 	// Independent group mute states & current-point unmute boundaries
 	private groupMuted: Map<string, boolean> = new Map();
 	private groupEligibilityToken: Map<string, number> = new Map();
@@ -515,6 +536,22 @@ class TTSService {
 		// Initialize registry from defaults
 		for (const [key, val] of Object.entries(DEFAULT_VOICE_REGISTRY)) {
 			this.voiceRegistry.set(key, { ...val });
+		}
+
+		this.loadElevenVoiceOverrides();
+	}
+
+	private loadElevenVoiceOverrides() {
+		if (typeof window === "undefined") return;
+		try {
+			const saved = JSON.parse(localStorage.getItem(ELEVEN_VOICE_MAP_STORAGE_KEY) || "{}");
+			for (const [seatId, voiceId] of Object.entries(saved)) {
+				if (typeof voiceId === "string" && voiceId.trim()) {
+					this.elevenVoiceOverrides.set(seatId, voiceId.trim());
+				}
+			}
+		} catch {
+			// corrupted map falls back to defaults
 		}
 	}
 
@@ -722,6 +759,66 @@ class TTSService {
 	public updateVoiceRegistryEntry(seatId: string, updates: Partial<AgentVoiceRegistryEntry>) {
 		const existing = this.getVoiceProfile(seatId);
 		this.voiceRegistry.set(seatId, { ...existing, ...updates });
+	}
+
+	public isElevenLabsAvailable(): boolean | null {
+		return this.elevenLabsAvailable;
+	}
+
+	public async getElevenLabsStatus(): Promise<boolean> {
+		await this.ensureElevenLabsAvailable();
+		return Boolean(this.elevenLabsAvailable);
+	}
+
+	public refreshElevenLabsAvailability(): void {
+		this.elevenLabsAvailable = null;
+		void this.ensureElevenLabsAvailable();
+	}
+
+	private async ensureElevenLabsAvailable(): Promise<void> {
+		if (this.elevenLabsAvailable !== null) return;
+		try {
+			const resp = await fetch("/api/voice/status");
+			if (!resp.ok) {
+				this.elevenLabsAvailable = false;
+				return;
+			}
+			const data = (await resp.json()) as { configured?: boolean };
+			this.elevenLabsAvailable = Boolean(data?.configured);
+		} catch {
+			this.elevenLabsAvailable = false;
+		}
+	}
+
+	public getElevenVoice(seatId: string): string {
+		const override = this.elevenVoiceOverrides.get(seatId);
+		if (override) return override;
+		const profile = this.getVoiceProfile(seatId);
+		return profile.elevenVoiceId || DEFAULT_ELEVEN_FALLBACK_VOICE;
+	}
+
+	public setElevenVoice(seatId: string, voiceId?: string) {
+		if (voiceId) {
+			this.elevenVoiceOverrides.set(seatId, voiceId);
+		} else {
+			this.elevenVoiceOverrides.delete(seatId);
+		}
+		if (typeof window !== "undefined") {
+			try {
+				localStorage.setItem(ELEVEN_VOICE_MAP_STORAGE_KEY, JSON.stringify(Object.fromEntries(this.elevenVoiceOverrides)));
+			} catch {
+				// ignore persistence failures
+			}
+		}
+	}
+
+	public async listElevenVoices(): Promise<Array<{ voiceId: string; name: string; category?: string }>> {
+		const resp = await fetch("/api/voice/voices");
+		if (!resp.ok) {
+			throw new Error(`ElevenLabs voice catalog is unavailable (${resp.status}).`);
+		}
+		const data = (await resp.json()) as { voices?: Array<{ voiceId: string; name: string; category?: string }> };
+		return Array.isArray(data?.voices) ? data.voices : [];
 	}
 
 	public subscribe(cb: SpeakCallback) {
@@ -1028,6 +1125,11 @@ class TTSService {
 		this.currentSpeakingGroupId = groupId;
 		this.notify();
 
+		if (this.elevenLabsAvailable !== false) {
+			const spoken = await this.speakViaElevenLabs(cleanText, profile, currentGenToken, onComplete, groupId);
+			if (spoken) return;
+		}
+
 		// 1. Try local Piper daemon if available
 		try {
 			this.inFlightController = new AbortController();
@@ -1095,6 +1197,93 @@ class TTSService {
 
 		// 2. High-performance Browser Speech Synthesis fallback with custom pitch and rate
 		this.fallbackSpeechSynthesis(cleanText, profile, onComplete, groupId, currentGenToken);
+	}
+
+	/**
+	 * Premium provider path: synthesize through the backend ElevenLabs proxy.
+	 * Returns true when the utterance is handled here (played or suppressed);
+	 * false hands control back to the local provider chain.
+	 */
+	private async speakViaElevenLabs(
+		cleanText: string,
+		profile: AgentVoiceRegistryEntry,
+		currentGenToken: number,
+		onComplete?: () => void,
+		groupId = "main",
+	): Promise<boolean> {
+		await this.ensureElevenLabsAvailable();
+		if (!this.elevenLabsAvailable) {
+			return false;
+		}
+
+		const settleSuppressed = () => {
+			this.currentSpeakingSeat = null;
+			this.currentSpeakingMessageId = null;
+			this.currentSpeakingGroupId = null;
+			this.notify();
+			onComplete?.();
+		};
+
+		try {
+			this.inFlightController = new AbortController();
+			const timeout = setTimeout(() => this.inFlightController?.abort(), 30000);
+
+			const resp = await fetch("/api/voice/tts", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					text: cleanText,
+					voiceId: this.getElevenVoice(profile.seatId),
+					modelId: ELEVEN_CHAT_MODEL,
+				}),
+				signal: this.inFlightController.signal,
+			});
+			clearTimeout(timeout);
+			this.inFlightController = null;
+
+			if (currentGenToken !== this.generationToken || this.isGroupMuted(groupId) || !this.isTtsEnabled(groupId)) {
+				settleSuppressed();
+				return true;
+			}
+
+			if (!resp.ok) {
+				if (resp.status === 503) {
+					this.elevenLabsAvailable = false;
+				}
+				return false;
+			}
+
+			const blob = await resp.blob();
+			if (currentGenToken !== this.generationToken || this.isGroupMuted(groupId) || !this.isTtsEnabled(groupId)) {
+				settleSuppressed();
+				return true;
+			}
+
+			const audio = new Audio(URL.createObjectURL(blob));
+			this.activeAudioElement = audio;
+
+			audio.onended = () => {
+				this.activeAudioElement = null;
+				this.currentSpeakingSeat = null;
+				this.currentSpeakingMessageId = null;
+				this.currentSpeakingGroupId = null;
+				this.notify();
+				onComplete?.();
+			};
+			audio.onerror = () => {
+				this.activeAudioElement = null;
+				if (currentGenToken === this.generationToken && !this.isGroupMuted(groupId)) {
+					this.fallbackSpeechSynthesis(cleanText, profile, onComplete, groupId, currentGenToken);
+				} else {
+					onComplete?.();
+				}
+			};
+			await audio.play();
+			return true;
+		} catch {
+			this.inFlightController = null;
+			return false;
+		}
 	}
 
 	private fallbackSpeechSynthesis(

@@ -206,12 +206,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 	const [ttsMuted, setTtsMuted] = useState(ttsService.isMuted());
 	const [voiceRegistry, setVoiceRegistry] = useState<AgentVoiceRegistryEntry[]>([]);
 	const [speakingSeat, setSpeakingSeat] = useState<string | null>(null);
+	const [voiceCatalog, setVoiceCatalog] = useState<Array<{ voiceId: string; name: string; category?: string }>>([]);
+	const [voiceProvider, setVoiceProvider] = useState<"ready" | "unavailable">("unavailable");
 
 	useEffect(() => {
 		if (isOpen) {
 			setVoiceRegistry(ttsService.getVoiceRegistry());
 			setTtsEnabled(ttsService.isMasterEnabled());
 			setTtsMuted(ttsService.isMuted());
+			ttsService
+				.getElevenLabsStatus()
+				.then((ready) => {
+					setVoiceProvider(ready ? "ready" : "unavailable");
+					if (!ready) return;
+					ttsService
+						.listElevenVoices()
+						.then(setVoiceCatalog)
+						.catch(() => setVoiceCatalog([]));
+				})
+				.catch(() => setVoiceProvider("unavailable"));
 		}
 	}, [isOpen]);
 
@@ -697,8 +710,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 						<div className="space-y-4">
 							<div className="flex items-center justify-between">
 								<h4 className="font-bold text-sm text-slate-100">Voice &amp; Audio Settings</h4>
-								<span className="text-[11px] font-mono px-2 py-0.5 rounded bg-teal-950/60 border border-teal-800 text-teal-300">
-									Multi-Agent TTS Registry
+								<span
+									className={`text-[11px] font-mono px-2 py-0.5 rounded border ${
+										voiceProvider === "ready"
+											? "bg-teal-950/60 border-teal-800 text-teal-300"
+											: "bg-slate-950/60 border-slate-700 text-slate-400"
+									}`}
+								>
+									{voiceProvider === "ready" ? "ElevenLabs Studio Voices" : "Device Voices"}
 								</span>
 							</div>
 							<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -804,6 +823,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 														</div>
 													</div>
 													<div className="flex items-center gap-2 shrink-0">
+														{voiceProvider === "ready" && voiceCatalog.length > 0 && (
+															<select
+																value={ttsService.getElevenVoice(agent.seatId)}
+																onChange={(e) => {
+																	ttsService.setElevenVoice(agent.seatId, e.target.value || undefined);
+																	setVoiceRegistry(ttsService.getVoiceRegistry());
+																}}
+																className="max-w-[130px] bg-[#18203a] border border-[#263254] rounded-lg px-2 py-1.5 text-[10px] text-slate-200 focus:outline-none focus:ring-1 focus:ring-teal-400/60 truncate"
+																title={`ElevenLabs studio voice for ${agent.displayName}`}
+															>
+																<option value="">Studio default</option>
+																{voiceCatalog.map((v) => (
+																	<option key={v.voiceId} value={v.voiceId}>
+																		{v.name}
+																		{v.category ? ` · ${v.category}` : ""}
+																	</option>
+																))}
+															</select>
+														)}
 														<button
 															type="button"
 															onClick={() => handlePreviewVoice(agent.seatId)}
