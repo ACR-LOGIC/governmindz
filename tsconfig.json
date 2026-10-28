@@ -20,7 +20,8 @@
 			"@governmindz/core": ["./libs/core/src/index.ts"],
 			"@governmindz/core/*": ["./libs/core/src/*"],
 			"@governmindz/mcp-core": ["./libs/mcp-core/src/index.ts"],
-			"@governmindz/mcp-core/*": ["./libs/mcp-core/src/*"]
+			"@governmindz/mcp-core/*": ["./libs/mcp-core/src/*"],
+			"@governmindz/voice": ["./libs/voice/src/index.ts"]
 		}
 	},
 	"include": [

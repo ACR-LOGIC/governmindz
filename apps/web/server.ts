@@ -2,6 +2,7 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
+import { Readable } from "node:stream";
 import { randomUUID, createHash } from "node:crypto";
 import Database from "better-sqlite3";
 import { runDebate } from "../gateway/src/debateRunner.js";
@@ -24,6 +25,7 @@ import {
 import { zetarisQueryHandler } from "../gateway/src/tools/zetaris.tools.js";
 import { sharedResilientZetarisClient } from "@governmindz/core/integrations/ResilientZetarisClient";
 import { executeWebSearch } from "../gateway/src/tools/webSearch.tools.js";
+import { voiceService } from "@governmindz/voice";
 import { getConfigStatus, saveSecureConfig, loadLocalEnvIfPresent } from "../gateway/src/services/cryptoConfig.js";
 loadLocalEnvIfPresent();
 
@@ -1100,6 +1102,84 @@ async function handleHealth(_req: http.IncomingMessage, res: http.ServerResponse
 	sendJson(res, 200, { meterless, zetaris, missingCapabilities: currentMissing });
 }
 
+function handleVoiceStatus(_req: http.IncomingMessage, res: http.ServerResponse) {
+	sendJson(res, 200, { configured: voiceService.isConfigured() });
+}
+
+async function handleVoiceTts(req: http.IncomingMessage, res: http.ServerResponse) {
+	if (req.method !== "POST") {
+		sendJson(res, 405, { error: "Use POST to synthesize speech." });
+		return;
+	}
+	if (!voiceService.isConfigured()) {
+		sendJson(res, 503, { error: "ElevenLabs voice is not configured on this server." });
+		return;
+	}
+	let body = "";
+	req.on("data", (c: any) => (body += c));
+	req.on("end", async () => {
+		try {
+			const payload = JSON.parse(body || "{}");
+			const out = await voiceService.synthesizeStream({
+				text: String(payload.text ?? ""),
+				voiceId: String(payload.voiceId ?? ""),
+				modelId: payload.modelId ? String(payload.modelId) : undefined,
+				outputFormat: payload.outputFormat ? String(payload.outputFormat) : undefined,
+			});
+			res.writeHead(200, {
+				"Content-Type": "audio/mpeg",
+				"Cache-Control": "no-store",
+				"X-Content-Type-Options": "nosniff",
+			});
+			const nodeStream = Readable.fromWeb(out as any);
+			nodeStream.pipe(res);
+			nodeStream.on("error", () => {
+				try {
+					res.end();
+				} catch {
+					// ignore
+				}
+			});
+		} catch (err: any) {
+			if (res.headersSent) {
+				try {
+					res.end();
+				} catch {
+					// ignore
+				}
+				return;
+			}
+			const message = err instanceof Error ? err.message : "Speech synthesis failed.";
+			const status = message.includes("character limit") ? 413 : message.includes("voice") ? 400 : 502;
+			sendJson(res, status, { error: message });
+		}
+	});
+}
+
+async function handleVoiceCatalog(_req: http.IncomingMessage, res: http.ServerResponse) {
+	if (!voiceService.isConfigured()) {
+		sendJson(res, 503, { error: "ElevenLabs voice is not configured on this server." });
+		return;
+	}
+	try {
+		sendJson(res, 200, { voices: await voiceService.listVoices() });
+	} catch (err: any) {
+		sendJson(res, 502, { error: err?.message || "Failed to load the ElevenLabs voice catalog." });
+	}
+}
+
+async function handleScribeToken(_req: http.IncomingMessage, res: http.ServerResponse) {
+	if (!voiceService.isConfigured()) {
+		sendJson(res, 503, { error: "ElevenLabs voice is not configured on this server." });
+		return;
+	}
+	try {
+		sendJson(res, 200, { token: await voiceService.createScribeSingleUseToken() });
+	} catch (err: any) {
+		sendJson(res, 502, { error: err?.message || "Failed to create a scribe token." });
+	}
+}
+
 function handleScenarios(_req: http.IncomingMessage, res: http.ServerResponse) {
 	const dir = path.resolve(process.cwd(), "input_examples");
 	let files: string[] = [];
@@ -1750,6 +1830,14 @@ const server = http.createServer((req, res) => {
 		handleResult(req, res, runId);
 	} else if (pathname === "/api/web-search") {
 		handleWebSearch(req, res);
+	} else if (pathname === "/api/voice/status") {
+		handleVoiceStatus(req, res);
+	} else if (pathname === "/api/voice/tts") {
+		void handleVoiceTts(req, res);
+	} else if (pathname === "/api/voice/voices") {
+		void handleVoiceCatalog(req, res);
+	} else if (pathname === "/api/voice/scribe-token") {
+		void handleScribeToken(req, res);
 	} else if (pathname === "/api/preferences") {
 		handlePreferences(req, res);
 	} else if (pathname === "/api/config") {

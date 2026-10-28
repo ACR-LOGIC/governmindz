@@ -20,6 +20,8 @@ import {
 	Cpu,
 	Volume2,
 	VolumeX,
+	Mic,
+	Square,
 	Database,
 	Compass,
 	BookOpen,
@@ -29,6 +31,8 @@ import {
 import { AVAILABLE_MODELS, type ModelOption } from "../../services/models";
 import { fetchModels } from "../../services/api";
 import { ttsService } from "../../services/ttsService";
+import { notificationService } from "../../services/notificationService";
+import { useScribe, CommitStrategy } from "@elevenlabs/react";
 import { resolveDemoOptionsVisibility } from "../../services/demoOptionsVisibility";
 import { DEMO_SCENARIOS, type DemoScenarioOption } from "../../services/demoScenarios";
 
@@ -125,6 +129,20 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 	const [plusMenuOpen, setPlusMenuOpen] = useState(false);
 	const [searchMenuOpen, setSearchMenuOpen] = useState(false);
 	const [modelMenuOpen, setModelMenuOpen] = useState(false);
+	const [micArming, setMicArming] = useState(false);
+
+	const scribe = useScribe({
+		modelId: "scribe_v2_realtime",
+		commitStrategy: CommitStrategy.VAD,
+		noVerbatim: true,
+		includeLanguageDetection: true,
+		onCommittedTranscript: (seg) => {
+			const chunk = seg?.text?.trim();
+			if (!chunk) return;
+			setText((prev) => (prev.trim() ? `${prev.trim()} ${chunk}` : chunk));
+			requestAnimationFrame(() => textareaRef.current?.scrollTo(0, textareaRef.current.scrollHeight));
+		},
+	});
 
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
@@ -285,6 +303,42 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 			onSelectScenarioFile(scenario.file);
 		}
 	};
+
+	const toggleMic = useCallback(async () => {
+		if (scribe.isConnected || micArming) {
+			scribe.disconnect();
+			setMicArming(false);
+			return;
+		}
+		if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+			notificationService.add({ type: "error", title: "Voice input unavailable", body: "This browser does not expose microphone capture." });
+			return;
+		}
+		if (!window.isSecureContext) {
+			notificationService.add({ type: "warning", title: "Voice input unavailable", body: "Microphone streaming requires a secure context." });
+			return;
+		}
+		setMicArming(true);
+		try {
+			const permStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+			permStream.getTracks().forEach((t) => t.stop());
+		} catch {
+			setMicArming(false);
+			notificationService.add({ type: "warning", title: "Microphone blocked", body: "Grant mic permission in your browser settings to dictate prompts." });
+			return;
+		}
+		try {
+			const resp = await fetch("/api/voice/scribe-token");
+			if (!resp.ok) throw new Error(`scribe token ${resp.status}`);
+			const data = (await resp.json()) as { token?: string; value?: string };
+			await scribe.connect({ token: data.token || data.value });
+		} catch {
+			scribe.disconnect();
+			notificationService.add({ type: "error", title: "Voice input unavailable", body: "Real-time transcription service is unreachable." });
+		} finally {
+			setMicArming(false);
+		}
+	}, [scribe, micArming]);
 
 	const handleExecuteDemo = () => {
 		setManualDemoOptionsOverride(false);
@@ -614,8 +668,14 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 								value={text}
 								onChange={(e) => setText(e.target.value)}
 								onKeyDown={handleKeyDown}
-								placeholder="Ask anything."
-								disabled={isBusy || disabled}
+								placeholder={
+									scribe.isConnected || scribe.isTranscribing
+										? scribe.partialTranscript.trim()
+											? `Listening… "${scribe.partialTranscript.trim()}"`
+											: "Listening… speak your prompt."
+										: "Ask anything."
+								}
+								disabled={isBusy || disabled || scribe.isConnected}
 								className="w-full bg-transparent border-0 resize-none text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none px-2 py-1 max-h-36 overflow-y-auto leading-relaxed"
 							/>
 						)}
@@ -812,6 +872,34 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 										</div>
 									)}
 								</div>
+
+								{/* [🎙️ Voice Input] Dictation Button */}
+								<button
+									type="button"
+									onClick={toggleMic}
+									disabled={isBusy || disabled}
+									className={`p-2 rounded-full transition-all ${
+										micArming || scribe.status === "connecting"
+											? "bg-teal-500/20 border border-teal-500/50 text-teal-200 shadow-[0_0_10px_rgba(20,184,166,0.35)]"
+											: scribe.isConnected || scribe.isTranscribing
+												? "bg-red-500/20 border border-red-500/50 text-red-300 shadow-[0_0_12px_rgba(239,68,68,0.45)]"
+												: "text-slate-400 hover:text-slate-200 hover:bg-[#1a233c]"
+									}`}
+									title={
+										scribe.isConnected || scribe.isTranscribing
+											? "Stop dictation — VAD will finalize spoken text"
+											: "Dictate prompt with your microphone"
+									}
+									aria-label={scribe.isConnected || scribe.isTranscribing ? "Stop dictation" : "Start dictation"}
+								>
+									{micArming || scribe.status === "connecting" ? (
+										<Loader2 className="w-4 h-4 animate-spin" />
+									) : scribe.isConnected || scribe.isTranscribing ? (
+										<Square className="w-3.5 h-3.5 fill-current" />
+									) : (
+										<Mic className="w-4 h-4" />
+									)}
+								</button>
 
 								{/* [🎙️ / 🔊 Voice] Toggle Button */}
 								<button

@@ -37,10 +37,12 @@
     "vite": "^8.3.5"
   },
   "dependencies": {
+    "@elevenlabs/elevenlabs-js": "^2.75.0",
+    "@elevenlabs/react": "^1.20.1",
+    "@playwright/test": "^1.64.1",
     "better-sqlite3": "^13.0.3",
     "lucide-react": "^1.61.0",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1",
-    "@playwright/test": "^1.64.1"
+    "react-dom": "^19.3.1"
   }
 }

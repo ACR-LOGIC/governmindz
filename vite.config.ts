@@ -82,6 +82,7 @@ export default defineConfig({
 		alias: {
 			"@governmindz/core": path.resolve(process.cwd(), "libs/core/src/index.ts"),
 			"@governmindz/core/*": path.resolve(process.cwd(), "libs/core/src/*"),
+			"@governmindz/voice": path.resolve(process.cwd(), "libs/voice/src/index.ts"),
 			"@": path.resolve(process.cwd(), "apps/web/src"),
 		},
 	},

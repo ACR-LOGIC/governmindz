@@ -92,6 +92,16 @@ declare module "node:url" {
 	export function fileURLToPath(url: string | URL): string;
 }
 
+declare module "node:stream" {
+	export class Readable {
+		pipe(destination: any, options?: { end?: boolean }): void;
+		on(event: string, listener: (chunk?: any) => void): this;
+		end(): void;
+		destroy(error?: any): void;
+		static fromWeb(stream: any, options?: { objectMode?: boolean }): Readable;
+	}
+}
+
 declare module "node:http" {
 	export interface IncomingMessage {
 		headers: Record<string, string | string[] | undefined>;
