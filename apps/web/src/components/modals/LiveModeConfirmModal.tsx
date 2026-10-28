@@ -25,8 +25,8 @@ export const LiveModeConfirmModal: React.FC<LiveModeConfirmModalProps> = ({
 	const missingCredentials = !meterlessConfigured || !zetarisConfigured;
 
 	return (
-		<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
-			<div className="max-w-lg w-full bg-[#0d1326] border border-[#232f50] rounded-2xl shadow-2xl p-6 text-slate-100 relative space-y-5 animate-scaleUp">
+		<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-[24px] animate-fadeIn">
+			<div className="max-w-lg w-full bg-[#0d1326]/90 border border-[#232f50]/80 rounded-2xl shadow-2xl p-6 text-slate-100 relative space-y-5 animate-scaleIn glass-panel">
 				{/* Header */}
 				<div className="flex items-center justify-between border-b border-[#1b2542] pb-3">
 					<div className="flex items-center gap-2.5">

@@ -18,6 +18,7 @@ import {
 	FileSpreadsheet,
 	FileCode,
 	Layers,
+	Bell,
 } from "lucide-react";
 import type { ActiveTab, HealthStatus, Conversation } from "../../types";
 import { ttsService } from "../../services/ttsService";
@@ -28,6 +29,8 @@ import {
 	type ConversationExportFormat,
 } from "../../services/exportBundle";
 import { evaluateWebConversation, formatConfidence } from "../../services/conversationEvaluation";
+import { notificationService } from "../../services/notificationService";
+import { NotificationCenter } from "../common/NotificationCenter";
 
 type ExportPhase = "idle" | "working" | "success" | "error";
 
@@ -64,9 +67,8 @@ interface HeaderProps {
 	activeConversation?: Conversation | null;
 	onToggleMode?: () => void;
 	onOpenCredentials?: () => void;
+	onOpenTour?: () => void;
 }
-
-
 
 export const Header: React.FC<HeaderProps> = ({
 	activeTab,
@@ -83,11 +85,14 @@ export const Header: React.FC<HeaderProps> = ({
 	activeConversation,
 	onToggleMode,
 	onOpenCredentials,
+	onOpenTour,
 }) => {
 	const meterlessOnline = health?.meterless?.state === "online";
 	const zetarisOnline = health?.zetaris?.ok;
 
 	const [ttsEnabled, setTtsEnabled] = useState(false);
+	const [notificationPanelOpen, setNotificationPanelOpen] = useState(false);
+	const [unreadCount, setUnreadCount] = useState(0);
 	const [exportMenuOpen, setExportMenuOpen] = useState(false);
 	const [meterlessConnecting, setMeterlessConnecting] = useState(false);
 	const [exportState, setExportState] = useState<ExportUiState>({
@@ -96,12 +101,20 @@ export const Header: React.FC<HeaderProps> = ({
 	});
 	const exportRef = useRef<HTMLDivElement>(null);
 	const exportAbortRef = useRef<AbortController | null>(null);
+	const notificationRef = useRef<HTMLButtonElement>(null);
 	const evaluation = activeConversation ? evaluateWebConversation(activeConversation) : null;
 	const archiveEnabled = evaluation?.status === "EVALUATED";
 	const exportBusy = exportState.phase === "working";
 
 	useEffect(() => {
 		setTtsEnabled(ttsService.isTtsEnabled());
+	}, []);
+
+	useEffect(() => {
+		const unsub = notificationService.subscribe((list) => {
+			setUnreadCount(list.filter((n) => !n.read).length);
+		});
+		return unsub;
 	}, []);
 
 	useEffect(() => {
@@ -208,8 +221,26 @@ export const Header: React.FC<HeaderProps> = ({
 				setExportMenuOpen(false);
 			}
 		};
+		const handleTourExportMenu = (e: Event) => {
+			const open = Boolean((e as CustomEvent<{ open?: boolean }>).detail?.open);
+			setExportMenuOpen(open);
+		};
 		document.addEventListener("mousedown", handleClickOutside);
-		return () => document.removeEventListener("mousedown", handleClickOutside);
+		window.addEventListener("governmindz:tour-export-menu", handleTourExportMenu);
+		return () => {
+			document.removeEventListener("mousedown", handleClickOutside);
+			window.removeEventListener("governmindz:tour-export-menu", handleTourExportMenu);
+		};
+	}, []);
+
+	useEffect(() => {
+		const handleNotificationOutside = (e: MouseEvent) => {
+			if (notificationRef.current && !notificationRef.current.contains(e.target as Node)) {
+				setNotificationPanelOpen(false);
+			}
+		};
+		document.addEventListener("mousedown", handleNotificationOutside);
+		return () => document.removeEventListener("mousedown", handleNotificationOutside);
 	}, []);
 
 	const handleToggleTts = () => {
@@ -236,14 +267,37 @@ export const Header: React.FC<HeaderProps> = ({
 		}
 	};
 
+	const navItem = (
+		icon: React.ReactNode,
+		label: string,
+		tab: ActiveTab,
+		activeColor: string,
+	) => {
+		const active = activeTab === tab;
+		return (
+			<button
+				type="button"
+				onClick={() => setActiveTab(tab)}
+				className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+					active
+						? `bg-[#262632] text-${activeColor} shadow-sm shadow-black/40`
+						: "text-slate-400 hover:text-slate-200 hover:bg-[#1e1e26]"
+				}`}
+			>
+				{icon}
+				<span>{label}</span>
+			</button>
+		);
+	};
+
 	return (
-		<header className="h-14 border-b border-[#22222a] bg-[#111114]/90 backdrop-blur-md px-4 flex items-center justify-between shrink-0 z-20">
+		<header className="h-16 border-b border-[#1e2842] bg-[#0a0e1a]/90 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between shrink-0 z-30">
 			{/* Left side: Sidebar toggle and Brand title */}
 			<div className="flex items-center gap-3">
 				<button
 					type="button"
 					onClick={() => setLeftSidebarOpen(!leftSidebarOpen)}
-					className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#1e1e26] transition-colors"
+					className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-surface transition-colors transition-smooth"
 					title={leftSidebarOpen ? "Collapse navigation" : "Expand navigation"}
 					aria-label="Toggle navigation sidebar"
 				>
@@ -254,10 +308,10 @@ export const Header: React.FC<HeaderProps> = ({
 					<img
 						src="/governmindz-logo.png"
 						alt="GovernMindz logo"
-						className="h-8 w-8 rounded-full object-cover ring-1 ring-amber-400/40 shadow-[0_0_16px_rgba(59,130,246,0.35)]"
+						className="h-8 w-8 rounded-xl object-cover ring-1 ring-amber-400/50 shadow-lg shadow-amber-950/30"
 					/>
 					<div className="flex items-baseline gap-2">
-						<span className="font-display font-bold text-lg tracking-tight text-[#f4b942]">
+						<span className="font-display font-bold text-xl tracking-tight text-[#f4b942]">
 							GovernMindz
 						</span>
 						<span className="hidden sm:inline-block text-[10px] font-mono tracking-widest uppercase text-slate-400">
@@ -268,82 +322,47 @@ export const Header: React.FC<HeaderProps> = ({
 			</div>
 
 			{/* Center: 3 Integrated Views Navigation */}
-			<div id="tour-explorer" className="flex items-center bg-[#16161c] border border-[#262630] p-1 rounded-xl gap-1">
-				<button
-					type="button"
-					onClick={() => setActiveTab("chat")}
-					className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-						activeTab === "chat"
-							? "bg-[#262632] text-[#5eead4] shadow-sm shadow-black/40"
-							: "text-slate-400 hover:text-slate-200"
-					}`}
-				>
-					<MessageSquare className="w-3.5 h-3.5" />
-					<span>Conversation</span>
-				</button>
-
-				<button
-					type="button"
-					onClick={() => setActiveTab("explorer")}
-					className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-						activeTab === "explorer"
-							? "bg-[#262632] text-[#f4b942] shadow-sm shadow-black/40"
-							: "text-slate-400 hover:text-slate-200"
-					}`}
-				>
-					<Activity className="w-3.5 h-3.5" />
-					<span>Execution</span>
-				</button>
-
-				<button
-					id="tour-evidence"
-					type="button"
-					onClick={() => setActiveTab("evidence")}
-					className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-						activeTab === "evidence"
-							? "bg-[#262632] text-[#34d399] shadow-sm shadow-black/40"
-							: "text-slate-400 hover:text-slate-200"
-					}`}
-				>
-					<ShieldCheck className="w-3.5 h-3.5" />
-					<span>Trust & Evidence</span>
-				</button>
+			<div id="tour-explorer" className="flex items-center bg-[#111114]/80 border border-[#262630] p-1.5 rounded-xl gap-1.5 backdrop-blur-sm shadow-lg">
+				{navItem(<MessageSquare className="w-3.5 h-3.5" />, "Conversation", "chat", "teal-400")}
+				{navItem(<Activity className="w-3.5 h-3.5" />, "Execution", "explorer", "amber-400")}
+				{navItem(
+					<ShieldCheck className="w-3.5 h-3.5" />,
+					"Trust & Evidence",
+					"evidence",
+					"emerald-400",
+				)}
 			</div>
 
 			{/* Right side: Audio Toggle and Infrastructure indicators */}
 			<div className="flex items-center gap-2">
-				{/* Speaker Icon Toggle: Local Text-to-Speech (Piper / Web Speech) */}
+				{/* Speaker Icon Toggle */}
 				<button
 					type="button"
 					onClick={handleToggleTts}
-					className={`p-1.5 rounded-lg transition-all ${
+					className={`p-1.5 rounded-xl transition-all ${
 						ttsEnabled
-							? "bg-amber-500/20 border border-amber-500/40 text-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.3)]"
-							: "text-slate-400 hover:text-white hover:bg-[#1e1e26]"
+							? "bg-amber-500/20 border border-amber-500/40 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.25)]"
+							: "text-slate-400 hover:text-white hover:bg-surface hover:border-[#2a2a38] border-transparent"
 					}`}
-					title={
-						ttsEnabled
-							? "Voice Synthesis ACTIVE — Click to mute"
-							: "Voice Synthesis MUTED — Click to activate speech"
-					}
+					title={ttsEnabled ? "Voice Synthesis ACTIVE — Click to mute" : "Voice Synthesis MUTED — Click to activate speech"}
 					aria-label="Toggle voice synthesis"
 				>
 					{ttsEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
 				</button>
 
 				{/* Independent Infrastructure Connection Indicators */}
-				<div className="hidden lg:flex items-center gap-1.5 text-[11px] font-mono">
+				<div id="tour-connectivity" className="hidden lg:flex items-center gap-1.5 text-[11px] font-mono">
 					{/* Meterless Indicator */}
 					<button
 						type="button"
 						onClick={handleMeterlessClick}
 						disabled={meterlessConnecting}
-						className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md border transition-colors ${
+						className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-xl border transition-all ${
 							meterlessOnline
-								? "bg-emerald-950/40 border-emerald-800 text-emerald-300"
+								? "bg-emerald-950/40 border-emerald-800/60 text-emerald-300 hover:bg-emerald-950/60"
 								: mode === "live"
-								? "bg-rose-950/40 border-rose-800 text-rose-300 cursor-pointer"
-								: "bg-[#181822] border-[#2a2a38] text-slate-400"
+								? "bg-rose-950/40 border-rose-800/60 text-rose-300 hover:bg-rose-950/60 cursor-pointer"
+								: "bg-[#12182b] border-[#262630] text-slate-400 hover:bg-[#161f3c] hover:border-[#2c385c]"
 						}`}
 						title={
 							meterlessConnecting
@@ -358,25 +377,25 @@ export const Header: React.FC<HeaderProps> = ({
 						<span
 							className={`w-1.5 h-1.5 rounded-full ${
 								meterlessOnline
-									? "bg-emerald-400 animate-pulse"
+									? "bg-emerald-400 animate-pulse-dot"
 									: mode === "live"
 									? "bg-rose-400"
 									: "bg-slate-500"
 							}`}
 						/>
-						<span>{meterlessConnecting ? "Connecting..." : "Meterless"}</span>
+						<span>{meterlessConnecting ? "Connecting…" : "Meterless"}</span>
 					</button>
 
 					{/* Zetaris Indicator */}
 					<button
 						type="button"
 						onClick={onOpenCredentials}
-						className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md border transition-colors ${
+						className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-xl border transition-all ${
 							zetarisOnline
-								? "bg-emerald-950/40 border-emerald-800 text-emerald-300"
+								? "bg-emerald-950/40 border-emerald-800/60 text-emerald-300 hover:bg-emerald-950/60"
 								: mode === "live"
-								? "bg-rose-950/40 border-rose-800 text-rose-300 cursor-pointer"
-								: "bg-[#181822] border-[#2a2a38] text-slate-400"
+								? "bg-rose-950/40 border-rose-800/60 text-rose-300 hover:bg-rose-950/60 cursor-pointer"
+								: "bg-[#12182b] border-[#262630] text-slate-400 hover:bg-[#161f3c] hover:border-[#2c385c]"
 						}`}
 						title={
 							zetarisOnline
@@ -389,7 +408,7 @@ export const Header: React.FC<HeaderProps> = ({
 						<span
 							className={`w-1.5 h-1.5 rounded-full ${
 								zetarisOnline
-									? "bg-emerald-400 animate-pulse"
+									? "bg-emerald-400 animate-pulse-dot"
 									: mode === "live"
 									? "bg-rose-400"
 									: "bg-slate-500"
@@ -404,26 +423,48 @@ export const Header: React.FC<HeaderProps> = ({
 					id="tour-mode"
 					type="button"
 					onClick={onToggleMode}
-					className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono uppercase font-semibold border transition-all cursor-pointer ${
+					className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-mono uppercase font-bold border transition-all cursor-pointer ${
 						mode === "live"
-							? "bg-emerald-950/50 border-emerald-600/60 text-emerald-300 hover:border-emerald-400"
-							: "bg-amber-950/50 border-amber-600/60 text-amber-300 hover:border-amber-400"
+							? "bg-emerald-950/50 border-emerald-600/60 text-emerald-300 hover:border-emerald-400 hover:bg-emerald-950/80"
+							: "bg-amber-950/50 border-amber-600/60 text-amber-300 hover:border-amber-400 hover:bg-amber-950/80"
 					}`}
 					title={`Current mode: ${mode.toUpperCase()} (Click to change mode)`}
 				>
 					<span
 						className={`w-1.5 h-1.5 rounded-full ${
-							mode === "live" ? "bg-emerald-400 animate-pulse" : "bg-amber-400"
+							mode === "live" ? "bg-emerald-400 animate-pulse-dot" : "bg-amber-400"
 						}`}
 					/>
 					<span>{mode === "live" ? "Live Mode" : "Demo Mode"}</span>
+				</button>
+
+				{/* Notification Bell */}
+				<button
+					id="tour-notifications"
+					ref={notificationRef}
+					type="button"
+					onClick={() => setNotificationPanelOpen(!notificationPanelOpen)}
+					className={`p-1.5 rounded-xl transition-all relative ${
+						unreadCount > 0
+							? "text-amber-400 bg-amber-950/20 border border-amber-500/40 shadow-[0_0_10px_rgba(245,158,11,0.25)]"
+							: "text-slate-400 hover:text-white hover:bg-surface hover:border-transparent border-transparent"
+					}`}
+					title={unreadCount > 0 ? `${unreadCount} unread notifications` : "Notifications"}
+					aria-label="Notifications"
+					aria-expanded={notificationPanelOpen}
+					aria-haspopup="true"
+				>
+					<Bell className="w-4 h-4" />
+					{unreadCount > 0 && (
+						<span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-amber-500 ring-2 ring-[#0a0e1a]" />
+					)}
 				</button>
 
 				{/* Refresh health button */}
 				<button
 					type="button"
 					onClick={refreshHealth}
-					className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#1e1e26] transition-colors"
+					className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-surface transition-colors transition-smooth"
 					title="Check Connectivity"
 					aria-label="Check Connectivity"
 				>
@@ -431,16 +472,16 @@ export const Header: React.FC<HeaderProps> = ({
 				</button>
 
 				{/* Platform-Wide Export Menu */}
-				<div className="relative" ref={exportRef}>
+				<div id="tour-export" className="relative" ref={exportRef}>
 					<button
 						type="button"
 						onClick={() => setExportMenuOpen(!exportMenuOpen)}
 						disabled={!activeConversation}
-						className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+						className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
 							exportMenuOpen
 								? "bg-[#1f1f28] border-amber-500/50 text-amber-300"
-								: "border-[#2e2e38] bg-[#16161a] text-slate-300 hover:text-white hover:border-[#3e3e4c]"
-						} ${!activeConversation ? "opacity-50 cursor-not-allowed" : ""}`}
+								: "border-[#2e2e38] bg-[#111114] text-slate-300 hover:text-white hover:border-[#3e3e4c]"
+						} ${!activeConversation ? "opacity-60 cursor-not-allowed" : ""}`}
 						title="Export conversation history and granular outputs"
 						aria-label="Export debate outputs"
 					>
@@ -450,148 +491,155 @@ export const Header: React.FC<HeaderProps> = ({
 					</button>
 
 					{exportMenuOpen && activeConversation && (
-					<div className="absolute right-0 mt-2 w-80 bg-[#141418] border border-[#2a2a36] rounded-xl shadow-2xl p-2 z-50 animate-fadeIn space-y-1">
-						<div className="flex items-center justify-between px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-slate-400 border-b border-[#22222c]">
-							<span>Export conversation</span>
-							<button
-								type="button"
-								onClick={() => setExportMenuOpen(false)}
-								className="text-slate-400 hover:text-white"
-								aria-label="Close export menu"
-							>
-								✕
-							</button>
-						</div>
-
-						{evaluation ? (
-							<div className="px-2 py-1.5 text-[10px] font-mono border-b border-[#22222c] pb-1.5">
-								{evaluation.status === "EVALUATED"
-									? `Evaluated · Confidence: ${formatConfidence(evaluation.confidence)} · Download All: enabled`
-									: `Not evaluated · Confidence: ${formatConfidence(evaluation.confidence)} · Download All: disabled until evaluation completes`}
-							</div>
-						) : null}
-
-						<div className="px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-slate-400 border-b border-[#22222c] pb-1">
-							Single formats
-						</div>
-						{exportActions.map((action) => (
-							<button
-								key={action.format}
-								type="button"
-								disabled={exportBusy}
-								onClick={() => runExport(action.format)}
-								className={`w-full flex items-start gap-2.5 p-2 rounded-lg text-left transition-colors ${
-									exportBusy ? "opacity-60 cursor-not-allowed" : "hover:bg-[#1f1f28] text-slate-200"
-								}`}
-							>
-								{action.icon}
-								<div>
-									<div className="text-xs font-semibold">{action.label}</div>
-									<div className="text-[10px] text-slate-400 leading-tight">
-										{action.description}
-									</div>
-								</div>
-							</button>
-						))}
-
-						<div className="px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider text-slate-500 border-t border-[#22222c] pt-1">
-							Conversation archive
-						</div>
-						<button
-							type="button"
-							id="tour-download-all"
-							disabled={exportBusy || !archiveEnabled}
-							onClick={() => runExport("zip")}
-							aria-disabled={!archiveEnabled}
-							className={`w-full flex items-start gap-2.5 p-2 rounded-lg border text-left transition-colors ${
-								!archiveEnabled
-									? "border-[#4c566a] bg-[#1a1a24] text-slate-500 opacity-80 cursor-not-allowed"
-									: exportBusy
-										? "border-amber-500/60 bg-[#2a1b0a] text-amber-200 opacity-60 cursor-not-allowed"
-										: "border-amber-500/50 bg-[#16161a] text-amber-300 hover:bg-[#1f1f28] hover:border-amber-400"
-							} mb-1`}
-						>
-							<Download className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-							<div>
-								<div className="text-xs font-semibold">
-									{archiveEnabled ? "Download All (.ZIP)" : "Download All (.ZIP)"}
-								</div>
-								<div className="text-[10px] text-slate-400 leading-tight">
-									{archiveEnabled
-										? "Complete evaluable export including all referenced artifacts"
-										: "Complete evaluation required before archive download"}
-								</div>
-							</div>
-						</button>
-
-						{exportState.phase === "working" && (
-							<div className="px-2 py-1.5 flex flex-col gap-1.5 border-t border-[#22222c] pt-1">
-								<div className="flex items-center gap-2">
-									<RefreshCw className="w-3.5 h-3.5 text-amber-400 animate-spin" />
-									<span className="text-xs font-semibold text-amber-300">
-										Generating {EXPORT_LABELS[exportState.format || "zip"]}...
-									</span>
-								</div>
+						<div className="absolute right-0 mt-3 w-96 glass-panel rounded-xl shadow-2xl p-2 z-50 animate-scaleIn space-y-1">
+							<div className="flex items-center justify-between px-3 py-2 text-[10px] font-mono uppercase tracking-wider text-slate-400 border-b border-[#22222c]">
+								<span>Export conversation</span>
 								<button
 									type="button"
-									onClick={cancelExport}
-									className="w-full p-1.5 rounded bg-[#2a1b0a] border border-amber-900/50 text-amber-300 text-[10px] hover:bg-[#2a1b0a]/70"
+									onClick={() => setExportMenuOpen(false)}
+									className="text-slate-400 hover:text-white hover:bg-[#22222c] rounded p-1 transition-colors"
+									aria-label="Close export menu"
 								>
-									Cancel export
+									✕
 								</button>
 							</div>
-						)}
 
-						{exportState.phase === "success" && (
-							<div className="px-2 py-1.5 flex flex-col gap-1.5 border-t border-[#22222c] pt-1 bg-[#0b2117]">
-								<div className="flex items-center gap-2">
-									<span className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse" />
-									<span className="text-xs font-semibold text-emerald-300">
-										{exportState.message || "Downloaded"}
-									</span>
+							{evaluation ? (
+								<div className="px-3 py-2 text-[10px] font-mono border-b border-[#22222c] pb-2">
+									{evaluation.status === "EVALUATED"
+										? `Evaluated · Confidence: ${formatConfidence(evaluation.confidence)} · Download All: enabled`
+										: `Not evaluated · Confidence: ${formatConfidence(evaluation.confidence)} · Download All: disabled until evaluation completes`}
 								</div>
-								{exportState.warnings.length > 0 && (
-									<div className="text-[10px] text-amber-300 leading-tight">
-										{exportState.warnings.join(" ")}
+							) : null}
+
+							<div className="px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider text-slate-400 border-b border-[#22222c] pb-1">
+								Single formats
+							</div>
+							{exportActions.map((action) => (
+								<button
+									key={action.format}
+									type="button"
+									disabled={exportBusy}
+									onClick={() => runExport(action.format)}
+									className={`w-full flex items-start gap-2.5 p-2.5 rounded-lg text-left transition-all ${
+										exportBusy ? "opacity-60 cursor-not-allowed" : "hover:bg-surface hover:text-slate-200 hover:border-transparent"
+									}`}
+								>
+									{action.icon}
+									<div>
+										<div className="text-xs font-semibold">{action.label}</div>
+										<div className="text-[10px] text-slate-400 leading-tight">{action.description}</div>
 									</div>
-								)}
-								{exportState.format && (
-									<button
-										type="button"
-										onClick={() => runExport(exportState.format ?? "pdf")}
-										className="w-full p-1 rounded bg-emerald-900/30 border border-emerald-600/40 text-emerald-200 text-[10px] hover:bg-emerald-900/50"
-									>
-										Download again
-									</button>
-								)}
-							</div>
-						)}
+								</button>
+							))}
 
-						{exportState.phase === "error" && (
-							<div className="px-2 py-1.5 flex flex-col gap-1.5 border-t border-[#22222c] pt-1 bg-[#2e1616]">
-								<div className="text-[10px] text-rose-300 leading-tight break-words">
-									{exportState.message || "Export failed"}
+							<div className="px-3 py-1 text-[10px] font-mono uppercase tracking-wider text-slate-500 border-t border-[#22222c] pt-1">
+								Conversation archive
+							</div>
+							<button
+								type="button"
+								id="tour-download-all"
+								disabled={exportBusy || !archiveEnabled}
+								onClick={() => runExport("zip")}
+								aria-disabled={!archiveEnabled}
+								className={`w-full flex items-start gap-2.5 p-2.5 rounded-lg border text-left transition-all ${
+									!archiveEnabled
+										? "border-[#4c566a] bg-[#1a1a24] text-slate-500 opacity-80 cursor-not-allowed"
+										: exportBusy
+										? "border-amber-500/60 bg-[#2a1b0a] text-amber-200 opacity-60 cursor-not-allowed"
+										: "border-amber-500/50 bg-[#111114] text-amber-300 hover:bg-surface hover:border-amber-400"
+								} mb-1`}
+							>
+								<Download className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+								<div>
+									<div className="text-xs font-semibold">
+										{archiveEnabled ? "Download All (.ZIP)" : "Download All (.ZIP)"}
+									</div>
+									<div className="text-[10px] text-slate-400 leading-tight">
+										{archiveEnabled
+											? "Complete evaluable export including all referenced artifacts"
+											: "Complete evaluation required before archive download"}
+									</div>
 								</div>
-								{exportState.format && (
+							</button>
+
+							{exportState.phase === "working" && (
+								<div className="px-3 py-2 flex flex-col gap-1.5 border-t border-[#22222c] pt-2">
+									<div className="flex items-center gap-2">
+										<RefreshCw className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+										<span className="text-xs font-semibold text-amber-300">
+											Generating {EXPORT_LABELS[exportState.format || "zip"]}...
+										</span>
+									</div>
 									<button
 										type="button"
-										onClick={() => runExport(exportState.format ?? "pdf")}
-										className="w-full p-1 rounded bg-[#7f1d1d] border border-rose-700 text-rose-200 text-[10px] hover:bg-[#7f1d1d]/70"
+										onClick={cancelExport}
+										className="w-full p-1.5 rounded-lg bg-[#2a1b0a]/50 border border-amber-900/50 text-amber-300 text-[10px] hover:bg-[#2a1b0a]/80 transition-colors"
 									>
-										Retry
+										Cancel export
 									</button>
-								)}
-							</div>
-						)}
-					</div>
-				)}
+								</div>
+							)}
+
+							{exportState.phase === "success" && (
+								<div className="px-3 py-2 flex flex-col gap-1.5 border-t border-[#22222c] pt-2 bg-[#0b2117]/40">
+									<div className="flex items-center gap-2">
+										<span className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse-dot" />
+										<span className="text-xs font-semibold text-emerald-300">{exportState.message || "Downloaded"}</span>
+									</div>
+									{exportState.warnings.length > 0 && (
+										<div className="text-[10px] text-amber-300 leading-tight">{exportState.warnings.join(" ")}</div>
+									)}
+									{exportState.format && (
+										<button
+											type="button"
+											onClick={() => runExport(exportState.format ?? "pdf")}
+											className="w-full p-1.5 rounded-lg bg-emerald-900/30 border border-emerald-600/40 text-emerald-200 text-[10px] hover:bg-emerald-900/50 transition-colors"
+										>
+											Download again
+										</button>
+									)}
+								</div>
+							)}
+
+							{exportState.phase === "error" && (
+								<div className="px-3 py-2 flex flex-col gap-1.5 border-t border-[#22222c] pt-2 bg-[#2e1616]/40">
+									<div className="text-[10px] text-rose-300 leading-tight break-words">{exportState.message || "Export failed"}</div>
+									{exportState.format && (
+										<button
+											type="button"
+											onClick={() => runExport(exportState.format ?? "pdf")}
+											className="w-full p-1.5 rounded-lg bg-[#7f1d1d]/50 border border-rose-700 text-rose-200 text-[10px] hover:bg-[#7f1d1d]/80 transition-colors"
+										>
+											Retry
+										</button>
+									)}
+								</div>
+							)}
+						</div>
+					)}
 				</div>
+
+				{/* Guided Tour button */}
+				{onOpenTour && (
+					<button
+						id="tour-trigger-btn"
+						type="button"
+						onClick={onOpenTour}
+						className="hidden md:flex items-center gap-1 px-3 py-1.5 rounded-xl border border-teal-500/40 bg-teal-950/30 text-teal-300 hover:text-white hover:bg-teal-900/40 text-xs font-semibold transition-all"
+						title="Start Interactive Guided Product Tour"
+						aria-label="Start Interactive Guided Product Tour"
+					>
+						<span>Guided Tour</span>
+					</button>
+				)}
 
 				{/* Settings button */}
 				<button
+					id="tour-settings-btn"
 					type="button"
 					onClick={openSettings}
-					className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#1e1e26] transition-colors"
+					className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-surface transition-colors transition-smooth"
 					title="Settings"
 					aria-label="Open settings"
 				>
@@ -602,13 +650,18 @@ export const Header: React.FC<HeaderProps> = ({
 				<button
 					type="button"
 					onClick={() => setRightSidebarOpen(!rightSidebarOpen)}
-					className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#1e1e26] transition-colors"
+					className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-surface transition-colors transition-smooth"
 					title={rightSidebarOpen ? "Collapse agent roster" : "Expand agent roster"}
 					aria-label="Toggle agent roster"
 				>
 					{rightSidebarOpen ? <PanelRightClose className="w-5 h-5" /> : <PanelRightOpen className="w-5 h-5" />}
 				</button>
 			</div>
+
+			{/* Notification Center Panel */}
+			{notificationPanelOpen && (
+				<NotificationCenter isOpen={notificationPanelOpen} onClose={() => setNotificationPanelOpen(false)} />
+			)}
 		</header>
 	);
 };

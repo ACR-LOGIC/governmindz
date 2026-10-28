@@ -40,8 +40,8 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
 	);
 
 	return (
-		<div className="fixed inset-0 z-50 overflow-hidden bg-black/60 backdrop-blur-sm flex justify-end animate-fadeIn">
-			<div className="w-full max-w-md bg-[#0c101e] border-l border-[#1e2842] h-full flex flex-col shadow-2xl p-6 overflow-y-auto animate-slideLeft">
+		<div className="fixed inset-0 z-50 overflow-hidden bg-black/75 backdrop-blur-[24px] flex justify-end animate-fadeIn">
+			<div className="w-full max-w-md bg-[#0c101e]/95 border-l border-[#1e2842]/80 h-full flex flex-col shadow-2xl p-6 overflow-y-auto animate-slideLeft glass-panel">
 				{/* Top bar with avatar, name, and creative title */}
 				<div className="flex items-start justify-between pb-4 border-b border-[#1e2842] mb-6">
 					<div className="flex items-center gap-3">

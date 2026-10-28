@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { MessageBubble } from "./MessageBubble";
 import { FinalAnswerCard } from "./FinalAnswerCard";
 import { ParallelCrewStack } from "./ParallelCrewStack";
@@ -6,15 +6,34 @@ import type { ChatMessage, AgentProfile, ScenarioItem, Conversation } from "../.
 import type { CrewRound } from "../../types/crew";
 import { AGENT_REGISTRY, getAgentProfile } from "../../services/agentRegistry";
 import { AgentAvatar } from "../common/AgentAvatar";
-import { ArrowDown, Bot, ShieldCheck, Sparkles, AlertCircle, Database, Play, Pause, RotateCcw, ArrowRight, Layers, Volume2, VolumeX } from "lucide-react";
+import {
+	ArrowDown,
+	ShieldCheck,
+	Sparkles,
+	Database,
+	Play,
+	Pause,
+	RotateCcw,
+	ArrowRight,
+	Layers,
+	Volume2,
+	VolumeX,
+	Flame,
+	Search,
+	Scale,
+	MessageSquare,
+} from "lucide-react";
 import { ttsService } from "../../services/ttsService";
 import type { DemoQueueState } from "../../services/demoPresentationQueue";
+import { useConversationAutoScroll } from "../../services/autoScrollController";
+import { resolveActivityPhase, type ActiveAgentActivity } from "../../services/conversationSync";
 
 interface GroupConversationProps {
 	conversation?: Conversation | null;
 	messages: ChatMessage[];
 	agentRoster?: AgentProfile[];
 	activeAgentThinking: string | null;
+	activeAgentActivity?: ActiveAgentActivity | null;
 	inquiryScore?: number;
 	finalConfidence?: number;
 	consensusMethod?: string;
@@ -38,11 +57,43 @@ interface GroupConversationProps {
 	onExploreZetaris?: () => void;
 }
 
+const PHASE_LABELS: Record<
+	ActiveAgentActivity["phase"],
+	{ label: string; colorClass: string; defaultDescription: string }
+> = {
+	researching: {
+		label: "Researching Evidence",
+		colorClass: "bg-sky-950/80 text-sky-300 border-sky-500/40",
+		defaultDescription: "Querying governed catalogs, tables, and external reference sources…",
+	},
+	analyzing: {
+		label: "Analyzing & Formulating",
+		colorClass: "bg-amber-950/80 text-amber-300 border-amber-500/40",
+		defaultDescription: "Evaluating evidence constraints and formulating initial position…",
+	},
+	responding: {
+		label: "Responding to Council",
+		colorClass: "bg-indigo-950/80 text-indigo-300 border-indigo-500/40",
+		defaultDescription: "Addressing peer challenges and refining calibrated confidence…",
+	},
+	challenging: {
+		label: "Adversarial Challenge",
+		colorClass: "bg-rose-950/80 text-rose-300 border-rose-500/40",
+		defaultDescription: "Stress-testing claims for unsupported certainty or missing receipts…",
+	},
+	synthesizing: {
+		label: "Synthesizing Consensus",
+		colorClass: "bg-emerald-950/80 text-emerald-300 border-emerald-500/40",
+		defaultDescription: "Reconciling team positions, dissent, and verified evidence into final decision…",
+	},
+};
+
 export const GroupConversation: React.FC<GroupConversationProps> = ({
 	conversation,
 	messages,
 	agentRoster,
 	activeAgentThinking,
+	activeAgentActivity = null,
 	inquiryScore,
 	finalConfidence,
 	consensusMethod,
@@ -64,13 +115,42 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 	onResetDemo,
 	onExploreZetaris,
 }) => {
-	const messagesEndRef = useRef<HTMLDivElement>(null);
-	const containerRef = useRef<HTMLDivElement>(null);
-	const [showScrollBottom, setShowScrollBottom] = useState(false);
 	const [filterMode, setFilterMode] = useState<"all" | "consensus">("all");
 	const [isAudioPlaying, setIsAudioPlaying] = useState(false);
 	const [audioProgress, setAudioProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
 	const [isMainMuted, setIsMainMuted] = useState(() => ttsService.isGroupMuted("main"));
+
+	const resolvedActivity: ActiveAgentActivity | null =
+		activeAgentActivity ||
+		(activeAgentThinking
+			? {
+					seatId: activeAgentThinking,
+					phase: resolveActivityPhase(activeAgentThinking),
+					startedAt: Date.now(),
+				}
+			: null);
+
+	const activityKey = [
+		resolvedActivity?.seatId || "",
+		resolvedActivity?.phase || "",
+		resolvedActivity?.detail || "",
+		holdingMessage || "",
+		conversation?.status || "",
+		activeCrewRound?.roundId || "",
+	].join("|");
+
+	const {
+		containerRef,
+		contentRef,
+		bottomAnchorRef,
+		scrollState,
+		handleContainerScroll,
+		jumpToLatest,
+	} = useConversationAutoScroll({
+		conversationId: conversation?.id || "default",
+		messages,
+		activityKey,
+	});
 
 	useEffect(() => {
 		const unsub = ttsService.subscribeSequential((isPlaying, current, total) => {
@@ -89,31 +169,20 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 		return unsubMute;
 	}, []);
 
-	const scrollToBottom = () => {
-		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-	};
-
-	useEffect(() => {
-		scrollToBottom();
-	}, [messages, activeAgentThinking]);
-
-	const handleScroll = () => {
-		if (!containerRef.current) return;
-		const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
-		const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
-		setShowScrollBottom(!isNearBottom);
-	};
-
-	// Determine final consensus / orchestrator presentation message
-	// Must ONLY match the concluding message of the debate (Synthesizer final consensus or Orchestrator final decree),
-	// never the initial Orchestrator convening announcement (round === 0 or type === orchestrator).
-	const finalMessage = conversation?.status === "completed" ? [...messages].reverse().find(
-		(m) =>
-			m.type === "final" ||
-			(m.type === "consensus" && m.fromSeat === "Synthesizer") ||
-			(m.fromSeat === "Synthesizer" && (m.structured as any)?.verdict) ||
-			(m.fromSeat === "Orchestrator" && (m.round || 0) >= 1 && m.type !== "orchestrator"),
-	) : undefined;
+	// Determine final consensus / supervisor presentation message
+	const finalMessage =
+		conversation?.status === "completed"
+			? [...messages]
+					.reverse()
+					.find(
+						(m) =>
+							m.type === "final" ||
+							(m.type === "summary" && m.fromSeat === "Supervisor") ||
+							(m.type === "consensus" && m.fromSeat === "Synthesizer") ||
+							(m.fromSeat === "Synthesizer" && (m.structured as any)?.verdict) ||
+							(m.fromSeat === "Orchestrator" && (m.round || 0) >= 1 && m.type !== "orchestrator"),
+					)
+			: undefined;
 
 	// Get other scenarios for the quick switch cards
 	const otherScenarios = allScenarios.filter(
@@ -133,25 +202,39 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 				)
 			: messages;
 
+	const activeProfile = resolvedActivity
+		? agentRoster?.find((a) => a.id === resolvedActivity.seatId) ||
+			(conversation?.agentAssignments?.[resolvedActivity.seatId]
+				? getAgentProfile(
+						resolvedActivity.seatId,
+						conversation.agentAssignments[resolvedActivity.seatId],
+					)
+				: AGENT_REGISTRY[resolvedActivity.seatId] || getAgentProfile(resolvedActivity.seatId))
+		: null;
+
+	const phaseInfo = resolvedActivity ? PHASE_LABELS[resolvedActivity.phase] : null;
+
 	return (
 		<div
 			id="tour-chat"
 			ref={containerRef}
-			onScroll={handleScroll}
-			className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 space-y-6 relative"
+			onScroll={handleContainerScroll}
+			className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-6 space-y-5 relative"
 		>
-			<div className="max-w-4xl mx-auto space-y-6">
+			<div ref={contentRef} className="max-w-4xl mx-auto space-y-5">
 				{/* Top Status Bar: Council Complexity banner if score exists */}
 				{inquiryScore != null && (
-					<div className="p-3.5 rounded-xl bg-[#12182b] border border-[#1e2842] flex items-center justify-between text-xs animate-fadeIn">
+					<div className="p-3 rounded-xl bg-[#12182b] border border-[#1e2842] flex items-center justify-between text-xs animate-fadeIn flex-wrap gap-2">
 						<div className="flex items-center gap-2">
 							<span className="text-slate-400 font-medium">Council Complexity:</span>
-							<span className="font-mono font-bold text-amber-300">Level {inquiryScore}/10</span>
+							<span className="font-mono font-bold text-amber-300">
+								{inquiryScore <= 1 ? `${(inquiryScore * 100).toFixed(0)}%` : `Level ${inquiryScore}/10`}
+							</span>
 						</div>
 						<div className="text-[11px] text-slate-400">
-							{inquiryScore >= 7
+							{(inquiryScore <= 1 ? inquiryScore >= 0.7 : inquiryScore >= 7)
 								? "High Complexity · Full Cross-Functional Council & Challenger Review"
-								: inquiryScore >= 4
+								: (inquiryScore <= 1 ? inquiryScore >= 0.4 : inquiryScore >= 4)
 									? "Moderate Complexity · Multi-Seat Deliberation"
 									: "Standard Inquiry · Core Review"}
 						</div>
@@ -198,7 +281,7 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 					</div>
 				)}
 
-				{/* Empty State: Live Mode (No demo templates or demo wording) */}
+				{/* Empty State: Live Mode */}
 				{messages.length === 0 && mode === "live" && (
 					<div className="my-12 text-center max-w-2xl mx-auto space-y-4 animate-fadeIn">
 						<div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-teal-500/20 via-sky-500/20 to-indigo-500/20 border border-teal-500/30 shadow-xl shadow-black/40">
@@ -219,12 +302,12 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 
 				{/* Empty State: Demo Mode Active Template Showcase & Quick Launch */}
 				{messages.length === 0 && mode !== "live" && (
-					<div className="my-8 text-center max-w-2xl mx-auto space-y-6 animate-fadeIn">
-						<div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-400/20 via-teal-500/20 to-sky-500/20 border border-[#2c385c] shadow-xl shadow-black/40">
-							<ShieldCheck className="w-8 h-8 text-[#f4b942]" />
+					<div className="my-6 text-center max-w-2xl mx-auto space-y-5 animate-fadeIn">
+						<div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400/20 via-teal-500/20 to-sky-500/20 border border-[#2c385c] shadow-xl shadow-black/40">
+							<ShieldCheck className="w-7 h-7 text-[#f4b942]" />
 						</div>
 
-						<div className="space-y-2">
+						<div className="space-y-1.5">
 							<h2 className="font-display font-bold text-2xl text-slate-100">
 								GovernMindz Deliberative Mission Control
 							</h2>
@@ -237,7 +320,7 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 
 						{/* Active Template Hero Card */}
 						{activeScenario && (
-							<div className="p-5 rounded-2xl bg-gradient-to-b from-[#18203a] via-[#12182b] to-[#0c101e] border-2 border-amber-500/40 shadow-2xl text-left space-y-3 relative overflow-hidden">
+							<div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-b from-[#18203a] via-[#12182b] to-[#0c101e] border-2 border-amber-500/40 shadow-2xl text-left space-y-3 relative overflow-hidden">
 								<div className="flex items-center justify-between border-b border-[#2c385c] pb-3">
 									<div className="flex items-center gap-2">
 										<Database className="w-4 h-4 text-amber-400" />
@@ -277,7 +360,7 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 
 						{/* Alternative Governance Templates Quick Switch */}
 						{otherScenarios.length > 0 && (
-							<div className="space-y-3 pt-2 text-left">
+							<div className="space-y-3 pt-1 text-left">
 								<div className="text-xs font-mono uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
 									<Layers className="w-3.5 h-3.5 text-teal-400" />
 									<span>Or switch to another Governance Benchmark:</span>
@@ -317,11 +400,10 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 				{/* Stream Mode & Sequential Audio Player Bar */}
 				{messages.length > 0 && (
 					<div className="flex items-center justify-between pb-3 border-b border-[#22222a] text-xs flex-wrap gap-2">
-						<div className="flex items-center gap-2">
+						<div className="flex items-center gap-2 flex-wrap">
 							<span className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
 								Council Stream:
 							</span>
-							{/* Minimal Icon-Only Group Audio Toggle (Main Council Audio) */}
 							<button
 								type="button"
 								onClick={() => ttsService.toggleGroupMute("main")}
@@ -436,13 +518,21 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 					</div>
 				)}
 
+				{/* Parallel Crew Research Stack with Barrier Synchronization */}
+				{activeCrewRound && (
+					<ParallelCrewStack
+						round={activeCrewRound}
+						isClosing={isCrewClosing}
+					/>
+				)}
+
 				{/* Messages Stream */}
 				{visibleMessages.map((m) => {
 					const assignment = conversation?.agentAssignments?.[m.fromSeat];
 					const agentProfile =
 						agentRoster?.find((a) => a.id === m.fromSeat) ||
 						(assignment ? getAgentProfile(m.fromSeat, assignment) : undefined);
-					// If this is the final consensus message, we render the highlighted FinalAnswerCard!
+
 					if (m === finalMessage) {
 						return (
 							<React.Fragment key={m.id}>
@@ -476,59 +566,93 @@ export const GroupConversation: React.FC<GroupConversationProps> = ({
 					);
 				})}
 
-				{/* Parallel Crew Research Stack with Barrier Synchronization */}
-				{activeCrewRound && (
-					<ParallelCrewStack
-						round={activeCrewRound}
-						isClosing={isCrewClosing}
-					/>
-				)}
-
 				{/* Non-Blocking Holding Message Indicator (Transient status; never added to transcript or audit logs) */}
 				{holdingMessage && (
 					<div
 						data-testid="holding-status-indicator"
-						className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-[#101728]/90 border border-teal-500/40 text-xs text-teal-300 max-w-md animate-fadeIn shadow-lg shadow-black/30"
+						className="flex items-center gap-3 px-4 py-3 rounded-xl bg-[#0e1424]/90 border border-teal-500/40 text-xs text-teal-300 max-w-md animate-fadeIn glass-panel shadow-xl shadow-black/40"
 					>
-						<span className="w-2 h-2 rounded-full bg-teal-400 animate-ping shrink-0" />
-						<span className="font-medium text-slate-200">{holdingMessage}</span>
+						<div className="relative w-2 h-2 shrink-0">
+							<span className="w-2 h-2 rounded-full bg-teal-400 animate-ping-dot absolute" />
+						</div>
+						<span className="font-medium text-slate-200 leading-tight">{holdingMessage}</span>
 					</div>
 				)}
 
-				{/* Active Agent Thinking Indicator */}
-				{activeAgentThinking && (
-					<div className="flex items-center gap-3 p-3.5 rounded-2xl bg-[#12182b]/90 border border-amber-500/40 max-w-lg animate-pulse shadow-xl shadow-amber-950/20">
+				{/* Active Agent Activity Indicator (driven by real workflow events) */}
+				{resolvedActivity && activeProfile && phaseInfo && (
+					<div
+						data-testid="active-agent-indicator"
+						data-active-seat={resolvedActivity.seatId}
+						data-active-phase={resolvedActivity.phase}
+						className="flex items-center gap-4 p-3.5 rounded-2xl bg-[#12182b]/90 border border-amber-500/40 max-w-xl glass-panel shadow-xl shadow-amber-950/20 animate-fadeIn"
+					>
 						<AgentAvatar
-							seatId={activeAgentThinking}
-							avatarId={agentRoster?.find((a) => a.id === activeAgentThinking)?.avatarId}
-							humanName={agentRoster?.find((a) => a.id === activeAgentThinking)?.humanName}
+							seatId={resolvedActivity.seatId}
+							avatarId={activeProfile.avatarId}
+							humanName={activeProfile.humanName}
 							size="sm"
-							status="analyzing"
+							status={
+								resolvedActivity.phase === "challenging"
+									? "challenging"
+									: resolvedActivity.phase === "synthesizing"
+										? "synthesizing"
+										: resolvedActivity.phase === "researching"
+											? "researching"
+											: "analyzing"
+							}
 							showStatusPip={true}
 						/>
-						<div className="text-xs text-slate-200">
-							<span className="font-bold text-amber-300">
-								{agentRoster?.find((a) => a.id === activeAgentThinking)?.humanName ||
-									AGENT_REGISTRY[activeAgentThinking]?.name ||
-									activeAgentThinking}
-							</span>{" "}
-							is evaluating evidence, reviewing catalog constraints, and formulating arguments…
+						<div className="min-w-0 flex-1 space-y-1">
+							<div className="flex items-center gap-2 flex-wrap">
+								<span className="font-bold text-xs text-amber-300">
+									{activeProfile.humanName || activeProfile.name}
+								</span>
+								<span className="text-[11px] text-slate-400">
+									· {activeProfile.role || resolvedActivity.seatId}
+								</span>
+								<span
+									className={`inline-flex items-center gap-1 text-[9.5px] font-mono font-bold uppercase px-2 py-0.5 rounded-md border ${phaseInfo.colorClass}`}
+								>
+									{resolvedActivity.phase === "challenging" && <Flame className="w-2.5 h-2.5" />}
+									{resolvedActivity.phase === "researching" && <Search className="w-2.5 h-2.5" />}
+									{resolvedActivity.phase === "synthesizing" && <Scale className="w-2.5 h-2.5" />}
+									{(resolvedActivity.phase === "analyzing" || resolvedActivity.phase === "responding") && (
+										<MessageSquare className="w-2.5 h-2.5" />
+									)}
+									<span>{phaseInfo.label}</span>
+									{typeof resolvedActivity.round === "number" && (
+										<span>· R{resolvedActivity.round}</span>
+									)}
+								</span>
+							</div>
+							<div className="text-xs text-slate-300 truncate">
+								{resolvedActivity.detail || phaseInfo.defaultDescription}
+							</div>
 						</div>
 					</div>
 				)}
 
-				<div ref={messagesEndRef} />
+				<div ref={bottomAnchorRef} />
 			</div>
 
-			{/* Floating Scroll to Bottom button */}
-			{showScrollBottom && (
+			{/* Compact "New Activity / Jump to Latest" Control when user scrolls up */}
+			{!scrollState.isFollowing && (
 				<button
 					type="button"
-					onClick={scrollToBottom}
-					className="fixed bottom-24 right-8 p-3 rounded-full bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-xl transition-all hover:scale-105 active:scale-95 z-20"
-					title="Scroll to latest deliberation message"
+					data-testid="jump-to-latest"
+					onClick={jumpToLatest}
+					className="fixed bottom-20 right-8 flex items-center gap-2 px-3.5 py-2 rounded-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-2xl shadow-black/60 transition-all hover:scale-105 active:scale-95 z-30 border border-amber-300/60"
+					title="Jump to latest deliberation activity"
 				>
-					<ArrowDown className="w-4 h-4" />
+					<ArrowDown className="w-3.5 h-3.5" />
+					<span>
+						{scrollState.unreadCount > 0
+							? `New Activity (${scrollState.unreadCount}) · Jump to Latest`
+							: scrollState.hasNewActivity
+								? "New Activity · Jump to Latest"
+								: "Jump to Latest"}
+					</span>
 				</button>
 			)}
 		</div>

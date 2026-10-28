@@ -43,6 +43,7 @@ const testFiles = [
 	"tests/synchronized_crew_exit.test.ts",
 	"tests/conversational_inquiry_bypass.test.ts",
 	"tests/crew_resilience.test.ts",
+	"tests/live_demo_ui_sync.test.ts",
 ];
 
 const result = spawnSync(

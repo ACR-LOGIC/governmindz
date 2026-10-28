@@ -22,6 +22,7 @@ import {
 	type ExportArtifactFile,
 } from "@governmindz/core/exports/ConversationExport";
 import { zetarisQueryHandler } from "../gateway/src/tools/zetaris.tools.js";
+import { sharedResilientZetarisClient } from "@governmindz/core/integrations/ResilientZetarisClient";
 import { executeWebSearch } from "../gateway/src/tools/webSearch.tools.js";
 import { getConfigStatus, saveSecureConfig, loadLocalEnvIfPresent } from "../gateway/src/services/cryptoConfig.js";
 loadLocalEnvIfPresent();
@@ -878,8 +879,10 @@ async function handleRun(req: http.IncomingMessage, res: http.ServerResponse) {
 				return;
 			}
 			try {
+				sharedResilientZetarisClient.reset();
+				const probeQuery = process.env.ZETARIS_DEMO_QUERY?.trim() || "SHOW LIGHTNING DATABASES";
 				const probe = (await zetarisQueryHandler(
-					{ query: "SELECT 1", limit: 1 },
+					{ query: probeQuery, limit: 1 },
 					{ callerRole: "analyst", correlationId: randomUUID() },
 				)) as any;
 				if (probe?.isSynthetic) {
@@ -1064,8 +1067,10 @@ async function handleHealth(_req: http.IncomingMessage, res: http.ServerResponse
 	let zetaris: any = { ok: false, configured: hasZetaris };
 	if (hasZetaris) {
 		try {
+			sharedResilientZetarisClient.reset();
+			const probeQuery = process.env.ZETARIS_DEMO_QUERY?.trim() || "SHOW LIGHTNING DATABASES";
 			const r = (await zetarisQueryHandler(
-				{ query: "SELECT 1", limit: 1 },
+				{ query: probeQuery, limit: 1 },
 				{ callerRole: "analyst", correlationId: randomUUID() },
 			)) as any;
 			zetaris = r?.isSynthetic
@@ -1073,7 +1078,9 @@ async function handleHealth(_req: http.IncomingMessage, res: http.ServerResponse
 						ok: false,
 						configured: true,
 						rows: 0,
-						reason: "Zetaris is unreachable; the provider returned synthetic fallback data.",
+						reason:
+							r?.fallbackReason ||
+							"Zetaris is unreachable; the provider returned synthetic fallback data.",
 					}
 				: { ok: true, configured: true, rows: r.rows ? r.rows.length : 0 };
 		} catch (e) {
@@ -1083,7 +1090,14 @@ async function handleHealth(_req: http.IncomingMessage, res: http.ServerResponse
 		zetaris = { ok: false, configured: false, reason: "Zetaris host not configured" };
 	}
 
-	sendJson(res, 200, { meterless, zetaris, missingCapabilities: CONFIG_MISSING });
+	const currentMissing = ["METERLESS_BASE_URL", "METERLESS_API_KEY", "ZETARIS_ORG_ID", "ZETARIS_API_KEY"].filter(
+		(k) => !process.env[k]?.trim(),
+	);
+	if (!process.env.AUDIT_TRAIL_SECRET || process.env.AUDIT_TRAIL_SECRET.length < 16) {
+		currentMissing.push("AUDIT_TRAIL_SECRET");
+	}
+
+	sendJson(res, 200, { meterless, zetaris, missingCapabilities: currentMissing });
 }
 
 function handleScenarios(_req: http.IncomingMessage, res: http.ServerResponse) {
@@ -1382,6 +1396,7 @@ function handleConfig(req: http.IncomingMessage, res: http.ServerResponse) {
 			try {
 				const payload = JSON.parse(body || "{}");
 				saveSecureConfig(payload);
+				sharedResilientZetarisClient.reset();
 				sendJson(res, 200, {
 					success: true,
 					message: "Credentials saved securely and encrypted at rest.",

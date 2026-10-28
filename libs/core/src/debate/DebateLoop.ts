@@ -349,8 +349,8 @@ export class DebateLoop {
 			(seatId) => this.transport.hasSeat(seatId) && !this.quarantinedSeats.has(seatId),
 		);
 
-		for (const seatId of eligibleSeats) {
-			this.emit({ type: "seat_thinking", seatId, round: 0 });
+		if (eligibleSeats.length > 0) {
+			this.emit({ type: "seat_thinking", seatId: eligibleSeats[0], round: 0 });
 		}
 
 		const tasks: ParallelProposalTask<AgentMessage>[] = eligibleSeats.map((seatId) => ({
@@ -379,6 +379,7 @@ export class DebateLoop {
 
 			if (res.status === "COMPLETED" && (res.message || res.value)) {
 				const proposal = (res.message || res.value)!;
+				this.emit({ type: "seat_thinking", seatId, round: 0 });
 				this.transcript.push(proposal);
 				this.emit({ type: "message", message: proposal });
 				if (isBlind) {
@@ -420,7 +421,6 @@ export class DebateLoop {
 		if (!challenger) return;
 		if (this.challengeCount >= 12) return;
 		const evidenceContext = this.config.evidenceContext || "";
-		this.emit({ type: "seat_thinking", seatId: "RivalChallenger", round });
 		try {
 			const result = await challenger.challenge(
 				seatId,
@@ -436,10 +436,13 @@ export class DebateLoop {
 				return;
 			}
 
+			this.emit({ type: "seat_thinking", seatId: "RivalChallenger", round });
+
 			const challengeMsg: AgentMessage = {
 				id: `rival-${seatId}-r${round}-${Date.now()}`,
 				fromSeat: "RivalChallenger",
 				toSeat: seatId,
+				inReplyTo: message.id,
 				type: "challenge",
 				content: result.challenge,
 				structured: {
@@ -559,6 +562,7 @@ export class DebateLoop {
 			sources,
 		});
 		if (!result.questions || result.questions.length === 0) return;
+		this.emit({ type: "seat_thinking", seatId: "Thinker", round });
 		this.thinkerCount++;
 		this.thinkerQuestionsAsked += result.questions.length;
 		for (const q of result.questions) {
@@ -1075,6 +1079,7 @@ export class DebateLoop {
 		try {
 			this.round += 1;
 			this.emit({ type: "round_start", round: this.round });
+			this.emit({ type: "seat_thinking", seatId: judgeSeatId, round: this.round });
 			const resolution = await this.transport.synthesize(
 				judgeSeatId,
 				this.transcript,

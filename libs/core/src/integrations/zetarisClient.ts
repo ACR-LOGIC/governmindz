@@ -278,22 +278,33 @@ function normalizeRows(data: unknown): unknown[][] {
 }
 
 export class ZetarisClient {
-	private readonly baseUrl: string;
-	private readonly apiKey: string;
-	private readonly orgId: string;
+	private readonly config: ZetarisConfig;
 	private readonly timeoutMs: number;
 
 	constructor(config: ZetarisConfig = {}) {
-		this.baseUrl = resolveBaseUrl(config.restUrl);
-		this.apiKey = (
-			config.apiKey?.trim() ||
+		this.config = config;
+		this.timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+	}
+
+	private get baseUrl(): string {
+		return resolveBaseUrl(this.config.restUrl);
+	}
+
+	private get apiKey(): string {
+		return (
+			this.config.apiKey?.trim() ||
 			env("ZETARIS_API_KEY") ||
 			env("ZETARIS_API_AUTH") ||
 			""
 		);
-		this.orgId =
-			(config.orgId?.trim() || env("ZETARIS_ORG_ID") || DEFAULT_ORG_ID).trim();
-		this.timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+	}
+
+	private get orgId(): string {
+		return (
+			this.config.orgId?.trim() ||
+			env("ZETARIS_ORG_ID") ||
+			DEFAULT_ORG_ID
+		).trim();
 	}
 
 	missingConfig(): string[] {

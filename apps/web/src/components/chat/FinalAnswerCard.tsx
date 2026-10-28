@@ -58,7 +58,6 @@ export const FinalAnswerCard: React.FC<FinalAnswerCardProps> = ({
 
 	const positionText = message.structured?.position || message.content;
 
-	// Build fallback conversation object if not directly passed.
 	const convData: Conversation = conversation || {
 		id: `conv_${message.id}`,
 		title: "Governance Decision Briefing",
@@ -121,21 +120,21 @@ export const FinalAnswerCard: React.FC<FinalAnswerCardProps> = ({
 	return (
 		<>
 			<div
-				className={`my-8 mx-auto max-w-3xl rounded-2xl bg-gradient-to-b from-[#18181f] via-[#121216] to-[#0c0c0e] border-2 border-amber-500/60 p-6 shadow-2xl shadow-black/80 relative overflow-hidden animate-fadeIn ${
+				className={`my-8 mx-auto max-w-3xl rounded-2xl bg-gradient-to-b from-[#18181f] via-[#121216] to-[#0c0c0e] border-2 border-amber-500/60 p-6 shadow-2xl shadow-black/80 relative overflow-hidden animate-scaleIn ${
 					isSpeaking ? "ring-2 ring-amber-400" : ""
 				}`}
 			>
 				{/* Subtle background glow */}
-				<div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+				<div className="absolute top-0 right-0 w-72 h-72 bg-amber-500/10 rounded-full blur-[64px] pointer-events-none" />
 
 				{/* Header with Award Badge & Quick Action Toolbar */}
-				<div className="flex items-center justify-between border-b border-[#2e2e3a] pb-4 mb-4 flex-wrap gap-2">
+				<div className="flex items-center justify-between border-b border-[#2e2e3a] pb-4 mb-5 flex-wrap gap-3">
 					<div className="flex items-center gap-3">
-						<div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 flex items-center justify-center font-bold shadow-lg shadow-amber-500/20">
-							<Award className="w-5 h-5" />
+						<div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 flex items-center justify-center font-bold shadow-lg shadow-amber-500/30">
+							<Award className="w-5.5 h-5.5" />
 						</div>
 						<div>
-							<h3 className="font-display font-bold text-base text-[#f4b942] flex items-center gap-2">
+							<h3 className="font-display font-bold text-lg text-[#f4b942] flex items-center gap-2 leading-tight">
 								Final Synthesized Governance Decision
 								<span
 									className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
@@ -191,16 +190,12 @@ export const FinalAnswerCard: React.FC<FinalAnswerCardProps> = ({
 
 						<div className="text-right">
 							<div
-								className={`text-2xl font-mono font-extrabold ${
-									hasConfidence ? "text-[#f4b942]" : "text-slate-400"
-								}`}
+								className={`text-3xl font-mono font-extrabold ${hasConfidence ? "text-[#f4b942]" : "text-slate-400"}`}
 							>
 								{confidenceLabel}
 							</div>
 							<div
-								className={`text-[10px] font-mono uppercase tracking-wider ${
-									hasConfidence ? "text-emerald-400" : "text-slate-400"
-								}`}
+								className={`text-[10px] font-mono uppercase tracking-wider ${hasConfidence ? "text-emerald-400" : "text-slate-400"}`}
 							>
 								{hasConfidence ? "Calibrated Confidence" : "Confidence unavailable"}
 							</div>
@@ -209,21 +204,21 @@ export const FinalAnswerCard: React.FC<FinalAnswerCardProps> = ({
 				</div>
 
 				{/* Main Consensus Position Text */}
-				<div className="text-sm text-slate-100 leading-relaxed font-medium bg-[#141418] p-4 rounded-xl border border-[#262630] mb-4 whitespace-pre-wrap">
+				<div className="text-sm text-slate-100 leading-relaxed font-medium bg-[#141418] p-5 rounded-xl border border-[#262630] mb-5 whitespace-pre-wrap shadow-inner">
 					{positionText}
 				</div>
 
 				{/* Evidence & Caveat list */}
 				{message.structured?.evidence && message.structured.evidence.length > 0 && (
-					<div className="mb-4">
-						<div className="text-[11px] font-mono uppercase tracking-wider text-emerald-400 mb-1.5 flex items-center gap-1.5">
+					<div className="mb-5">
+						<div className="text-[11px] font-mono uppercase tracking-wider text-emerald-400 mb-2 flex items-center gap-1.5">
 							<CheckCircle2 className="w-3.5 h-3.5" />
 							<span>Evidence Citations</span>
 						</div>
-						<ul className="space-y-1 text-xs text-slate-300">
+						<ul className="space-y-1.5 text-xs text-slate-300">
 							{message.structured.evidence.map((ev, i) => (
-								<li key={i} className="flex items-start gap-2 bg-[#181820] p-2 rounded-lg border border-[#282834]">
-									<span className="text-emerald-400 font-bold">✓</span>
+								<li key={i} className="flex items-start gap-2.5 bg-[#181820] p-2.5 rounded-lg border border-[#282834]">
+									<span className="text-emerald-400 font-bold shrink-0">✓</span>
 									<span>{ev}</span>
 								</li>
 							))}
@@ -233,10 +228,10 @@ export const FinalAnswerCard: React.FC<FinalAnswerCardProps> = ({
 
 				{/* Interactive Zetaris evidence hand-off */}
 				{convData.zetarisData?.query && onExploreZetaris && (
-					<div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-gradient-to-r from-teal-950/40 via-[#121c2d] to-[#12182b] border border-teal-700/50">
+					<div className="mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-gradient-to-r from-teal-950/40 via-[#121c2d] to-[#12182b] border border-teal-700/50 shadow-lg">
 						<div className="flex items-start gap-2.5">
-							<div className="w-8 h-8 rounded-lg bg-teal-500/15 border border-teal-500/40 flex items-center justify-center text-teal-300 shrink-0">
-								<Database className="w-4 h-4" />
+							<div className="w-9 h-9 rounded-lg bg-teal-500/15 border border-teal-500/40 flex items-center justify-center text-teal-300 shrink-0">
+								<Database className="w-4.5 h-4.5" />
 							</div>
 							<div>
 								<div className="text-[11px] font-mono font-bold uppercase tracking-wider text-teal-300">
@@ -250,7 +245,7 @@ export const FinalAnswerCard: React.FC<FinalAnswerCardProps> = ({
 						<button
 							type="button"
 							onClick={onExploreZetaris}
-							className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md shadow-teal-950/30 transition-all active:scale-95 shrink-0"
+							className="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md shadow-teal-950/30 transition-all active:scale-95 shrink-0"
 						>
 							<Database className="w-3.5 h-3.5" />
 							Explore Zetaris Data
@@ -258,16 +253,14 @@ export const FinalAnswerCard: React.FC<FinalAnswerCardProps> = ({
 					</div>
 				)}
 
-				{/* ============================================================ */}
 				{/* PRIMARY AUTHORITATIVE DELIVERABLE & ARTIFACT RELEASE CARD */}
-				{/* ============================================================ */}
 				{convData.primaryArtifact && (
-					<div className="my-5 p-4 rounded-xl bg-gradient-to-br from-[#1c2237] via-[#151a2d] to-[#0f1322] border-2 border-emerald-500/70 shadow-xl relative overflow-hidden">
-						<div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
+					<div className="my-5 p-4 rounded-xl bg-gradient-to-br from-[#1c2237] via-[#151a2d] to-[#0f1322] border-2 border-emerald-500/70 shadow-xl relative overflow-hidden hover-lift">
+						<div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/10 rounded-full blur-[48px] pointer-events-none" />
 
 						<div className="flex items-center justify-between mb-3 flex-wrap gap-2">
 							<div className="flex items-center gap-2.5">
-								<div className="w-9 h-9 rounded-lg bg-emerald-500/20 border border-emerald-500/50 flex items-center justify-center text-emerald-400">
+								<div className="w-10 h-10 rounded-lg bg-emerald-500/20 border border-emerald-500/50 flex items-center justify-center text-emerald-400">
 									{convData.primaryArtifact.format === "pptx" ? (
 										<Presentation className="w-5 h-5 text-amber-400" />
 									) : convData.primaryArtifact.format === "csv" ? (
@@ -280,7 +273,7 @@ export const FinalAnswerCard: React.FC<FinalAnswerCardProps> = ({
 								</div>
 								<div>
 									<div className="flex items-center gap-2">
-										<h4 className="font-display font-bold text-sm text-white">
+										<h4 className="font-display font-bold text-sm text-white tracking-tight">
 											{convData.primaryArtifact.title}
 										</h4>
 										<span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 uppercase">
@@ -362,15 +355,15 @@ export const FinalAnswerCard: React.FC<FinalAnswerCardProps> = ({
 				)}
 
 				{message.structured?.caveats && message.structured.caveats.length > 0 && (
-					<div className="mb-4">
+					<div className="mb-5">
 						<div className="text-[11px] font-mono uppercase tracking-wider text-amber-400 mb-1.5 flex items-center gap-1.5">
 							<AlertTriangle className="w-3.5 h-3.5" />
 							<span>Production Scope Caveats</span>
 						</div>
-						<ul className="space-y-1 text-xs text-slate-300">
+						<ul className="space-y-1.5 text-xs text-slate-300">
 							{message.structured.caveats.map((cav, i) => (
-								<li key={i} className="flex items-start gap-2 bg-[#181820] p-2 rounded-lg border border-[#282834]">
-									<span className="text-amber-400 font-bold">⚠</span>
+								<li key={i} className="flex items-start gap-2.5 bg-[#181820] p-2.5 rounded-lg border border-[#282834]">
+									<span className="text-amber-400 font-bold shrink-0">⚠</span>
 									<span>{cav}</span>
 								</li>
 							))}
@@ -378,10 +371,8 @@ export const FinalAnswerCard: React.FC<FinalAnswerCardProps> = ({
 					</div>
 				)}
 
-				{/* ============================================================ */}
 				{/* PROFESSIONAL OUTPUTS, EXPORT & PRESENTATION SUITE TOOLBAR */}
-				{/* ============================================================ */}
-				<div className="my-4 p-3.5 bg-gradient-to-r from-[#151c30] via-[#101524] to-[#151c30] rounded-xl border border-[#273559] shadow-lg">
+				<div className="my-4 p-3.5 bg-gradient-to-r from-[#151c30] via-[#101524] to-[#151c30] rounded-xl border border-[#273559] shadow-lg hover-lift">
 					<div className="flex items-center justify-between mb-2.5">
 						<div className="flex items-center gap-2">
 							<Sparkles className="w-4 h-4 text-amber-400" />
@@ -399,7 +390,7 @@ export const FinalAnswerCard: React.FC<FinalAnswerCardProps> = ({
 						<button
 							type="button"
 							onClick={() => exportConversationAsPdf(convData)}
-							className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1a233d] hover:bg-[#232f50] border border-[#2d3c66] hover:border-rose-400/60 text-slate-200 hover:text-white text-xs font-semibold transition-all shadow-sm group"
+							className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1a233d] hover:bg-[#232f50] border border-[#2d3c66] hover:border-rose-400/60 text-slate-200 hover:text-white text-xs font-semibold transition-all shadow-sm group hover-lift"
 							title="Generate and print executive PDF report"
 						>
 							<FileText className="w-3.5 h-3.5 text-rose-400 group-hover:scale-110 transition-transform" />
@@ -410,7 +401,7 @@ export const FinalAnswerCard: React.FC<FinalAnswerCardProps> = ({
 						<button
 							type="button"
 							onClick={() => exportConversationAsCsvSpreadsheet(convData)}
-							className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1a233d] hover:bg-[#232f50] border border-[#2d3c66] hover:border-emerald-400/60 text-slate-200 hover:text-white text-xs font-semibold transition-all shadow-sm group"
+							className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1a233d] hover:bg-[#232f50] border border-[#2d3c66] hover:border-emerald-400/60 text-slate-200 hover:text-white text-xs font-semibold transition-all shadow-sm group hover-lift"
 							title="Download Excel / Sheets compatible CSV dataset"
 						>
 							<FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
@@ -421,7 +412,7 @@ export const FinalAnswerCard: React.FC<FinalAnswerCardProps> = ({
 						<button
 							type="button"
 							onClick={() => exportConversationAsWordDoc(convData)}
-							className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1a233d] hover:bg-[#232f50] border border-[#2d3c66] hover:border-sky-400/60 text-slate-200 hover:text-white text-xs font-semibold transition-all shadow-sm group"
+							className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1a233d] hover:bg-[#232f50] border border-[#2d3c66] hover:border-sky-400/60 text-slate-200 hover:text-white text-xs font-semibold transition-all shadow-sm group hover-lift"
 							title="Download Word-formatted executive document (.DOC)"
 						>
 							<FileCode className="w-3.5 h-3.5 text-sky-400 group-hover:scale-110 transition-transform" />
@@ -432,7 +423,7 @@ export const FinalAnswerCard: React.FC<FinalAnswerCardProps> = ({
 						<button
 							type="button"
 							onClick={() => openModalTab("diagram")}
-							className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 border border-teal-500/50 text-teal-300 hover:text-teal-200 text-xs font-bold transition-all shadow-sm group"
+							className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 border border-teal-500/50 text-teal-300 hover:text-teal-200 text-xs font-bold transition-all shadow-sm group hover-lift"
 							title="View and download visual consensus diagrams and charts"
 						>
 							<GitFork className="w-3.5 h-3.5 text-teal-400 group-hover:scale-110 transition-transform" />

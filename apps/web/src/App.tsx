@@ -3,7 +3,8 @@ import { Header } from "./components/layout/Header";
 import { LeftSidebar } from "./components/layout/LeftSidebar";
 import { RightSidebar } from "./components/layout/RightSidebar";
 import { GroupConversation } from "./components/chat/GroupConversation";
-import { MessageComposer, DEMO_SCENARIOS } from "./components/chat/MessageComposer";
+import { MessageComposer } from "./components/chat/MessageComposer";
+import { DEMO_SCENARIOS } from "./services/demoScenarios";
 const ExecutionExplorer = React.lazy(() => import("./components/explorer/ExecutionExplorer"));
 const TrustEvidenceView = React.lazy(() => import("./components/evidence/TrustEvidenceView"));
 import { AgentDetailDrawer } from "./components/modals/AgentDetailDrawer";
@@ -28,11 +29,23 @@ import {
 import { getAgentProfile } from "./services/agentRegistry";
 import { assignHumanCouncil, generateTaskDelegationAnnouncement } from "./services/nameRotation";
 import { ttsService } from "./services/ttsService";
+import { notificationService } from "./services/notificationService";
+import type { Notification } from "./services/notificationService";
 import { CrewBarrierManager } from "./services/crewBarrier";
 import { evaluateWebConversation } from "./services/conversationEvaluation";
 import { AgentArrivalManager } from "./services/agentArrivalManager";
 import { SynchronizedExitCoordinator } from "./services/synchronizedExitCoordinator";
 import { DemoPresentationQueue, type DemoQueueState } from "./services/demoPresentationQueue";
+import {
+	appendWorkflowTimelineEvent,
+	buildParticipatingAgentRoster,
+	extractParticipatingSeatIds,
+	filterAssignmentsToParticipants,
+	isRosterEligibleSeat,
+	resolveActivityPhase,
+	upsertConversationMessage,
+	type ActiveAgentActivity,
+} from "./services/conversationSync";
 import type { CrewRound } from "./types/crew";
 import type {
 	ActiveTab,
@@ -43,19 +56,9 @@ import type {
 	AgentProfile,
 } from "./types";
 
-
 function getParticipatingAgentProfiles(conv: Conversation | null): AgentProfile[] {
 	if (!conv || !conv.messages || conv.messages.length === 0) return [];
-	const participatingSeats = Array.from(
-		new Set(
-			conv.messages
-				.map((m) => m.fromSeat)
-				.filter((seat) => seat && seat !== "user" && seat !== "Orchestrator")
-		)
-	);
-	return participatingSeats.map((seatId) =>
-		getAgentProfile(seatId, conv.agentAssignments?.[seatId])
-	);
+	return buildParticipatingAgentRoster(conv, conv.status === "completed");
 }
 
 const DEMO_HISTORY_KEY = "governmindz_demo_history_v1";
@@ -63,6 +66,17 @@ const DEMO_HISTORY_KEY = "governmindz_demo_history_v1";
 function demoConversationId(scenarioFile: string): string {
 	const scenarioId = scenarioFile.replace(/\.json$/, "").replace(/[^a-zA-Z0-9_-]/g, "_");
 	return `demo_${scenarioId}`;
+}
+
+function sanitizeHistoricalConversation(entry: Conversation): Conversation {
+	const participatingIds = extractParticipatingSeatIds(entry);
+	return {
+		...entry,
+		agentAssignments:
+			participatingIds.length > 0
+				? filterAssignmentsToParticipants(entry.agentAssignments, participatingIds)
+				: entry.agentAssignments,
+	};
 }
 
 function loadDemoHistory(): Conversation[] {
@@ -78,7 +92,7 @@ function loadDemoHistory(): Conversation[] {
 			const key = entry.scenarioId || entry.id;
 			const existing = byScenario.get(key);
 			if (!existing || (entry.updatedAt || 0) > (existing.updatedAt || 0)) {
-				byScenario.set(key, { ...entry, mode: "sample" });
+				byScenario.set(key, sanitizeHistoricalConversation({ ...entry, mode: "sample" }));
 			}
 		}
 		return Array.from(byScenario.values()).sort((a, b) => b.updatedAt - a.updatedAt);
@@ -96,11 +110,10 @@ function writeDemoHistory(list: Conversation[]): void {
 			const key = entry.scenarioId || entry.id;
 			const existing = byScenario.get(key);
 			if (!existing || (entry.updatedAt || 0) > (existing.updatedAt || 0)) {
-				byScenario.set(key, entry);
+				byScenario.set(key, sanitizeHistoricalConversation(entry));
 			}
 		}
-		const deduped = Array.from(byScenario.values())
-			.sort((a, b) => b.updatedAt - a.updatedAt);
+		const deduped = Array.from(byScenario.values()).sort((a, b) => b.updatedAt - a.updatedAt);
 		localStorage.setItem(DEMO_HISTORY_KEY, JSON.stringify(deduped));
 	} catch {
 		// localStorage unavailable: demo history stays in memory only
@@ -151,18 +164,24 @@ export const App: React.FC = () => {
 	const [liveConfirmModalOpen, setLiveConfirmModalOpen] = useState(false);
 	const [liveConfigModalOpen, setLiveConfigModalOpen] = useState(false);
 
-	const [conversations, setConversations] = useState<Conversation[]>([]);
-	const [activeId, setActiveId] = useState<string | null>(null);
-	const activeIdRef = useRef<string | null>(null);
+	const initialDraftRef = useRef<Conversation>(createDraftConversation("sample"));
+	const [conversations, setConversations] = useState<Conversation[]>(() => [initialDraftRef.current]);
+	const [activeId, setActiveId] = useState<string | null>(() => initialDraftRef.current.id);
+	const activeIdRef = useRef<string | null>(initialDraftRef.current.id);
 	const setActiveConversationId = useCallback((id: string | null) => {
 		activeIdRef.current = id;
 		setActiveId(id);
 	}, []);
 	const [isBusy, setIsBusy] = useState(false);
 	const [activeAgentThinking, setActiveAgentThinking] = useState<string | null>(null);
+	const [activeAgentActivity, setActiveAgentActivity] = useState<ActiveAgentActivity | null>(null);
 	const [activeCrewRound, setActiveCrewRound] = useState<CrewRound | null>(null);
 	const [isCrewClosing, setIsCrewClosing] = useState(false);
 	const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+	// Track active SSE subscription so session reset/switch cleanly aborts stale streams
+	const activeStreamUnsubRef = useRef<(() => void) | null>(null);
+	const activeStreamConversationIdRef = useRef<string | null>(null);
 
 	// Non-blocking holding message state & timer
 	const [holdingMessage, setHoldingMessage] = useState<string | null>(null);
@@ -196,12 +215,28 @@ export const App: React.FC = () => {
 	const [arrivalManager] = useState(() => new AgentArrivalManager({}, (roster) => setAgentRoster(roster)));
 	const arrivalConversationRef = useRef<string | null>(null);
 
+	const cleanupActiveStream = useCallback(() => {
+		if (activeStreamUnsubRef.current) {
+			activeStreamUnsubRef.current();
+			activeStreamUnsubRef.current = null;
+		}
+		activeStreamConversationIdRef.current = null;
+		if (holdingTimerRef.current) {
+			clearTimeout(holdingTimerRef.current);
+			holdingTimerRef.current = null;
+		}
+		setHoldingMessage(null);
+		setActiveAgentThinking(null);
+		setActiveAgentActivity(null);
+	}, []);
+
 	useEffect(() => {
 		return () => {
+			cleanupActiveStream();
 			arrivalManager.clearTimers();
 			exitCoordinator.destroy();
 		};
-	}, [arrivalManager, exitCoordinator]);
+	}, [arrivalManager, exitCoordinator, cleanupActiveStream]);
 
 	// Confidence chart points
 	const [chartData, setChartData] = useState<Record<string, Array<{ round: number; conf: number }>>>({
@@ -213,6 +248,11 @@ export const App: React.FC = () => {
 	const showToast = useCallback((msg: string) => {
 		setToastMsg(msg);
 		setTimeout(() => setToastMsg(null), 3500);
+	}, []);
+
+	const pushNotification = useCallback((n: Omit<Notification, "id" | "timestamp" | "read">) => {
+		if (!notificationService.shouldNotify(n.type)) return;
+		notificationService.add(n);
 	}, []);
 
 	// Live conversations persist on the server. Demo conversations are local-only
@@ -246,7 +286,7 @@ export const App: React.FC = () => {
 			try {
 				const summaryResult = CrewBarrierManager.generateCombinedSummary(round);
 				const summaryMsg: ChatMessage = {
-					id: `msg_crew_summary_${Date.now()}`,
+					id: `msg_crew_summary_${round.roundId}`,
 					fromSeat: "Supervisor",
 					type: "summary",
 					content: summaryResult.summaryText,
@@ -256,20 +296,24 @@ export const App: React.FC = () => {
 				setConversations((prev) => {
 					const curr = prev.find((c) => c.id === conversationId);
 					if (!curr) return prev;
-					if (
-						curr.messages.some(
-							(m) =>
-								m.id === summaryMsg.id ||
-								(m.type === "summary" &&
-									m.fromSeat === "Supervisor" &&
-									m.content === summaryResult.summaryText),
-						)
-					) {
-						return prev;
-					}
+					const { messages: nextMessages, isDuplicate } = upsertConversationMessage(
+						curr.messages,
+						summaryMsg,
+					);
+					if (isDuplicate) return prev;
+
+					// Supervisor joined the conversation by posting the combined crew summary
+					arrivalManager.activateAgent(
+						"Supervisor",
+						curr.agentAssignments?.Supervisor,
+						"Coordinate parallel research crews and validate deliverable readiness.",
+						curr.id,
+					);
+					arrivalManager.updateWorkflowStatus("Supervisor", "analyzing", undefined, undefined, curr.id);
+
 					const updated = {
 						...curr,
-						messages: [...curr.messages, summaryMsg],
+						messages: nextMessages,
 						updatedAt: Date.now(),
 					};
 					persistConversation(updated);
@@ -292,7 +336,7 @@ export const App: React.FC = () => {
 				showToast("Failed to post combined crew summary. Crew state preserved for retry.");
 			}
 		},
-		[showToast, persistConversation],
+		[arrivalManager, showToast, persistConversation],
 	);
 
 	// Active conversation lookup
@@ -303,12 +347,10 @@ export const App: React.FC = () => {
 
 	// Load initial health and scenarios
 	const loadInitData = useCallback(async () => {
-		try {
-			const h = await fetchHealth();
-			setHealth(h);
-		} catch (e) {
-			console.warn("Health check error:", e);
-		}
+		// Fetch health asynchronously so slow external health checks never block UI initialization
+		void fetchHealth()
+			.then((h) => setHealth(h))
+			.catch((e) => console.warn("Health check error:", e));
 
 		try {
 			const sc = await fetchScenarios();
@@ -344,7 +386,9 @@ export const App: React.FC = () => {
 		}
 
 		try {
-			const serverConvs = ((await fetchConversations()) || []).filter((c) => c.mode === "live");
+			const serverConvs = ((await fetchConversations()) || [])
+				.filter((c) => c.mode === "live")
+				.map(sanitizeHistoricalConversation);
 			const demoConvs = loadDemoHistory();
 			let combined: Conversation[] = [...serverConvs, ...demoConvs].sort(
 				(a, b) => (b.updatedAt || 0) - (a.updatedAt || 0),
@@ -377,7 +421,7 @@ export const App: React.FC = () => {
 			setConversations([draft]);
 			setActiveConversationId(draft.id);
 		}
-	}, []);
+	}, [setActiveConversationId]);
 
 	useEffect(() => {
 		loadInitData();
@@ -432,13 +476,9 @@ export const App: React.FC = () => {
 			showToast("Wait for the current run to finish before switching modes.");
 			return;
 		}
+		cleanupActiveStream();
 		demoQueueRef.current?.reset();
 		exitCoordinator.forceExit();
-		setHoldingMessage(null);
-		if (holdingTimerRef.current) {
-			clearTimeout(holdingTimerRef.current);
-			holdingTimerRef.current = null;
-		}
 		if (mode === "live") {
 			setMode("sample");
 			activateModeConversation("sample");
@@ -457,6 +497,7 @@ export const App: React.FC = () => {
 			setLiveConfirmModalOpen(false);
 			return;
 		}
+		cleanupActiveStream();
 		demoQueueRef.current?.reset();
 		setMode("live");
 		activateModeConversation("live");
@@ -483,13 +524,9 @@ export const App: React.FC = () => {
 			return;
 		}
 
+		cleanupActiveStream();
 		exitCoordinator.forceExit();
 		demoQueueRef.current?.reset();
-		if (holdingTimerRef.current) {
-			clearTimeout(holdingTimerRef.current);
-			holdingTimerRef.current = null;
-		}
-		setHoldingMessage(null);
 		setSelectedScenario(scenarioFile);
 
 		const scenarioId = scenarioFile.replace(/\.json$/, "");
@@ -515,6 +552,8 @@ export const App: React.FC = () => {
 			...prev.filter((c) => c.id !== demoId && !c.id.startsWith("demo_draft_")),
 		]);
 		setActiveConversationId(demoId);
+		arrivalConversationRef.current = demoId;
+		arrivalManager.setConversation(demoId, []);
 		upsertDemoHistory(demoConv);
 		setChartData({ FactChecker: [], CloudArchitect: [], Synthesizer: [] });
 		setActiveCrewRound(null);
@@ -526,16 +565,15 @@ export const App: React.FC = () => {
 
 	// Start Over in Demo mode: begin a blank local draft; history entries stay intact.
 	const handleStartOver = () => {
+		cleanupActiveStream();
 		exitCoordinator.forceExit();
 		demoQueueRef.current?.reset();
-		if (holdingTimerRef.current) {
-			clearTimeout(holdingTimerRef.current);
-			holdingTimerRef.current = null;
-		}
-		setHoldingMessage(null);
+		setIsBusy(false);
 		const draft = createDraftConversation("sample");
 		setConversations((prev) => [draft, ...prev.filter((c) => !c.id.startsWith("demo_draft_"))]);
 		setActiveConversationId(draft.id);
+		arrivalConversationRef.current = draft.id;
+		arrivalManager.setConversation(draft.id, []);
 		setChartData({ FactChecker: [], CloudArchitect: [], Synthesizer: [] });
 		setActiveCrewRound(null);
 		setIsCrewClosing(false);
@@ -551,12 +589,109 @@ export const App: React.FC = () => {
 	}, []);
 
 	// Finish Tour
-	const handleFinishTour = () => {
+	const tourAutoStartedRef = useRef(false);
+	const handleFinishTour = useCallback(() => {
 		setTourOpen(false);
+		tourAutoStartedRef.current = false;
+		setSettingsModalOpen(false);
+		setLiveConfigModalOpen(false);
+		setSelectedAgentForDrawer(null);
+		setActiveTab("chat");
+		window.dispatchEvent(new CustomEvent("governmindz:tour-export-menu", { detail: { open: false } }));
+		window.dispatchEvent(
+			new CustomEvent("governmindz:tour-composer-state", {
+				detail: { expand: null, openPlus: false, openSearch: false, openModel: false },
+			}),
+		);
 		localStorage.setItem("governmindz_tour_completed", "true");
 		savePreferences({ tourCompleted: true });
 		showToast("Tour completed! Enjoy exploring GovernMindz.");
-	};
+	}, [showToast]);
+
+	// Orchestrate interactive platform state across the 10-step Guided Product Tour
+	const handleTourStepChange = useCallback(
+		(stepId: string) => {
+			window.dispatchEvent(new CustomEvent("governmindz:tour-export-menu", { detail: { open: false } }));
+			window.dispatchEvent(
+				new CustomEvent("governmindz:tour-composer-state", {
+					detail: { expand: null, openPlus: false, openSearch: false, openModel: false },
+				}),
+			);
+
+			if (stepId === "chat") {
+				setActiveTab("chat");
+				setLeftSidebarOpen(true);
+				setRightSidebarOpen(true);
+				setSettingsModalOpen(false);
+				setLiveConfigModalOpen(false);
+				setSelectedAgentForDrawer(null);
+				if (!tourAutoStartedRef.current && !isBusy && (!activeConv || activeConv.messages.length === 0)) {
+					tourAutoStartedRef.current = true;
+					const defaultDemo = DEMO_SCENARIOS[0];
+					setTimeout(() => {
+						void handleStartDemoScenario(defaultDemo.file, defaultDemo.question);
+					}, 180);
+				}
+			} else if (stepId === "chatboxes") {
+				setActiveTab("chat");
+				setSettingsModalOpen(false);
+				setLiveConfigModalOpen(false);
+				setSelectedAgentForDrawer(null);
+			} else if (stepId === "options") {
+				setActiveTab("chat");
+				setLeftSidebarOpen(true);
+				setSettingsModalOpen(false);
+				setLiveConfigModalOpen(false);
+				setSelectedAgentForDrawer(null);
+			} else if (stepId === "composer") {
+				setActiveTab("chat");
+				setSettingsModalOpen(false);
+				setLiveConfigModalOpen(false);
+				setSelectedAgentForDrawer(null);
+				setTimeout(() => {
+					window.dispatchEvent(
+						new CustomEvent("governmindz:tour-composer-state", {
+							detail: { expand: true, openPlus: true },
+						}),
+					);
+				}, 60);
+			} else if (stepId === "roster") {
+				setActiveTab("chat");
+				setRightSidebarOpen(true);
+				setSettingsModalOpen(false);
+				setLiveConfigModalOpen(false);
+			} else if (stepId === "explorer") {
+				setSelectedAgentForDrawer(null);
+				setSettingsModalOpen(false);
+				setLiveConfigModalOpen(false);
+				setActiveTab("explorer");
+			} else if (stepId === "zetaris") {
+				setSelectedAgentForDrawer(null);
+				setSettingsModalOpen(false);
+				setLiveConfigModalOpen(false);
+				setActiveTab("evidence");
+			} else if (stepId === "outputs") {
+				setSelectedAgentForDrawer(null);
+				setSettingsModalOpen(false);
+				setLiveConfigModalOpen(false);
+				setActiveTab("chat");
+				setTimeout(() => {
+					window.dispatchEvent(new CustomEvent("governmindz:tour-export-menu", { detail: { open: true } }));
+				}, 80);
+			} else if (stepId === "settings") {
+				setSelectedAgentForDrawer(null);
+				setSettingsModalOpen(false);
+				setLiveConfigModalOpen(true);
+			} else if (stepId === "ready-live") {
+				setSelectedAgentForDrawer(null);
+				setSettingsModalOpen(false);
+				setLiveConfigModalOpen(false);
+				setActiveTab("chat");
+			}
+		},
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[isBusy, activeConv],
+	);
 
 	const handleSelectConversation = (id: string) => {
 		if (isBusy) {
@@ -564,9 +699,9 @@ export const App: React.FC = () => {
 			return;
 		}
 		if (id !== activeIdRef.current) {
+			cleanupActiveStream();
 			demoQueueRef.current?.reset();
 			exitCoordinator.forceExit();
-			setHoldingMessage(null);
 		}
 		setActiveConversationId(id);
 	};
@@ -577,12 +712,15 @@ export const App: React.FC = () => {
 			showToast("Wait for the current run to finish before starting a new conversation.");
 			return;
 		}
+		cleanupActiveStream();
 		exitCoordinator.forceExit();
 		demoQueueRef.current?.reset();
 		if (mode !== "live") {
 			const draft = createDraftConversation("sample");
 			setConversations((prev) => [draft, ...prev.filter((c) => !c.id.startsWith("demo_draft_"))]);
 			setActiveConversationId(draft.id);
+			arrivalConversationRef.current = draft.id;
+			arrivalManager.setConversation(draft.id, []);
 			setChartData({ FactChecker: [], CloudArchitect: [], Synthesizer: [] });
 			setActiveTab("chat");
 			return;
@@ -592,6 +730,8 @@ export const App: React.FC = () => {
 		const updated = [newConv, ...conversations];
 		setConversations(updated);
 		setActiveConversationId(newConv.id);
+		arrivalConversationRef.current = newConv.id;
+		arrivalManager.setConversation(newConv.id, []);
 		saveConversation(newConv);
 		setChartData({ FactChecker: [], CloudArchitect: [], Synthesizer: [] });
 		setActiveTab("chat");
@@ -637,6 +777,7 @@ export const App: React.FC = () => {
 	// Update Agent Roster Status
 	const updateAgentStatus = useCallback(
 		(seatId: string, status: AgentProfile["status"], confidence?: number | null) => {
+			if (!isRosterEligibleSeat(seatId)) return;
 			arrivalManager.updateWorkflowStatus(
 				seatId,
 				status,
@@ -651,6 +792,7 @@ export const App: React.FC = () => {
 	// Append Live Reasoning & Hypothesis Scratchpad steps
 	const appendAgentReasoning = useCallback(
 		(seatId: string, reasoningChunk: string) => {
+			if (!isRosterEligibleSeat(seatId)) return;
 			arrivalManager.appendReasoning(seatId, reasoningChunk, activeIdRef.current ?? undefined);
 		},
 		[arrivalManager],
@@ -734,15 +876,19 @@ export const App: React.FC = () => {
 	) => {
 		if (isBusy) return;
 
+		cleanupActiveStream();
 		const scenarioToUse = scenarioOverride || selectedScenario;
 		const topicToRun = userTopic || targetConv.topic || "Assess the Zetaris data available to this agent.";
 
 		// Assign / rotate friendly human names & job tasks for this deliberation
 		const councilAssignments = targetConv.agentAssignments || assignHumanCouncil();
 
-		if (arrivalConversationRef.current !== targetConv.id) {
-			arrivalConversationRef.current = targetConv.id;
-			arrivalManager.setConversation(targetConv.id, getParticipatingAgentProfiles(targetConv));
+		arrivalConversationRef.current = targetConv.id;
+		arrivalManager.setConversation(targetConv.id, getParticipatingAgentProfiles(targetConv));
+		for (const [seatId, assignment] of Object.entries(councilAssignments)) {
+			if (isRosterEligibleSeat(seatId)) {
+				arrivalManager.recordTaskAssignment(seatId, assignment, assignment.jobTask, targetConv.id);
+			}
 		}
 
 		// Format user message content if files or sources are attached
@@ -752,7 +898,9 @@ export const App: React.FC = () => {
 			formattedContent += `\n\n📎 Attached Files: ${names}`;
 		}
 		if (options?.searchModes && options.searchModes.length > 0) {
-			const modesStr = options.searchModes.map((m) => (m === "zetaris" ? "Zetaris AI" : m === "web" ? "Web Search" : m)).join(" + ");
+			const modesStr = options.searchModes
+				.map((m) => (m === "zetaris" ? "Zetaris AI" : m === "web" ? "Web Search" : m))
+				.join(" + ");
 			formattedContent += `\n🔍 Sources Consulted: ${modesStr}`;
 		}
 
@@ -812,22 +960,30 @@ export const App: React.FC = () => {
 			demoQueueRef.current?.reset();
 		}
 
+		const targetId = targetConv.id;
+		activeStreamConversationIdRef.current = targetId;
+
 		try {
 			const { runId } = await startRun({
 				mode,
 				scenario: scenarioToUse,
 				topic: topicToRun,
-				conversationId: mode === "live" ? targetConv.id : undefined,
+				conversationId: mode === "live" ? targetId : undefined,
 				searchModes: options?.searchModes,
 				model: options?.model,
 				attachments: options?.attachments,
 			});
 
+			// Guard if user reset or switched conversation while startRun was awaiting
+			if (activeIdRef.current !== targetId) {
+				return;
+			}
+
 			// Subscribe to SSE event stream
-			subscribeRunEvents(
+			const unsub = subscribeRunEvents(
 				runId,
 				(ev: any) => {
-					// Handle SSE event dispatch
+					if (activeIdRef.current !== targetId) return;
 					handleStreamEvent(ev);
 				},
 				(err) => {
@@ -837,8 +993,11 @@ export const App: React.FC = () => {
 						holdingTimerRef.current = null;
 					}
 					setHoldingMessage(null);
-					setIsBusy(false);
-					setActiveAgentThinking(null);
+					if (mode === "live") {
+						setIsBusy(false);
+						setActiveAgentThinking(null);
+						setActiveAgentActivity(null);
+					}
 				},
 				() => {
 					if (holdingTimerRef.current) {
@@ -846,25 +1005,30 @@ export const App: React.FC = () => {
 						holdingTimerRef.current = null;
 					}
 					setHoldingMessage(null);
-					setIsBusy(false);
-					setActiveAgentThinking(null);
+					if (mode === "live") {
+						setIsBusy(false);
+						setActiveAgentThinking(null);
+						setActiveAgentActivity(null);
+					}
 				},
 			);
+			activeStreamUnsubRef.current = unsub;
 		} catch (err: any) {
-			if (holdingTimerRef.current) {
-				clearTimeout(holdingTimerRef.current);
-				holdingTimerRef.current = null;
-			}
-			setHoldingMessage(null);
+			cleanupActiveStream();
 			setConversations((prev) => {
 				const updated = prev.map((c) =>
-					c.id === targetConv.id
+					c.id === targetId
 						? { ...c, status: "error" as const, updatedAt: Date.now() }
 						: c,
 				);
-				const current = updated.find((c) => c.id === targetConv.id);
+				const current = updated.find((c) => c.id === targetId);
 				if (current) persistConversation(current);
 				return updated;
+			});
+			pushNotification({
+				type: "run_error",
+				title: "Deliberation run failed",
+				body: err?.message || "The deliberation stream terminated unexpectedly.",
 			});
 			showToast(`Run failed: ${err.message}`);
 			if (mode === "live") {
@@ -916,32 +1080,39 @@ export const App: React.FC = () => {
 				const curr = prev.find((c) => c.id === conversationId);
 				if (!curr) return prev;
 
-				let updated = { ...curr };
+				let updated: Conversation = {
+					...curr,
+					workflowEvents: appendWorkflowTimelineEvent(curr.workflowEvents, ev),
+				};
 
 				if (ev.type === "run_start") {
-					// Announce the active agent roster with friendly human names and assigned job tasks
+					// Record council assignments without activating seats on the roster prematurely.
+					// Agents will join the visible roster chronologically as they enter the conversation.
 					const assignments = updated.agentAssignments || assignHumanCouncil();
 					for (const [seatId, assignment] of Object.entries(assignments)) {
-						if (seatId === "user" || seatId === "Orchestrator") continue;
-						arrivalManager.activateAgent(seatId, assignment, assignment.jobTask, updated.id);
+						if (!isRosterEligibleSeat(seatId)) continue;
+						arrivalManager.recordTaskAssignment(seatId, assignment, assignment.jobTask, updated.id);
 					}
 					const rosterAnnouncement = generateTaskDelegationAnnouncement(assignments, ev.mode);
 
 					const orchMsg: ChatMessage = {
-						id: `msg_orch_${Date.now()}`,
+						id: `msg_orch_start_${updated.id}`,
 						fromSeat: "Orchestrator",
 						type: "orchestrator",
 						content: rosterAnnouncement,
 						timestamp: Date.now(),
 					};
-					updated.messages = [...updated.messages, orchMsg];
+					const { messages: nextMessages } = upsertConversationMessage(updated.messages, orchMsg);
+					updated.messages = nextMessages;
 					updated.status = "running";
 				} else if (ev.type === "agent_pre_cue") {
-					// Pre-cue: lightweight scheduling signal informing downstream agents
-					appendAgentReasoning(
-						ev.targetAgent,
-						`[Internal Pre-Cue: ${ev.taskType}] ${ev.hint || "Preparing background analysis for upcoming debate turn..."}`,
-					);
+					// Pre-cue is an internal scheduling signal; only append if the agent has already joined
+					if (arrivalManager.getRoster().some((a) => a.id === ev.targetAgent)) {
+						appendAgentReasoning(
+							ev.targetAgent,
+							`[Internal Pre-Cue: ${ev.taskType}] ${ev.hint || "Preparing analysis for upcoming debate turn..."}`,
+						);
+					}
 				} else if (ev.type === "web_search") {
 					updated.webSearchData = {
 						query: ev.query,
@@ -949,10 +1120,6 @@ export const App: React.FC = () => {
 						source: ev.source,
 						results: ev.results || [],
 					};
-					appendAgentReasoning(
-						"CredibleSourcesResearchAgent",
-						`Dispatched online web search query: "${ev.query}". Retrieved ${ev.results?.length || 0} authoritative external standards and citations.`,
-					);
 				} else if (ev.type === "zetaris") {
 					updated.zetarisData = {
 						query: ev.query,
@@ -962,130 +1129,153 @@ export const App: React.FC = () => {
 						isSynthetic: ev.isSynthetic,
 						evidenceSource: ev.evidenceSource,
 					};
-					appendAgentReasoning(
-						"FactChecker",
-						`Connected to Zetaris virtual fabric. Executed query: "${ev.query}" (${ev.rows?.length || 0} rows retrieved).`,
-					);
 				} else if (ev.type === "inquiry_score") {
 					updated.inquiryScore = ev.score;
 				} else if (ev.type === "seat_thinking") {
-					setActiveAgentThinking(ev.seatId);
-					updateAgentStatus(ev.seatId, "analyzing");
-					const note = ev.step || `Formulating epistemic position and examining schema provenance...`;
-					appendAgentReasoning(ev.seatId, note);
+					const seatId = ev.seatId;
+					const phase = resolveActivityPhase(seatId, ev.step, ev.round);
+					setActiveAgentThinking(seatId);
+					setActiveAgentActivity({
+						seatId,
+						phase,
+						round: ev.round,
+						detail: ev.step,
+						startedAt: Date.now(),
+					});
+					if (isRosterEligibleSeat(seatId, updated.agentAssignments)) {
+						arrivalManager.activateAgent(
+							seatId,
+							updated.agentAssignments?.[seatId],
+							undefined,
+							updated.id,
+						);
+						updateAgentStatus(
+							seatId,
+							phase === "challenging"
+								? "challenging"
+								: phase === "synthesizing"
+									? "synthesizing"
+									: phase === "researching"
+										? "researching"
+										: "analyzing",
+						);
+						const note =
+							ev.step || `Round ${ev.round ?? 0}: Formulating position and verifying evidence constraints...`;
+						appendAgentReasoning(seatId, note);
+					}
 				} else if (ev.type === "message") {
 					setActiveAgentThinking(null);
+					setActiveAgentActivity(null);
 					const rawMsg = ev.message;
-					const newMsg: ChatMessage = {
-						id: rawMsg.id || `msg_${Date.now()}`,
-						fromSeat: rawMsg.fromSeat,
-						toSeat: rawMsg.toSeat,
-						type: rawMsg.type || "proposal",
-						content: rawMsg.content || rawMsg.structured?.position || "",
-						structured: rawMsg.structured,
-						round: rawMsg.round,
-						confidence: rawMsg.confidence ?? rawMsg.structured?.confidence_self,
-						timestamp: rawMsg.timestamp || Date.now(),
-						latency_ms: rawMsg.latency_ms,
-						replyToExcerpt: rawMsg.replyToExcerpt,
-						envelope: rawMsg.envelope || (rawMsg.structured ? {
-							schemaVersion: "1.0",
-							message: {
-								type: rawMsg.type || "proposal",
-								text: rawMsg.structured?.position || rawMsg.content || "",
-								replyTo: rawMsg.toSeat && rawMsg.toSeat !== "all" ? rawMsg.toSeat : undefined,
-							},
-							result: {
-								conclusion: rawMsg.structured?.position || rawMsg.content || "",
-								confidence: rawMsg.confidence ?? rawMsg.structured?.confidence_self ?? 1.0,
-								evidenceIds: (rawMsg.structured?.evidence || []).map((_: any, idx: number) => `ev-${idx + 1}`),
-								unresolvedQuestions: rawMsg.structured?.caveats || [],
-							},
-							execution: {
-								taskId: rawMsg.id || `task-${Date.now()}`,
-								status: "completed",
-								round: rawMsg.round,
-								latency_ms: rawMsg.latency_ms,
-								auditRef: rawMsg.id,
-							},
-						} : undefined),
-					};
+					if (rawMsg) {
+						const enrichedRaw = {
+							...rawMsg,
+							content: rawMsg.content || rawMsg.structured?.position || "",
+							envelope:
+								rawMsg.envelope ||
+								(rawMsg.structured
+									? {
+											schemaVersion: "1.0" as const,
+											message: {
+												type: rawMsg.type || "proposal",
+												text: rawMsg.structured?.position || rawMsg.content || "",
+												replyTo:
+													rawMsg.inReplyTo ||
+													(rawMsg.toSeat && rawMsg.toSeat !== "all" ? rawMsg.toSeat : undefined),
+											},
+											result: {
+												conclusion: rawMsg.structured?.position || rawMsg.content || "",
+												confidence:
+													rawMsg.confidence ?? rawMsg.structured?.confidence_self ?? 1.0,
+												evidenceIds: (rawMsg.structured?.evidence || []).map(
+													(_: any, idx: number) => `ev-${idx + 1}`,
+												),
+												unresolvedQuestions: rawMsg.structured?.caveats || [],
+											},
+											execution: {
+												taskId: rawMsg.id || `task-${Date.now()}`,
+												status: "completed",
+												round: rawMsg.round,
+												latency_ms: rawMsg.latency_ms,
+												auditRef: rawMsg.id,
+											},
+										}
+									: undefined),
+						};
 
-					updated.messages = [...updated.messages, newMsg];
+						const { messages: nextMessages, message: newMsg, isDuplicate } =
+							upsertConversationMessage(updated.messages, enrichedRaw);
+						updated.messages = nextMessages;
 
-					// Live text-to-speech reading if voice enabled (associated with main group)
-					if (ttsService.isTtsEnabled("main")) {
-						const speakerName = updated.agentAssignments?.[rawMsg.fromSeat]?.humanName || rawMsg.fromSeat;
-						const speechText = newMsg.content || "";
-						if (speechText) {
-							ttsService.queueSpeak(speechText, speakerName, newMsg.id, "main");
+						const s = newMsg.fromSeat;
+						const conf = newMsg.confidence || 0;
+
+						if (!isDuplicate && isRosterEligibleSeat(s, updated.agentAssignments)) {
+							// Agent has joined the conversation by contributing a message
+							arrivalManager.activateAgent(
+								s,
+								updated.agentAssignments?.[s],
+								undefined,
+								updated.id,
+							);
+							appendAgentReasoning(
+								s,
+								`Deliberation Round ${newMsg.round ?? 0}: Committed ${newMsg.type} [Confidence: ${((newMsg.confidence || 0.8) * 100).toFixed(0)}%].`,
+							);
+							updateAgentStatus(s, "completed", conf);
+						}
+
+						if (!isDuplicate && ttsService.isTtsEnabled("main")) {
+							const speakerName =
+								updated.agentAssignments?.[s]?.humanName || s;
+							const speechText = newMsg.content || "";
+							if (speechText) {
+								ttsService.queueSpeak(speechText, speakerName, newMsg.id, "main");
+							}
+						}
+
+						if (!isDuplicate && (s === "FactChecker" || s === "CloudArchitect" || s === "Synthesizer")) {
+							setChartData((cd) => ({
+								...cd,
+								[s]: [...(cd[s] || []), { round: newMsg.round || 0, conf }],
+							}));
 						}
 					}
-
-					// Record contribution step in live scratchpad
-					appendAgentReasoning(
-						rawMsg.fromSeat,
-						`Deliberation Round ${rawMsg.round || 1}: Committed position [Confidence: ${((newMsg.confidence || 0.8) * 100).toFixed(0)}%].`,
-					);
-
-					// Update confidence chart
-					const s = rawMsg.fromSeat;
-					const conf = newMsg.confidence || 0;
-					if (s === "FactChecker" || s === "CloudArchitect" || s === "Synthesizer") {
-						setChartData((cd) => ({
-							...cd,
-							[s]: [...(cd[s] || []), { round: rawMsg.round || 0, conf }],
-						}));
-					}
-
-					updateAgentStatus(s, "completed", conf);
 				} else if (ev.type === "rival_trigger") {
-					updateAgentStatus("RivalChallenger", "challenging");
-					appendAgentReasoning(
-						"RivalChallenger",
-						"Detected unverified consensus assumption. Probing boundary cases and raising formal challenge.",
-					);
+					setActiveAgentThinking("RivalChallenger");
+					setActiveAgentActivity({
+						seatId: "RivalChallenger",
+						phase: "challenging",
+						round: ev.round,
+						targetSeat: ev.seatId,
+						detail: `Challenging ${ev.seatId || "council claim"} (${ev.reason || "epistemic verification"})…`,
+						startedAt: Date.now(),
+					});
 				} else if (ev.type === "thinker_question") {
-					updateAgentStatus("Thinker", "analyzing");
-					appendAgentReasoning(
-						"Thinker",
-						"Exploring hidden governance angles and long-term retention policies.",
-					);
+					if (arrivalManager.getRoster().some((a) => a.id === "Thinker")) {
+						updateAgentStatus("Thinker", "completed");
+						appendAgentReasoning(
+							"Thinker",
+							`Probed operational edge case: "${ev.question || "contingency check"}"`,
+						);
+					}
 				} else if (ev.type === "audit") {
 					if (ev.event) {
 						updated.auditEvents = [...updated.auditEvents, ev.event];
 					}
 				} else if (ev.type === "deliverable_contract") {
 					updated.contract = ev.contract;
-				} else if (ev.type === "crew_start") {
-					appendAgentReasoning("Supervisor", `Launched parallel ${ev.crew} with ${ev.agentCount} independent agents.`);
 				} else if (ev.type === "agent_task_assigned") {
-					arrivalManager.activateAgent(
-						ev.agentId,
-						updated.agentAssignments?.[ev.agentId],
-						ev.task,
-						updated.id,
-					);
-					updateAgentStatus(ev.agentId, "analyzing");
-					appendAgentReasoning(ev.agentId, `[Task] ${ev.task}`);
-				} else if (ev.type === "research_finding") {
-					updateAgentStatus(ev.agentId, "completed");
-					appendAgentReasoning(ev.agentId, `[Finding: ${ev.finding?.title || "Evidence"}] ${ev.finding?.claim || ""}`);
-				} else if (ev.type === "crew_complete") {
-					appendAgentReasoning(
-						"Supervisor",
-						`[${ev.crew} ${ev.failed ? "Failed" : "Completed"}] ${ev.summary || (ev.failed ? "Did not complete" : "Findings verified")}`,
-					);
-				} else if (ev.type === "crew_failed") {
-					appendAgentReasoning(
-						"Supervisor",
-						`[${ev.crew} Failed] ${ev.error || "Did not complete. Evidence excluded."}`,
-					);
-				} else if (ev.type === "hater_crew_challenge") {
-					updateAgentStatus("RivalChallenger", "challenging");
-					appendAgentReasoning("RivalChallenger", `[Independent Challenge to ${ev.targetAgent}] ${ev.challenge}`);
-				} else if (ev.type === "crew_challenge_response") {
-					appendAgentReasoning("Synthesizer", `[${ev.crew} Defense] ${ev.defenseStatement}`);
+					// Record the task assignment so when the agent joins the conversation, its task is shown.
+					// Never add non-participating agents or sub-crew workers directly to the main Agent Roster.
+					if (isRosterEligibleSeat(ev.agentId)) {
+						arrivalManager.recordTaskAssignment(
+							ev.agentId,
+							updated.agentAssignments?.[ev.agentId],
+							ev.task,
+							updated.id,
+						);
+					}
 				} else if (ev.type === "artifact_created" || ev.type === "artifact_ready") {
 					if (ev.contract) updated.contract = ev.contract;
 					if (ev.primaryArtifact) updated.primaryArtifact = ev.primaryArtifact;
@@ -1098,6 +1288,7 @@ export const App: React.FC = () => {
 					updated.supervisorDecision = "REJECTED";
 				} else if (ev.type === "complete" || ev.type === "done") {
 					setActiveAgentThinking(null);
+					setActiveAgentActivity(null);
 					setIsBusy(false);
 					updated.status = "completed";
 					if (ev.result) {
@@ -1114,11 +1305,39 @@ export const App: React.FC = () => {
 					if (ev.supervisorDecision) updated.supervisorDecision = ev.supervisorDecision;
 					if (ev.dataCrewReport) updated.dataCrewReport = ev.dataCrewReport;
 					if (ev.webCrewReport) updated.webCrewReport = ev.webCrewReport;
+
+					// Strictly prune the roster and conversation history so ONLY agents that
+					// actually joined the conversation remain on the roster or in saved history.
+					const participatingIds = extractParticipatingSeatIds(updated);
+					arrivalManager.pruneToParticipants(participatingIds, updated.id);
+					for (const seatId of participatingIds) {
+						arrivalManager.updateWorkflowStatus(seatId, "completed", undefined, undefined, updated.id);
+					}
+					updated.agentAssignments = filterAssignmentsToParticipants(
+						updated.agentAssignments,
+						participatingIds,
+					);
+					pushNotification({
+						type: "run_complete",
+						title: "AI Deliberation complete",
+						body:
+							updated.finalConfidence != null
+								? `Final confidence ${updated.finalConfidence}`
+								: "Cryptographic audit verified",
+						source: updated.id,
+					});
+
 					showToast("AI Deliberation complete · Cryptographic audit verified");
 				} else if (ev.type === "error") {
 					setActiveAgentThinking(null);
+					setActiveAgentActivity(null);
 					setIsBusy(false);
 					updated.status = "error";
+					pushNotification({
+						type: "run_error",
+						title: "Deliberation run failed",
+						body: ev.message || "Deliberation error",
+					});
 					showToast(`Run failed: ${ev.message || "Deliberation error"}`);
 				}
 
@@ -1130,7 +1349,7 @@ export const App: React.FC = () => {
 				return prev.map((c) => (c.id === conversationId ? updated : c));
 			});
 		},
-		[arrivalManager, updateAgentStatus, appendAgentReasoning, showToast, triggerBarrierRelease, persistConversation],
+		[arrivalManager, updateAgentStatus, appendAgentReasoning, showToast, triggerBarrierRelease, persistConversation, exitCoordinator],
 	);
 
 	// Initialize Demo presentation queue
@@ -1163,7 +1382,7 @@ export const App: React.FC = () => {
 				setHoldingMessage(null);
 			}
 
-			if (mode === "live" || !demoQueueRef.current || ev.type === "run_start") {
+			if (mode === "live" || !demoQueueRef.current) {
 				applyStreamEvent(ev);
 			} else {
 				const textLength =
@@ -1173,7 +1392,7 @@ export const App: React.FC = () => {
 
 				demoQueueRef.current.enqueue({
 					id: `demo_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-					type: ev.type,
+					type: ev.type === "seat_thinking" ? "seat_thinking" : ev.type === "message" ? "message" : "crew",
 					payload: ev,
 					textLength,
 					fromSeat: ev.message?.fromSeat || ev.seatId,
@@ -1224,178 +1443,244 @@ export const App: React.FC = () => {
 		}
 	};
 
+	const computedRounds = useMemo(() => {
+		if (!activeConv?.messages || activeConv.messages.length === 0) return 0;
+		const maxRound = activeConv.messages.reduce(
+			(max, m) => (typeof m.round === "number" ? Math.max(max, m.round + 1) : max),
+			1,
+		);
+		return maxRound;
+	}, [activeConv?.messages]);
+
+	const isAuditVerified = Boolean(
+		activeConv &&
+			activeConv.status === "completed" &&
+			activeConv.auditEvents &&
+			activeConv.auditEvents.length > 0,
+	);
+
 	return (
 		<ErrorBoundary>
-		<div className="h-screen w-screen flex flex-col bg-[#0a0e1a] text-[#e8ecf7] overflow-hidden select-none">
-			{/* Top Bar Header */}
-			<Header
-				activeTab={activeTab}
-				setActiveTab={setActiveTab}
-				leftSidebarOpen={leftSidebarOpen}
-				setLeftSidebarOpen={setLeftSidebarOpen}
-				rightSidebarOpen={rightSidebarOpen}
-				setRightSidebarOpen={setRightSidebarOpen}
-				health={health}
-				refreshHealth={handleRefreshHealth}
-				openSettings={() => setSettingsModalOpen(true)}
-				mode={mode}
-				isBusy={isBusy}
-				activeConversation={activeConv}
-				onToggleMode={handleToggleMode}
-				onOpenCredentials={() => setLiveConfigModalOpen(true)}
-			/>
-
-			{/* Main Workspace 3-Pane Layout */}
-			<div className="flex-1 flex overflow-hidden">
-				{/* Left Persistent Navigation Sidebar */}
-				<LeftSidebar
-					conversations={conversations}
-					activeConversationId={activeId}
-					onSelectConversation={handleSelectConversation}
-					onNewConversation={handleNewConversation}
-					onRenameConversation={handleRenameConversation}
-					onDeleteConversation={handleDeleteConversation}
-					mode={mode}
-					setMode={setMode}
-					scenarios={scenarios}
-					selectedScenario={selectedScenario}
-					setSelectedScenario={handleSelectScenario}
+			<div className="h-screen w-screen flex flex-col bg-[#0a0e1a] text-[#e8ecf7] overflow-hidden select-none">
+				{/* Top Bar Header */}
+				<Header
+					activeTab={activeTab}
+					setActiveTab={setActiveTab}
+					leftSidebarOpen={leftSidebarOpen}
+					setLeftSidebarOpen={setLeftSidebarOpen}
+					rightSidebarOpen={rightSidebarOpen}
+					setRightSidebarOpen={setRightSidebarOpen}
+					health={health}
+					refreshHealth={handleRefreshHealth}
 					openSettings={() => setSettingsModalOpen(true)}
-					isOpen={leftSidebarOpen}
-					onRequestLiveMode={() => setLiveConfirmModalOpen(true)}
+					mode={mode}
+					isBusy={isBusy}
+					activeConversation={activeConv}
+					onToggleMode={handleToggleMode}
+					onOpenCredentials={() => setLiveConfigModalOpen(true)}
+					onOpenTour={() => {
+						tourAutoStartedRef.current = false;
+						setTourOpen(true);
+					}}
 				/>
 
-				{/* Center: Selected View */}
-				<main className="flex-1 flex flex-col min-w-0 bg-[#0a0e1a] overflow-hidden relative">
-					{activeConv ? (
-						<>
-							{activeTab === "chat" && (
-								<>
-									<GroupConversation
-										conversation={activeConv}
-										mode={mode}
-										messages={activeConv.messages}
-										agentRoster={agentRoster}
-										activeAgentThinking={activeAgentThinking}
-										inquiryScore={activeConv.inquiryScore}
-										finalConfidence={activeConv.finalConfidence}
-										rounds={2}
-										auditVerified={false}
-										onSelectAgent={handleSelectAgentFromChat}
-										onStartPrompt={(prompt) => handleSendMessage(prompt, activeScenarioItem?.file)}
-										onRateMessage={handleRateMessage}
-										activeScenario={activeScenarioItem}
-										allScenarios={scenarios}
-										onSelectScenario={handleSelectScenario}
-										activeCrewRound={activeCrewRound}
-										isCrewClosing={isCrewClosing}
-										holdingMessage={holdingMessage}
-										demoQueueState={demoQueueState}
-										onPauseDemo={() => demoQueueRef.current?.pause()}
-										onResumeDemo={() => demoQueueRef.current?.resume()}
-										onResetDemo={() => {
-											demoQueueRef.current?.reset();
-											handleStartOver();
-										}}
-										onExploreZetaris={handleExploreZetaris}
-									/>
-									<MessageComposer
-										mode={mode}
-										onSendMessage={handleSendMessage}
-										onStartDemoScenario={handleStartDemoScenario}
-										onStartOver={handleStartOver}
-										selectedScenarioFile={selectedScenario}
-										onSelectScenarioFile={handleSelectScenario}
-										isBusy={isBusy}
-										disabled={false}
-										defaultTopic={activeScenarioItem?.topic}
-										hasCompletedMessages={Boolean(activeConv?.messages && activeConv.messages.length > 0)}
-									/>
-								</>
-							)}
+				{/* Main Workspace 3-Pane Layout */}
+				<div className="flex-1 flex overflow-hidden">
+					{/* Left Persistent Navigation Sidebar */}
+					<LeftSidebar
+						conversations={conversations}
+						activeConversationId={activeId}
+						onSelectConversation={handleSelectConversation}
+						onNewConversation={handleNewConversation}
+						onRenameConversation={handleRenameConversation}
+						onDeleteConversation={handleDeleteConversation}
+						mode={mode}
+						setMode={setMode}
+						scenarios={scenarios}
+						selectedScenario={selectedScenario}
+						setSelectedScenario={handleSelectScenario}
+						openSettings={() => setSettingsModalOpen(true)}
+						isOpen={leftSidebarOpen}
+						onRequestLiveMode={() => setLiveConfirmModalOpen(true)}
+					/>
 
-							{activeTab === "explorer" && <React.Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Loading…</div>}><ExecutionExplorer conversation={activeConv} /></React.Suspense>}
+					{/* Center: Selected View */}
+					<main className="flex-1 flex flex-col min-w-0 bg-[#0a0e1a] overflow-hidden relative">
+						{activeConv ? (
+							<>
+								{activeTab === "chat" && (
+									<>
+										<GroupConversation
+											conversation={activeConv}
+											mode={mode}
+											messages={activeConv.messages}
+											agentRoster={agentRoster}
+											activeAgentThinking={activeAgentThinking}
+											activeAgentActivity={activeAgentActivity}
+											inquiryScore={activeConv.inquiryScore}
+											finalConfidence={activeConv.finalConfidence}
+											rounds={computedRounds || 1}
+											auditVerified={isAuditVerified}
+											onSelectAgent={handleSelectAgentFromChat}
+											onStartPrompt={(prompt) => handleSendMessage(prompt, activeScenarioItem?.file)}
+											onRateMessage={handleRateMessage}
+											activeScenario={activeScenarioItem}
+											allScenarios={scenarios}
+											onSelectScenario={handleSelectScenario}
+											activeCrewRound={activeCrewRound}
+											isCrewClosing={isCrewClosing}
+											holdingMessage={holdingMessage}
+											demoQueueState={demoQueueState}
+											onPauseDemo={() => demoQueueRef.current?.pause()}
+											onResumeDemo={() => demoQueueRef.current?.resume()}
+											onResetDemo={() => {
+												demoQueueRef.current?.reset();
+												handleStartOver();
+											}}
+											onExploreZetaris={handleExploreZetaris}
+										/>
+										<MessageComposer
+											mode={mode}
+											onSendMessage={handleSendMessage}
+											onStartDemoScenario={handleStartDemoScenario}
+											onStartOver={handleStartOver}
+											selectedScenarioFile={selectedScenario}
+											onSelectScenarioFile={handleSelectScenario}
+											isBusy={isBusy}
+											disabled={false}
+											defaultTopic={activeScenarioItem?.topic}
+											hasCompletedMessages={Boolean(activeConv?.messages && activeConv.messages.length > 0)}
+										/>
+									</>
+								)}
 
-							{activeTab === "evidence" && <React.Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Loading…</div>}><TrustEvidenceView conversation={activeConv} /></React.Suspense>}
-						</>
-					) : (
-						<div className="flex-1 flex items-center justify-center text-xs text-slate-400">
-							Select or create a debate to begin.
-						</div>
-					)}
-				</main>
+								{activeTab === "explorer" && (
+									<React.Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Loading…</div>}>
+										<ExecutionExplorer conversation={activeConv} />
+									</React.Suspense>
+								)}
 
-				{/* Right Agent Activity & Metrics Sidebar */}
-				<RightSidebar
-					agents={agentRoster}
-					onSelectAgent={handleSelectAgent}
-					chartData={chartData}
-					finalConfidence={activeEvaluation?.evaluated ? activeConv?.finalConfidence : undefined}
-					consensusReached={Boolean(activeEvaluation?.evaluated && activeConv?.status === "completed")}
-					consensusMethod="synthesizer"
-					auditVerified={false}
-					auditCount={activeConv?.auditEvents?.length || 0}
-					inquiryScore={activeConv?.inquiryScore}
-					currentRound={(activeConv?.messages?.filter((m) => m.round === 1).length ?? 0) > 0 ? 1 : 0}
-					isOpen={rightSidebarOpen}
-				/>
-			</div>
+								{activeTab === "evidence" && (
+									<React.Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Loading…</div>}>
+										<TrustEvidenceView conversation={activeConv} />
+									</React.Suspense>
+								)}
+							</>
+						) : (
+							<div className="flex-1 flex items-center justify-center text-xs text-slate-400">
+								Select or create a debate to begin.
+							</div>
+						)}
+					</main>
 
-			{/* Slide-over Agent Detail Drawer */}
-			<AgentDetailDrawer
-				agent={currentSelectedAgent}
-				messages={activeConv?.messages || []}
-				onClose={() => setSelectedAgentForDrawer(null)}
-			/>
-
-			{/* Settings Modal */}
-			<SettingsModal
-				isOpen={settingsModalOpen}
-				onClose={() => setSettingsModalOpen(false)}
-				health={health}
-				activeConversation={activeConv}
-				onClearAll={() => {
-					setConversations([]);
-					setActiveConversationId(null);
-					setSettingsModalOpen(false);
-					showToast("Active session cleared");
-				}}
-				onReplayTour={() => setTourOpen(true)}
-				onOpenCredentials={() => setLiveConfigModalOpen(true)}
-				onRefreshHealth={handleRefreshHealth}
-			/>
-
-			{/* Guided Onboarding UI Tour */}
-			<TourGuide
-				isOpen={tourOpen}
-				onClose={() => setTourOpen(false)}
-				onFinish={handleFinishTour}
-			/>
-
-			{/* Live Mode Confirmation Dialog */}
-			<LiveModeConfirmModal
-				isOpen={liveConfirmModalOpen}
-				onConfirm={handleConfirmLiveMode}
-				onCancel={() => setLiveConfirmModalOpen(false)}
-				onOpenConfig={() => setLiveConfigModalOpen(true)}
-				meterlessConfigured={Boolean(health?.meterless?.configured || health?.meterless?.state === "online")}
-				zetarisConfigured={Boolean(health?.zetaris?.configured || health?.zetaris?.ok)}
-			/>
-
-			{/* Live Mode Secure Credential Configuration */}
-			<LiveConfigModal
-				isOpen={liveConfigModalOpen}
-				onClose={() => setLiveConfigModalOpen(false)}
-				onConfigSaved={handleRefreshHealth}
-			/>
-
-			{/* Toast Notification */}
-			{toastMsg && (
-				<div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl bg-[#18203a] text-teal-300 border border-[#2c385c] shadow-2xl text-xs font-semibold animate-fadeIn">
-					{toastMsg}
+					{/* Right Agent Activity & Metrics Sidebar */}
+					<RightSidebar
+						agents={agentRoster}
+						activeAgentId={activeAgentActivity?.seatId || activeAgentThinking}
+						onSelectAgent={handleSelectAgent}
+						chartData={chartData}
+						finalConfidence={activeEvaluation?.evaluated ? activeConv?.finalConfidence : undefined}
+						consensusReached={Boolean(activeEvaluation?.evaluated && activeConv?.status === "completed")}
+						consensusMethod="synthesizer"
+						auditVerified={isAuditVerified}
+						auditCount={activeConv?.auditEvents?.length || 0}
+						inquiryScore={activeConv?.inquiryScore}
+						currentRound={(activeConv?.messages?.filter((m) => m.round === 1).length ?? 0) > 0 ? 1 : 0}
+						isOpen={rightSidebarOpen}
+					/>
 				</div>
-			)}
-		</div>
+
+				{/* Slide-over Agent Detail Drawer */}
+				<AgentDetailDrawer
+					agent={currentSelectedAgent}
+					messages={activeConv?.messages || []}
+					onClose={() => setSelectedAgentForDrawer(null)}
+				/>
+
+				{/* Settings Modal */}
+				<SettingsModal
+					isOpen={settingsModalOpen}
+					onClose={() => setSettingsModalOpen(false)}
+					health={health}
+					activeConversation={activeConv}
+					onClearAll={() => {
+						setConversations([]);
+						setActiveConversationId(null);
+						setSettingsModalOpen(false);
+						showToast("Cleared all conversation history");
+					}}
+					onReplayTour={() => {
+						setSettingsModalOpen(false);
+						setTourOpen(true);
+					}}
+					onOpenCredentials={() => {
+						setSettingsModalOpen(false);
+						setLiveConfigModalOpen(true);
+					}}
+					onRefreshHealth={handleRefreshHealth}
+				/>
+
+				{/* Live Mode Confirmation Modal */}
+				<LiveModeConfirmModal
+					isOpen={liveConfirmModalOpen}
+					onCancel={() => setLiveConfirmModalOpen(false)}
+					onConfirm={handleConfirmLiveMode}
+				/>
+
+				{/* Live Mode Credentials Configuration Modal */}
+				<LiveConfigModal
+					isOpen={liveConfigModalOpen}
+					onClose={() => setLiveConfigModalOpen(false)}
+					onConfigSaved={async () => {
+						await handleRefreshHealth();
+					}}
+				/>
+
+				{/* Guided Product Tour Overlay */}
+				<TourGuide
+					isOpen={tourOpen}
+					onClose={handleFinishTour}
+					onFinish={handleFinishTour}
+					onStepChange={handleTourStepChange}
+					onStartDemo={() => {
+						const chosen = DEMO_SCENARIOS.find((s) => s.file === selectedScenario) || DEMO_SCENARIOS[0];
+						void handleStartDemoScenario(chosen.file, chosen.question);
+					}}
+					onInspectAgent={() => {
+						const candidate =
+							agentRoster[0] ||
+							getAgentProfile("FactChecker", activeConv?.agentAssignments?.FactChecker);
+						setSelectedAgentForDrawer(candidate);
+					}}
+					onOpenSettings={() => {
+						setLiveConfigModalOpen(false);
+						setSettingsModalOpen(true);
+					}}
+					onOpenCredentials={() => {
+						setSettingsModalOpen(false);
+						setLiveConfigModalOpen(true);
+					}}
+					onRefreshHealth={handleRefreshHealth}
+					onSwitchToLiveMode={() => {
+						handleFinishTour();
+						if (mode !== "live") {
+							setLiveConfirmModalOpen(true);
+						}
+					}}
+					isDemoBusy={isBusy}
+					hasMessages={Boolean(activeConv?.messages && activeConv.messages.length > 0)}
+					zetarisOnline={Boolean(health?.zetaris?.ok)}
+					meterlessOnline={health?.meterless?.state === "online"}
+				/>
+
+				{/* Toast Notification */}
+				{toastMsg && (
+					<div className="fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-xl bg-[#18203a] border border-amber-500/40 text-xs font-medium text-amber-300 shadow-2xl animate-fadeIn">
+						{toastMsg}
+					</div>
+				)}
+			</div>
 		</ErrorBoundary>
 	);
 };
+export default App;

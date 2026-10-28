@@ -22,10 +22,19 @@ const HOLDING_MESSAGES = [
 	"Hold tight, stepping up",
 ];
 
+export interface RecordedTaskAssignment {
+	humanName?: string;
+	jobTask?: string;
+	avatarId?: string;
+	role?: string;
+	task?: string;
+}
+
 export class AgentArrivalManager {
 	private readonly config: ArrivalConfig;
 	private timers: Map<string, any> = new Map();
 	private activeRoster: Map<string, AgentProfile> = new Map();
+	private assignedTasks: Map<string, RecordedTaskAssignment> = new Map();
 	private currentConversationId: string | null = null;
 	private onRosterChange?: (roster: AgentProfile[]) => void;
 
@@ -38,10 +47,18 @@ export class AgentArrivalManager {
 		this.clearTimers();
 		this.currentConversationId = conversationId;
 		this.activeRoster.clear();
+		this.assignedTasks.clear();
 		for (const agent of initialAgents) {
 			this.activeRoster.set(agent.id, {
 				...agent,
 				arrivalStage: "working",
+			});
+			this.assignedTasks.set(agent.id, {
+				humanName: agent.humanName,
+				jobTask: agent.jobTask,
+				avatarId: agent.avatarId,
+				role: agent.role,
+				task: agent.currentTask || agent.jobTask,
 			});
 		}
 		this.notify();
@@ -55,9 +72,14 @@ export class AgentArrivalManager {
 		return Array.from(this.activeRoster.values());
 	}
 
+	public getAssignedSeatIds(): Set<string> {
+		return new Set(this.assignedTasks.keys());
+	}
+
 	public clearRoster(): void {
 		this.clearTimers();
 		this.activeRoster.clear();
+		this.assignedTasks.clear();
 		this.notify();
 	}
 
@@ -69,7 +91,63 @@ export class AgentArrivalManager {
 	}
 
 	/**
-	 * Activate an agent for the current conversation.
+	 * Records a task assignment for an agent without adding them to the visible roster yet.
+	 * The agent will only appear on the roster when they actually join the conversation.
+	 */
+	public recordTaskAssignment(
+		seatId: string,
+		assignment?: { humanName?: string; jobTask?: string; avatarId?: string; role?: string },
+		initialTask?: string,
+		conversationId?: string,
+	): void {
+		if (conversationId && this.currentConversationId && conversationId !== this.currentConversationId) {
+			return;
+		}
+		const prev = this.assignedTasks.get(seatId);
+		this.assignedTasks.set(seatId, {
+			humanName: assignment?.humanName ?? prev?.humanName,
+			jobTask: initialTask ?? assignment?.jobTask ?? prev?.jobTask,
+			avatarId: assignment?.avatarId ?? prev?.avatarId,
+			role: assignment?.role ?? prev?.role,
+			task: initialTask ?? assignment?.jobTask ?? prev?.task,
+		});
+
+		// If the agent has already joined the active roster, update its task metadata in place
+		const existing = this.activeRoster.get(seatId);
+		if (existing && initialTask && initialTask !== existing.currentTask) {
+			existing.currentTask = initialTask;
+			existing.jobTask = initialTask;
+			this.notify();
+		}
+	}
+
+	/**
+	 * Prunes the active roster so only agents in `participatingSeatIds` remain.
+	 * Ensures any agent that never joined the conversation is never displayed on the roster.
+	 */
+	public pruneToParticipants(
+		participatingSeatIds: Iterable<string>,
+		conversationId?: string,
+	): void {
+		if (conversationId && this.currentConversationId && conversationId !== this.currentConversationId) {
+			return;
+		}
+		const allowed = new Set(participatingSeatIds);
+		let changed = false;
+		for (const seatId of Array.from(this.activeRoster.keys())) {
+			if (!allowed.has(seatId)) {
+				this.clearAgentTimers(seatId);
+				this.activeRoster.delete(seatId);
+				changed = true;
+			}
+		}
+		if (changed) {
+			this.notify();
+		}
+	}
+
+	/**
+	 * Activate an agent for the current conversation as they join.
 	 * Follows: pop_in -> holding -> greeting -> assigned -> working
 	 */
 	public activateAgent(
@@ -78,19 +156,30 @@ export class AgentArrivalManager {
 		initialTask?: string,
 		conversationId?: string,
 	): AgentProfile {
+		const recorded = this.assignedTasks.get(seatId);
+		const mergedAssignment = {
+			humanName: assignment?.humanName ?? recorded?.humanName,
+			jobTask: assignment?.jobTask ?? recorded?.jobTask,
+			avatarId: assignment?.avatarId ?? recorded?.avatarId,
+			role: assignment?.role ?? recorded?.role,
+		};
+		const resolvedTask = initialTask ?? recorded?.task ?? mergedAssignment.jobTask;
+
 		// Stale event guard: if conversationId is specified and doesn't match current, ignore
 		if (conversationId && this.currentConversationId && conversationId !== this.currentConversationId) {
-			return getAgentProfile(seatId, assignment);
+			return getAgentProfile(seatId, mergedAssignment);
 		}
+
+		this.recordTaskAssignment(seatId, mergedAssignment, resolvedTask, conversationId);
 
 		// Duplicate guard: if agent already exists in active roster
 		const existing = this.activeRoster.get(seatId);
 		if (existing) {
 			// If already working or completed, do not regress back to holding/greeting
 			if (existing.arrivalStage === "working") {
-				if (initialTask && initialTask !== existing.currentTask) {
-					existing.currentTask = initialTask;
-					existing.jobTask = initialTask;
+				if (resolvedTask && resolvedTask !== existing.currentTask) {
+					existing.currentTask = resolvedTask;
+					existing.jobTask = resolvedTask;
 					this.notify();
 				}
 				return existing;
@@ -99,10 +188,10 @@ export class AgentArrivalManager {
 		}
 
 		// Initialize base profile
-		const profile = getAgentProfile(seatId, assignment);
-		if (initialTask) {
-			profile.jobTask = initialTask;
-			profile.currentTask = initialTask;
+		const profile = getAgentProfile(seatId, mergedAssignment);
+		if (resolvedTask) {
+			profile.jobTask = resolvedTask;
+			profile.currentTask = resolvedTask;
 		}
 
 		// Stage 1: Pop-in & Holding
@@ -179,7 +268,12 @@ export class AgentArrivalManager {
 
 		let agent = this.activeRoster.get(seatId);
 		if (!agent) {
-			agent = getAgentProfile(seatId);
+			const recorded = this.assignedTasks.get(seatId);
+			agent = getAgentProfile(seatId, recorded);
+			if (recorded?.task) {
+				agent.currentTask = recorded.task;
+				agent.jobTask = recorded.task;
+			}
 			agent.arrivalStage = "working";
 			agent.lastActiveTime = Date.now();
 			this.activeRoster.set(seatId, agent);
@@ -213,11 +307,15 @@ export class AgentArrivalManager {
 		let agent = this.activeRoster.get(seatId);
 		if (!agent) {
 			// Agent was activated directly by workflow event: introduce it directly to working
-			agent = getAgentProfile(seatId);
+			const recorded = this.assignedTasks.get(seatId);
+			agent = getAgentProfile(seatId, recorded);
 			agent.arrivalStage = "working";
 			agent.status = status;
 			if (confidence !== undefined) agent.confidence = confidence;
-			if (task) agent.currentTask = task;
+			if (task || recorded?.task) {
+				agent.currentTask = task || recorded?.task;
+				agent.jobTask = task || recorded?.jobTask || agent.jobTask;
+			}
 			agent.lastActiveTime = Date.now();
 			this.activeRoster.set(seatId, agent);
 			this.notify();

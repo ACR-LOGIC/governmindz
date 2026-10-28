@@ -95,8 +95,8 @@ export const LiveConfigModal: React.FC<LiveConfigModalProps> = ({ isOpen, onClos
 	};
 
 	return (
-		<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
-			<div className="max-w-2xl w-full bg-[#0c1122] border border-[#212d4d] rounded-2xl shadow-2xl p-6 text-slate-100 relative space-y-5 animate-scaleUp max-h-[90vh] flex flex-col">
+		<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-[24px] animate-fadeIn">
+			<div id="tour-credentials-modal" className="max-w-2xl w-full bg-[#0c1122]/90 border border-[#212d4d]/80 rounded-2xl shadow-2xl p-6 text-slate-100 relative space-y-5 animate-scaleIn max-h-[90vh] flex flex-col glass-panel">
 				{/* Header */}
 				<div className="flex items-center justify-between border-b border-[#1b2542] pb-3 shrink-0">
 					<div className="flex items-center gap-2.5">
