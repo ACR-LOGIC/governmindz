@@ -6,6 +6,8 @@
 import assert from "node:assert/strict";
 import { describe, test, beforeEach, after } from "node:test";
 import Database from "better-sqlite3";
+import fs from "node:fs";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import {
 	AIProviderRegistry,
@@ -571,31 +573,41 @@ describe("ChangeExecutionService", () => {
 	});
 
 	test("execute change with valid approval and permission", async () => {
-		const change = await service.prepareChange({
-			projectId: "project-1",
-			type: "code_patch",
-			description: "Fix",
-			diff: "fix",
-			targetFiles: ["src/x.ts"],
-			preparedBy: "client-1",
-		});
-		const { approvalId } = await service.submitForReview(change.id);
+		const testFile = "src/x_test_exec.ts";
+		fs.writeFileSync(testFile, "original content\n");
+		try {
+			const change = await service.prepareChange({
+				projectId: "project-1",
+				type: "code_patch",
+				description: "Fix",
+				diff: `--- a/${testFile}\n+++ b/${testFile}\n@@ -1 +1 @@\n-original content\n+fixed content\n`,
+				targetFiles: [testFile],
+				preparedBy: "client-1",
+			});
+			const { approvalId } = await service.submitForReview(change.id);
 
-		// Grant EXECUTE permission to user-1
-		const engine = new PermissionPolicyEngine();
-		await engine.grantPermission("user-1", "project-1", "EXECUTE", [
-			"project_change_execute",
-		]);
+			// Grant EXECUTE permission to user-1
+			const engine = new PermissionPolicyEngine();
+			await engine.grantPermission("user-1", "project-1", "EXECUTE", [
+				"project_change_execute",
+			]);
 
-		// Approve the approval
-		const approvalService = new ApprovalService();
-		await approvalService.approve(approvalId, "user-1");
+			// Approve the approval
+			const approvalService = new ApprovalService();
+			await approvalService.approve(approvalId, "user-1");
 
-		const result = await service.executeChange({
-			changeId: change.id,
-			executedBy: "user-1",
-		});
-		assert.strictEqual(result.change.status, "completed");
-		assert.ok(result.result);
+			const result = await service.executeChange({
+				changeId: change.id,
+				executedBy: "user-1",
+			});
+			assert.strictEqual(result.change.status, "completed");
+			assert.ok(result.result);
+
+			// Verify file was actually modified
+			const content = fs.readFileSync(testFile, "utf8");
+			assert.strictEqual(content.trim(), "fixed content");
+		} finally {
+			fs.rmSync(testFile, { force: true });
+		}
 	});
 });
