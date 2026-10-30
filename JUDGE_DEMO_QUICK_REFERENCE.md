@@ -1,6 +1,6 @@
 # Judge Demo Quick Reference
 
-Three demos, one per Open Agent Hackathon track. Every demo runs in deterministic
+Three demos. Every demo runs in deterministic
 Demo Mode with no API keys and no network access.
 
 ## Run the demos
@@ -28,7 +28,7 @@ node --import tsx apps/gateway/src/sample.ts --scenario input_examples/03-reason
 
 ---
 
-## Demo 1 — Track 01: Solving Fragmented Intelligence
+## Demo 1 — Solving Fragmented Intelligence
 
 **Card:** `1. Solving Fragmented Intelligence`
 
@@ -48,7 +48,7 @@ the final answer cites all three silos and the audit chain stays intact.
 
 ---
 
-## Demo 2 — Track 02: The Agent That Can Explain Why
+## Demo 2 — The Agent That Can Explain Why
 
 **Card:** `2. The Agent That Can Explain Why`
 
@@ -68,7 +68,7 @@ in the final synthesis card.
 
 ---
 
-## Demo 3 — Track 03: Reasoning Architecture
+## Demo 3 — Reasoning Architecture
 
 **Card:** `3. Reasoning Architecture`
 
@@ -94,11 +94,10 @@ final outputs, full records, and the Zetaris/Meterless setup for Live Mode.
 
 ---
 
-## Scoring alignment
+## Evaluation Criteria
 
-The hackathon scores Impact 30, Technical 20, Innovation 15, Demo 15,
-Product & UX 10, and Sponsor Tech 10. Each demo is built to make the judge's
-decision easy:
+The project is evaluated across Impact, Technical, Innovation, Demo,
+Product & UX, and Sponsor Tech. Each demo is built to make evaluation easy:
 
 | Criterion | Evidence in the demos |
 | :--- | :--- |
@@ -109,8 +108,8 @@ decision easy:
 | Product & UX | One-card launch, paced multi-agent presentation, pause/resume, and download-ready final decisions. |
 | Sponsor Tech | Zetaris federated evidence and Meterless/NVIDIA model routing are part of the reasoning path, not decoration. |
 
-**Primary submission track:** Track 02 — The Agent That Can Explain Why. The
-other two demos show the same architecture applied to Tracks 01 and 03.
+**Primary demo:** Demo 2 — The Agent That Can Explain Why. The
+other two demos show the same architecture applied to Demo 1 and Demo 3.
 
 ---
 

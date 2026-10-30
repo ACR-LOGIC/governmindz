@@ -4,7 +4,7 @@
 
 **A governed, competition-ready multi-agent research, debate, and deliverable-synthesis platform that shows the exact evidence, disagreements, and cryptographic proof behind AI decisions.**
 
-GOVERNMINDZ conducts parallel multi-agent research across **Zetaris Lightning federated database fabrics** and **authoritative external web sources**, visualizes real-time progress via **parallel crew bubbles with barrier synchronization**, resolves conflicting claims through role-separated debate, and compiles verified user deliverables (PowerPoint presentations, PDF reports, spreadsheets, charts, and audit ledgers). Built for the **Open Agent Hackathon 2026**.
+GOVERNMINDZ conducts parallel multi-agent research across **Zetaris Lightning federated database fabrics** and **authoritative external web sources**, visualizes real-time progress via **parallel crew bubbles with barrier synchronization**, resolves conflicting claims through role-separated debate, and compiles verified user deliverables (PowerPoint presentations, PDF reports, spreadsheets, charts, and audit ledgers).
 
 Available both as an **interactive Mission Control Web Application** (React 19, TypeScript, Vite, Tailwind CSS v4, Lucide React, SQLite persistence) and a **production-grade CLI pipeline**.
 
@@ -255,16 +255,16 @@ handling, and unused Meterless capabilities—see [`docs/METERLESS.md`](docs/MET
 
 ---
 
-## Three Hackathon Track Demos
+## Demo Scenarios
 
-Demo Mode ships exactly three scenarios, one per challenge track. Open
+Demo Mode ships exactly three scenarios. Open
 `npm run web`, choose a card, and click **Start Demo**.
 
 | Track | Demo card | What it demonstrates |
 | :--- | :--- | :--- |
-| **01 — Solving Fragmented Intelligence** | 1. Solving Fragmented Intelligence | Reconciles conflicting ERP, logistics, and risk-feed records with explicit source and freshness provenance. |
-| **02 — The Agent That Can Explain Why** | 2. The Agent That Can Explain Why | Falsifies a pricing hypothesis with retention telemetry and explains the real churn driver with evidence and caveats. |
-| **03 — Reasoning Architecture** | 3. Reasoning Architecture | Applies policy rules, H-MEM precedents, and an auditable decision chain to clinic scheduling requests. |
+| **1 — Solving Fragmented Intelligence** | 1. Solving Fragmented Intelligence | Reconciles conflicting ERP, logistics, and risk-feed records with explicit source and freshness provenance. |
+| **2 — The Agent That Can Explain Why** | 2. The Agent That Can Explain Why | Falsifies a pricing hypothesis with retention telemetry and explains the real churn driver with evidence and caveats. |
+| **3 — Reasoning Architecture** | 3. Reasoning Architecture | Applies policy rules, H-MEM precedents, and an auditable decision chain to clinic scheduling requests. |
 
 See [`JUDGE_DEMO_QUICK_REFERENCE.md`](JUDGE_DEMO_QUICK_REFERENCE.md) for the
 per-demo judge walkthrough and CLI commands. For the complete Track 03
@@ -343,11 +343,4 @@ User Prompt ➔ Deliverable Contract ➔ Design Assistant ➔ Physical File ➔ 
 
 ---
 
-## Hackathon Submission Metadata
-
-- **Event:** Open Agent Hackathon 2026 (October 22–27, 2026)
-- **Primary track:** Track 02 — The Agent That Can Explain Why
-- **Demo tracks:** Track 01 — Solving Fragmented Intelligence · Track 02 — The Agent That Can Explain Why · Track 03 — Reasoning Architecture
-- **Judging focus:** Impact 30 · Technical 20 · Innovation 15 · Demo 15 · Product & UX 10 · Sponsor Tech 10
-- **Repository:** [https://github.com/ACR-LOGIC/governmindz](https://github.com/ACR-LOGIC/governmindz)
 - **License:** Apache-2.0 / MIT

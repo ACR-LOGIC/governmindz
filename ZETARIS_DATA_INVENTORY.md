@@ -1,4 +1,4 @@
-# Governmindz Hackathon Data Setup: Complete Inventory
+# Governmindz Data Setup: Complete Inventory
 
 ## Status: ✅ READY FOR TESTING
 
@@ -116,7 +116,7 @@ Your Zetaris instance has **8 Lightning databases** with **real queryable data**
 
 ---
 
-## How to Use This for Governmindz Hackathon
+## How to Use This Data Inventory
 
 ### Command 1: Run a Governance Test
 ```bash
@@ -161,7 +161,7 @@ npm run web
 
 ---
 
-## What's Still Needed for Full Hackathon Submission
+## What's Still Needed
 
 - [ ] Custom multi-source queries (e.g., SEC_DATA + COMPANY_DNS + NY_TAXI joined via CIK)
 - [ ] USL (Unified Semantic Layer) model over SEC_DATA + COMPANY_DNS for governance reasoning
@@ -177,6 +177,6 @@ npm run web
 1. **Start with Tier 1 questions** (PII detection, classification risk)
 2. **Move to Tier 2** (multi-source reconciliation)
 3. **Build a custom demo scenario** with GOVERNMINDZ_TOPIC override
-4. **Export your session history** and audit trail for the hackathon submission
+4. **Export your session history** and audit trail
 
 **Status:** All 8 databases queryable, all tables discoverable, preflight passing. Ready for agent testing.
