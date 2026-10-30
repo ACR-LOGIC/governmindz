@@ -15,6 +15,7 @@ import { loadSampleScenario, type SampleScenario } from "./sampleScenario.js";
 import { DocumentIngestionService } from "@governmindz/core/documents/DocumentIngestionService";
 import { SampleSeatClient } from "./sampleSeat.js";
 import { zetarisQueryHandler } from "./tools/zetaris.tools.js";
+import { projectCatalogSearchHandler } from "./tools/projectCatalog.tools.js";
 import {
 	classifyDeliverable,
 	type DeliverableContract,
@@ -172,6 +173,33 @@ function buildTask(topic: string, context: string): string {
 		"",
 		"Do not invent database names, row counts, sources, or credentials. If the evidence is insufficient, say so and lower your confidence.",
 	].join("\n");
+}
+
+async function buildProjectCatalogContext(
+	topic: string,
+): Promise<string | null> {
+	let result: any;
+	try {
+		result = await projectCatalogSearchHandler(
+			{ query: topic, limit: 10, selectedOnly: true },
+			{ callerRole: "agent", correlationId: randomUUID() },
+		);
+	} catch {
+		return null;
+	}
+	if (result.status !== "connected" || !result.total || !result.results) {
+		return null;
+	}
+	const lines = [
+		"",
+		"Synced GitHub project catalog (authorized repositories):",
+		...result.results.map(
+			(r) =>
+				`- ${r.fullName} (${r.visibility})${r.description ? ` — ${r.description}` : ""}`,
+		),
+		"",
+	];
+	return lines.join("\n");
 }
 
 export async function runDebate(params: RunParams): Promise<RunOutput> {
@@ -363,6 +391,12 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 	}
 	if (webCitationContext) {
 		combinedEvidenceContext = `${combinedEvidenceContext}\n${webCitationContext}`;
+	}
+
+	// Incorporate synced GitHub project catalog into agent-visible evidence
+	const projectCatalogContext = await buildProjectCatalogContext(topic);
+	if (projectCatalogContext) {
+		combinedEvidenceContext = `${combinedEvidenceContext}\n${projectCatalogContext}`;
 	}
 
 	const provider = isSample ? null : new MeterlessProvider();
