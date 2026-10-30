@@ -1,0 +1,32 @@
+{
+	"id": "pricing-change",
+	"topic": "Should we change our pricing for [product/plan], and if so, how?",
+	"description": "Evaluate a proposed pricing change: impact on revenue, customer churn, competitive positioning, and go-to-market messaging.",
+	"deliverableType": "report",
+	"investigationInstructions": [
+		"Analyze current pricing tiers, customer distribution, and revenue per tier.",
+		"Research competitor pricing for comparable offerings.",
+		"Model revenue impact of proposed price changes (new vs. existing customers).",
+		"Assess churn risk: price sensitivity by segment, grandfathering options.",
+		"Evaluate competitive positioning after the change.",
+		"Plan customer communication and grandfathering strategy.",
+		"Define success metrics and review timeline."
+	],
+	"zetarisQuery": null,
+	"evidenceRequirements": [
+		"Current pricing tiers and customer counts per tier",
+		"Historical churn data by pricing tier",
+		"Competitor pricing research",
+		"Customer LTV and CAC data by segment",
+		"Usage/feature adoption data by tier"
+	],
+	"expectedOutputStructure": [
+		"Executive summary with pricing recommendation",
+		"Current vs. proposed pricing comparison",
+		"Revenue impact model (best case, expected, worst case)",
+		"Churn risk assessment by segment",
+		"Competitive positioning analysis",
+		"Customer communication and rollout plan",
+		"Success metrics and 30/60/90 day review checkpoints"
+	]
+}

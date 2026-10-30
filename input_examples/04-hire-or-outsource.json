@@ -1,0 +1,30 @@
+{
+	"id": "hire-or-outsource",
+	"topic": "Should we hire a full-time employee or outsource this work to a contractor/agency?",
+	"description": "Decide between hiring a permanent team member versus outsourcing to a contractor or agency for a specific project or role.",
+	"deliverableType": "report",
+	"investigationInstructions": [
+		"Define the scope, duration, and required skills for the work.",
+		"Estimate total cost of hiring (salary, benefits, onboarding, equipment, overhead).",
+		"Estimate total cost of outsourcing (contractor rates, agency fees, management overhead).",
+		"Assess timeline: how quickly is the work needed vs. how long to hire.",
+		"Evaluate long-term strategic value: is this a core competency or peripheral work?",
+		"Consider risk: knowledge retention, IP, continuity, and team culture impact."
+	],
+	"zetarisQuery": null,
+	"evidenceRequirements": [
+		"Current team capacity and workload data",
+		"Budget constraints and cost center allocations",
+		"Project timeline and deadline constraints",
+		"Market rates for contractors/agencies in the relevant domain",
+		"Historical data on similar hiring vs. outsourcing decisions"
+	],
+	"expectedOutputStructure": [
+		"Executive summary with recommendation (hire vs. outsource)",
+		"Cost comparison table (hire vs. outsource over 6/12/24 months)",
+		"Timeline analysis for both options",
+		"Risk assessment for both options",
+		"Implementation plan for the chosen approach",
+		"Success metrics and review checkpoints"
+	]
+}

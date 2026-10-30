@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { Readable } from "node:stream";
-import { randomUUID, createHash } from "node:crypto";
+import { randomUUID, createHash, createHmac } from "node:crypto";
 import Database from "better-sqlite3";
 import { runDebate } from "../gateway/src/debateRunner.js";
 
@@ -237,6 +237,22 @@ db.exec(`
 		enabled INTEGER NOT NULL DEFAULT 1,
 		created_at INTEGER NOT NULL,
 		updated_at INTEGER NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS webhook_deliveries (
+		id TEXT PRIMARY KEY,
+		webhook_id TEXT NOT NULL,
+		event_type TEXT NOT NULL,
+		payload TEXT NOT NULL,
+		signature TEXT NOT NULL,
+		idempotency_key TEXT NOT NULL,
+		attempt INTEGER NOT NULL DEFAULT 0,
+		status TEXT NOT NULL DEFAULT 'pending',
+		http_status INTEGER,
+		error_message TEXT,
+		delivered_at INTEGER,
+		created_at INTEGER NOT NULL,
+		FOREIGN KEY (webhook_id) REFERENCES webhook_configs(id)
 	);
 `);
 
@@ -1080,6 +1096,23 @@ async function handleRun(req: http.IncomingMessage, res: http.ServerResponse) {
 				});
 				run.result = out;
 				run.done = true;
+
+				// Outgoing webhooks on debate completion
+				void deliverWebhookEvent("debate.completed", {
+					runId,
+					result: out.result,
+					supervisorDecision: out.supervisorDecision,
+					contract: out.contract,
+					timestamp: Date.now(),
+				});
+				if (out.supervisorDecision === "APPROVED") {
+					void deliverWebhookEvent("deliverable.approved", {
+						runId,
+						primaryArtifact: out.primaryArtifact,
+						supervisorResponse: out.supervisorResponse,
+						timestamp: Date.now(),
+					});
+				}
 
 				const completeEv = {
 					type: "complete",
@@ -2660,6 +2693,142 @@ async function handleSingleWebhook(
 	}
 	res.writeHead(405);
 	res.end();
+}
+
+/* ----------------------------------------------------------------
+   Outgoing webhook delivery
+----------------------------------------------------------------- */
+
+function signWebhookPayload(secret: string, payload: string): string {
+	return createHmac("sha256", secret).update(payload).digest("hex");
+}
+
+async function deliverWebhookEvent(
+	eventType: string,
+	payload: Record<string, unknown>,
+): Promise<void> {
+	const db = getCatalogDbForServer();
+	const webhooks = db
+		.prepare(
+			"SELECT * FROM webhook_configs WHERE enabled = 1",
+		)
+		.all() as any[];
+
+	const now = Date.now();
+	const idempotencyKey = `wh:${createHash("sha256")
+		.update(`${eventType}:${JSON.stringify(payload)}:${now}`)
+		.digest("hex")
+		.slice(0, 24)}`;
+
+	for (const wh of webhooks) {
+		try {
+			const events = JSON.parse(wh.events || "[]");
+			if (!events.includes(eventType)) continue;
+
+			const secret = wh.secret || "";
+			const payloadStr = JSON.stringify(payload);
+			const signature = signWebhookPayload(secret, payloadStr);
+
+			let delivered = false;
+			let lastError: string | null = null;
+			let httpStatus: number | null = null;
+
+			for (let attempt = 1; attempt <= 3; attempt++) {
+				const deliveryId = `wh_del:${createHash("sha256")
+					.update(`${wh.id}:${eventType}:${attempt}:${now}`)
+					.digest("hex")
+					.slice(0, 24)}`;
+
+				try {
+					const controller = new AbortController();
+					const timeout = setTimeout(
+						() => controller.abort(),
+						10000,
+					);
+					const resp = await fetch(wh.target_url, {
+						method: "POST",
+						headers: {
+							"Content-Type": "application/json",
+							"X-GovernMindz-Signature": signature,
+							"X-GovernMindz-Event": eventType,
+							"X-GovernMindz-Idempotency-Key": idempotencyKey,
+							"X-GovernMindz-Delivery-Id": deliveryId,
+							"X-GovernMindz-Timestamp": String(now),
+						},
+						body: payloadStr,
+						signal: controller.signal,
+					});
+					clearTimeout(timeout);
+					httpStatus = resp.status;
+
+					if (resp.status >= 200 && resp.status < 300) {
+						delivered = true;
+						break;
+					}
+					lastError = `HTTP ${resp.status}`;
+				} catch (err: any) {
+					lastError = err?.message || String(err);
+				}
+
+				// Record delivery attempt
+				db.prepare(`
+					INSERT INTO webhook_deliveries (id, webhook_id, event_type, payload, signature, idempotency_key, attempt, status, http_status, error_message, created_at)
+					VALUES (@id, @webhook_id, @event_type, @payload, @signature, @idempotency_key, @attempt, @status, @http_status, @error_message, @created_at)
+				`).run({
+					id: deliveryId,
+					webhook_id: wh.id,
+					event_type: eventType,
+					payload: payloadStr,
+					signature,
+					idempotency_key: idempotencyKey,
+					attempt,
+					status: delivered ? "delivered" : "pending",
+					http_status: httpStatus ?? null,
+					error_message: lastError ?? null,
+					created_at: now,
+				});
+
+				if (!delivered && attempt < 3) {
+					// Exponential backoff: 1s, 2s, 4s
+					await new Promise((r) =>
+						setTimeout(r, Math.pow(2, attempt - 1) * 1000),
+					);
+				}
+			}
+
+			// Final delivery record
+			const finalStatus = delivered ? "delivered" : "failed";
+			db.prepare(`
+				INSERT INTO webhook_deliveries (id, webhook_id, event_type, payload, signature, idempotency_key, attempt, status, http_status, error_message, delivered_at, created_at)
+				VALUES (@id, @webhook_id, @event_type, @payload, @signature, @idempotency_key, 3, @status, @http_status, @error_message, @delivered_at, @created_at)
+			`).run({
+				id: `wh_final:${createHash("sha256")
+					.update(`${wh.id}:${eventType}:${now}`)
+					.digest("hex")
+					.slice(0, 24)}`,
+				webhook_id: wh.id,
+				event_type: eventType,
+				payload: payloadStr,
+				signature,
+				idempotency_key: idempotencyKey,
+				status: finalStatus,
+				http_status: httpStatus ?? null,
+				error_message: delivered ? null : lastError ?? "All attempts failed",
+				delivered_at: delivered ? now : null,
+				created_at: now,
+			});
+
+			if (!delivered) {
+				console.warn(
+					`[GovernMindz] Webhook delivery failed after 3 attempts: ${wh.target_url} for event ${eventType}`,
+				);
+			}
+		} catch (err: any) {
+			console.warn(
+				`[GovernMindz] Webhook delivery error: ${err?.message || String(err)}`,
+			);
+		}
+	}
 }
 
 async function handleGitHubSearch(

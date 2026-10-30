@@ -1,0 +1,34 @@
+{
+	"id": "feature-build-vs-buy",
+	"topic": "Should we build this feature in-house or buy an existing SaaS solution?",
+	"description": "Decide whether to develop a feature internally or purchase a third-party SaaS solution, considering cost, time-to-market, customization, and maintenance.",
+	"deliverableType": "report",
+	"investigationInstructions": [
+		"Define feature requirements: must-have vs. nice-to-have capabilities.",
+		"Estimate build cost: engineering time, infrastructure, ongoing maintenance.",
+		"Estimate buy cost: subscription fees, implementation, integration.",
+		"Compare time-to-market for both options.",
+		"Assess customization needs vs. SaaS flexibility.",
+		"Evaluate strategic value: is this a core differentiator or commodity feature?",
+		"Consider vendor lock-in and exit strategy for the buy option.",
+		"Assess opportunity cost of engineering time diverted from core product."
+	],
+	"zetarisQuery": null,
+	"evidenceRequirements": [
+		"Detailed feature requirements specification",
+		"Engineering capacity and velocity data",
+		"SaaS vendor options with pricing and features",
+		"Integration requirements with existing stack",
+		"Historical build vs. buy outcomes for similar features",
+		"Maintenance cost estimates for self-built solutions"
+	],
+	"expectedOutputStructure": [
+		"Executive summary with recommendation (build vs. buy)",
+		"Cost comparison: build (engineering + maintenance) vs. buy (subscription + integration)",
+		"Time-to-market comparison for both options",
+		"Feature coverage analysis (requirements met by each option)",
+		"Risk assessment (vendor lock-in, maintenance burden, timeline risk)",
+		"Decision framework and criteria",
+		"Implementation plan for the chosen approach"
+	]
+}
