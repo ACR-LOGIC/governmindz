@@ -396,5 +396,4 @@ npm run web
 # curl -s http://127.0.0.1:8787/api/health
 ```
 
-For the Track 03 demo and the explorer, see
-[`TRACK_03_REASONING_GUIDED_DEMO.md`](TRACK_03_REASONING_GUIDED_DEMO.md).
+For the demo scenarios and the explorer, see [`Zetaris.md`](Zetaris.md).

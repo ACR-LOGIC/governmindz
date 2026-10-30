@@ -2,7 +2,7 @@
  * ZetarisFallbackCatalog.ts
  *
  * Implements Requirement R2 (F16): Structured fallback schema metadata and realistic
- * synthetic evidence for all 8 Lightning databases documented in ZETARIS_DATA_INVENTORY.md:
+ * synthetic evidence for all 8 Lightning databases documented inline below:
  * 1. SEC_DATA (14 tables)
  * 2. OPENFDA_REST (2 tables)
  * 3. CLINICALTRIALS_REST (1 table)
