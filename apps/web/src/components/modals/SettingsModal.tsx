@@ -23,7 +23,7 @@ import {
 	Send,
 	Loader2,
 	Mic,
-	GitHub,
+	GitBranch,
 } from "lucide-react";
 import type { Conversation, HealthStatus } from "../../types";
 import { detectMeterless } from "../../services/api";
@@ -679,7 +679,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 							{ id: "audio", label: "Voice & Audio", icon: Volume2 },
 							{ id: "models", label: "Models & Providers", icon: Cpu },
 { id: "data", label: "Privacy & Data", icon: ShieldCheck },
-						{ id: "github", label: "GitHub", icon: GitHub },
+						{ id: "github", label: "GitHub", icon: GitBranch },
 							{ id: "about", label: "About GovernMindz", icon: Info },
 						].map((tab) => {
 							const Icon = tab.icon;
@@ -1474,7 +1474,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 										<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842] flex items-center justify-between">
 											<div className="flex items-center gap-3">
 												<div className="p-2 rounded-lg bg-slate-800 border border-slate-700">
-													<GitHub className="w-5 h-5 text-slate-200" />
+													<GitBranch className="w-5 h-5 text-slate-200" />
 												</div>
 												<div>
 													<div className="font-semibold text-slate-100">
