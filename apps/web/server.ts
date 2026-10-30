@@ -226,7 +226,9 @@ db.exec(`
 		created_at INTEGER NOT NULL,
 		updated_at INTEGER NOT NULL,
 		approved_by TEXT,
-		approved_at INTEGER
+		approved_at INTEGER,
+		executed_at INTEGER,
+		executed_by TEXT
 	);
 
 	CREATE TABLE IF NOT EXISTS webhook_configs (

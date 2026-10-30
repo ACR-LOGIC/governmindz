@@ -28,7 +28,7 @@ let catalogDb: Database.Database | null = null;
 
 function getCatalogDb(): Database.Database {
 	if (!catalogDb) {
-		catalogDb = new Database(CATALOG_DB_PATH, { readonly: true });
+		catalogDb = new Database(CATALOG_DB_PATH, { readonly: false });
 		catalogDb.pragma("journal_mode = WAL");
 	}
 	return catalogDb;
@@ -123,7 +123,9 @@ export class PermissionPolicyEngine {
 			// 3. Check permission level covers tool requirement
 			const requiredLevel = TOOL_PERMISSION_LEVELS[toolName];
 			if (requiredLevel) {
-				const requiredNum = PERMISSION_HIERARCHY[requiredLevel as PermissionLevel];
+				const requiredNum = PERMISSION_HIERARCHY[
+					requiredLevel.toUpperCase() as PermissionLevel
+				];
 				const clientNum = PERMISSION_HIERARCHY[perm.permissionLevel];
 				if (clientNum < requiredNum) {
 					return {

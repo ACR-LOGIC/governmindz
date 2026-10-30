@@ -1,0 +1,34 @@
+{
+	"id": "security-review",
+	"topic": "Assess our security posture and identify priority remediations.",
+	"description": "Evaluate security controls, identify gaps, and prioritize remediation actions.",
+	"deliverableType": "report",
+	"investigationInstructions": [
+		"Inventory current security controls (auth, authorization, encryption, network).",
+		"Review OWASP Top 10 coverage for the application stack.",
+		"Assess secrets management and key rotation practices.",
+		"Evaluate dependency vulnerabilities and outdated packages.",
+		"Check access controls and least-privilege enforcement.",
+		"Review logging, monitoring, and incident detection capabilities.",
+		"Identify compliance gaps (SOC 2, GDPR, CCPA if applicable).",
+		"Prioritize remediations by risk and effort."
+	],
+	"zetarisQuery": null,
+	"evidenceRequirements": [
+		"Current architecture diagram and technology stack",
+		"List of dependencies and their versions",
+		"Security scan results (if available)",
+		"Access control policies and role definitions",
+		"Incident history and log retention settings",
+		"Compliance requirements and current status"
+	],
+	"expectedOutputStructure": [
+		"Executive summary with overall security rating",
+		"Security control inventory with gaps",
+		"OWASP Top 10 coverage assessment",
+		"Vulnerability summary (dependencies, configurations)",
+		"Prioritized remediation backlog (risk vs effort)",
+		"Quick wins (low effort, high impact)",
+		"Long-term security roadmap"
+	]
+}

@@ -1,0 +1,32 @@
+{
+	"id": "dependency-review",
+	"topic": "Review and prioritize dependency updates and security patches.",
+	"description": "Assess the health of project dependencies, identify outdated or vulnerable packages, and plan updates.",
+	"deliverableType": "report",
+	"investigationInstructions": [
+		"List all direct and transitive dependencies with versions.",
+		"Identify dependencies with known security vulnerabilities.",
+		"Identify outdated dependencies with available updates.",
+		"Assess breaking change risk for major version updates.",
+		"Group updates by risk level (low, medium, high).",
+		"Create an update schedule with testing requirements.",
+		"Identify abandoned or unmaintained dependencies to replace."
+	],
+	"zetarisQuery": null,
+	"evidenceRequirements": [
+		"Package lock files (package-lock.json, requirements.txt, etc.)",
+		"Security advisory notifications (Dependabot, etc.)",
+		"Current dependency versions and changelogs",
+		"Test suite coverage for regression validation",
+		"Deployment pipeline configuration"
+	],
+	"expectedOutputStructure": [
+		"Executive summary with dependency health rating",
+		"Vulnerable dependencies requiring immediate action",
+		"Outdated dependencies with available updates",
+		"Update plan grouped by risk level",
+		"Breaking change assessment for major versions",
+		"Abandoned dependencies with replacement recommendations",
+		"Testing and rollback plan for updates"
+	]
+}
