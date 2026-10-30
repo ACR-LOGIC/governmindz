@@ -16,13 +16,17 @@
  */
 
 import { createHash } from "node:crypto";
-import Database from "better-sqlite3";
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
+import Database from "better-sqlite3";
 import { approvalService } from "./ApprovalService.js";
 import { externalClientRegistry } from "./ExternalClientRegistry.js";
 import { permissionPolicyEngine } from "./PermissionPolicyEngine.js";
 
 const CATALOG_DB_PATH = path.resolve(process.cwd(), "data", "conversations.db");
+const PROJECT_ROOT = process.cwd();
+const BACKUP_ROOT = path.resolve(PROJECT_ROOT, ".governmindz-backups");
 let catalogDb: Database.Database | null = null;
 
 function getCatalogDb(): Database.Database {
@@ -31,6 +35,99 @@ function getCatalogDb(): Database.Database {
 		catalogDb.pragma("journal_mode = WAL");
 	}
 	return catalogDb;
+}
+
+/* ----------------------------------------------------------------
+   Backup / apply / rollback helpers
+----------------------------------------------------------------- */
+
+function ensureBackupDir(): string {
+	const ts = Date.now();
+	const dir = path.join(BACKUP_ROOT, String(ts));
+	fs.mkdirSync(dir, { recursive: true });
+	return dir;
+}
+
+function resolveTargetFile(targetFile: string): string {
+	const resolved = path.resolve(PROJECT_ROOT, targetFile);
+	if (resolved !== PROJECT_ROOT && !resolved.startsWith(PROJECT_ROOT + path.sep)) {
+		throw new Error(`Target file outside project root: ${targetFile}`);
+	}
+	return resolved;
+}
+
+function backupFiles(targetFiles: string[], backupDir: string): string[] {
+	const backedUp: string[] = [];
+	for (const tf of targetFiles) {
+		const resolved = resolveTargetFile(tf);
+		if (!fs.existsSync(resolved)) continue;
+		const rel = path.relative(PROJECT_ROOT, resolved);
+		const dest = path.join(backupDir, rel);
+		fs.mkdirSync(path.dirname(dest), { recursive: true });
+		fs.copyFileSync(resolved, dest);
+		backedUp.push(rel);
+	}
+	return backedUp;
+}
+
+function runGitApply(diff: string): { success: boolean; error?: string } {
+	try {
+		execFileSync("git", ["apply", "--check", "-"], {
+			input: diff,
+			encoding: "utf8",
+			cwd: PROJECT_ROOT,
+			maxBuffer: 10 * 1024 * 1024,
+		});
+		execFileSync("git", ["apply", "-"], {
+			input: diff,
+			encoding: "utf8",
+			cwd: PROJECT_ROOT,
+			maxBuffer: 10 * 1024 * 1024,
+		});
+		return { success: true };
+	} catch (err: any) {
+		return { success: false, error: err?.message || String(err) };
+	}
+}
+
+function runNpmInstall(): { success: boolean; error?: string } {
+	try {
+		execFileSync("npm", ["install"], {
+			cwd: PROJECT_ROOT,
+			encoding: "utf8",
+			maxBuffer: 20 * 1024 * 1024,
+		});
+		return { success: true };
+	} catch (err: any) {
+		return { success: false, error: err?.message || String(err) };
+	}
+}
+
+function restoreBackup(backupDir: string): { restored: string[]; errors: string[] } {
+	const restored: string[] = [];
+	const errors: string[] = [];
+	if (!fs.existsSync(backupDir)) return { restored, errors };
+
+	function walk(dir: string) {
+		for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+			const full = path.join(dir, entry.name);
+			if (entry.isDirectory()) {
+				walk(full);
+			} else {
+				const rel = path.relative(backupDir, full);
+				const target = path.join(PROJECT_ROOT, rel);
+				try {
+					fs.mkdirSync(path.dirname(target), { recursive: true });
+					fs.copyFileSync(full, target);
+					restored.push(rel);
+				} catch (err: any) {
+					errors.push(`${rel}: ${err?.message || String(err)}`);
+				}
+			}
+		}
+	}
+	walk(backupDir);
+	return { restored, errors };
 }
 
 export type ChangeType =
@@ -51,7 +148,8 @@ export type ChangeStatus =
 	| "completed"
 	| "rejected"
 	| "deferred"
-	| "cancelled";
+	| "cancelled"
+	| "rolled_back";
 
 export const HIGH_RISK_CHANGE_TYPES: ChangeType[] = [
 	"deployment_change",
@@ -253,47 +351,163 @@ export class ChangeExecutionService {
 			"UPDATE project_artifacts SET status = 'in_progress', updated_at = @now WHERE id = @id",
 		).run({ now, id: input.changeId });
 
-		// Execute the change (placeholder — actual file system changes
-		// would be implemented here with rollback capability)
-		let existingContent: any = {};
+		// Create backup before any file system changes
+		let backupDir: string | null = null;
+		let backedUpFiles: string[] = [];
+		let rollbackInfo: string | undefined = undefined;
+
 		try {
-			existingContent = JSON.parse(change.executionResult || "{}");
-		} catch {
-			existingContent = {};
-		}
-		const executionResult = JSON.stringify({
-			status: "executed",
-			executedAt: now,
-			executedBy: input.executedBy,
-			changeId: input.changeId,
-			targetFiles: change.targetFiles,
-			message: "Change executed successfully. File system modifications are a future integration point.",
-		});
+			backupDir = ensureBackupDir();
+			backedUpFiles = backupFiles(change.targetFiles, backupDir);
 
-		// Record execution
-		db.prepare(`
-			UPDATE project_artifacts
-			SET status = 'completed', executed_at = @now, executed_by = @executedBy,
-				content = @content, updated_at = @now
-			WHERE id = @id
-		`).run({
-			now,
-			executedBy: input.executedBy,
-			content: JSON.stringify({
-				diff: existingContent.diff ?? "",
+			let applyResult: { success: boolean; error?: string };
+
+			switch (change.type) {
+				case "code_patch":
+				case "config_change":
+				case "file_modification": {
+					applyResult = runGitApply(change.diff);
+					break;
+				}
+				case "dependency_change": {
+					applyResult = runNpmInstall();
+					break;
+				}
+				case "migration":
+				case "deployment_change": {
+					// High-risk: do not auto-execute. Record intent only.
+					applyResult = {
+						success: false,
+						error: `${change.type} changes require manual execution — GovernMindz prepares but does not apply migrations or deployments automatically.`,
+					};
+					break;
+				}
+				default: {
+					applyResult = {
+						success: false,
+						error: `Unsupported change type for auto-execution: ${change.type}`,
+					};
+				}
+			}
+
+			if (!applyResult.success) {
+				// Rollback: restore files from backup
+				const restore = backupDir ? restoreBackup(backupDir) : { restored: [], errors: [] };
+				db.prepare(
+					"UPDATE project_artifacts SET status = 'rejected', executed_at = @now, content = @content, updated_at = @now WHERE id = @id",
+				).run({
+					now,
+					content: JSON.stringify({
+						diff: change.diff,
+						targetFiles: change.targetFiles,
+						changeHash: change.changeHash,
+						version: change.version,
+						riskLevel: "low",
+						executionResult: JSON.stringify({
+							status: "failed",
+							error: applyResult.error,
+							restored: restore.restored,
+							errors: restore.errors,
+						}),
+					}),
+					id: input.changeId,
+				});
+				return {
+					change: {
+						...change,
+						status: "rejected",
+						executedAt: now,
+						executedBy: input.executedBy,
+						executionResult: JSON.stringify({
+							status: "failed",
+							error: applyResult.error,
+							restored: restore.restored,
+							errors: restore.errors,
+						}),
+					},
+					result: JSON.stringify({
+						status: "failed",
+						error: applyResult.error,
+						restored: restore.restored,
+						errors: restore.errors,
+					}),
+				};
+			}
+
+			// Success — record execution with rollback info
+			rollbackInfo = backupDir ? JSON.stringify({ backupDir, backedUpFiles }) : undefined;
+			const executionResult = JSON.stringify({
+				status: "executed",
+				executedAt: now,
+				executedBy: input.executedBy,
+				changeId: input.changeId,
 				targetFiles: change.targetFiles,
-				changeHash: change.changeHash,
-				version: change.version,
-				riskLevel: existingContent.riskLevel ?? "low",
-				executionResult,
-			}),
-			id: input.changeId,
-		});
+				message: "Change executed successfully.",
+				rollbackInfo,
+			});
 
-		return {
-			change: { ...change, status: "completed", executedAt: now, executedBy: input.executedBy, executionResult },
-			result: executionResult,
-		};
+			// Record execution
+			db.prepare(`
+				UPDATE project_artifacts
+				SET status = 'completed', executed_at = @now, executed_by = @executedBy,
+					content = @content, updated_at = @now
+				WHERE id = @id
+			`).run({
+				now,
+				executedBy: input.executedBy,
+				content: JSON.stringify({
+					diff: change.diff,
+					targetFiles: change.targetFiles,
+					changeHash: change.changeHash,
+					version: change.version,
+					riskLevel: "low",
+					executionResult,
+				}),
+				id: input.changeId,
+			});
+
+			return {
+				change: {
+					...change,
+					status: "completed",
+					executedAt: now,
+					executedBy: input.executedBy,
+					executionResult,
+					rollbackInfo,
+				},
+				result: executionResult,
+			};
+		} catch (err: any) {
+			// Unexpected error — attempt rollback
+			if (backupDir) {
+				const restore = restoreBackup(backupDir);
+				rollbackInfo = (JSON.stringify({
+					backupDir,
+					restored: restore.restored,
+					errors: restore.errors,
+					emergencyRollback: true,
+				}) as string);
+			}
+			db.prepare(
+				"UPDATE project_artifacts SET status = 'rejected', executed_at = @now, content = @content, updated_at = @now WHERE id = @id",
+			).run({
+				now: Date.now(),
+				content: JSON.stringify({
+					diff: change.diff,
+					targetFiles: change.targetFiles,
+					changeHash: change.changeHash,
+					version: change.version,
+					riskLevel: "low",
+					executionResult: JSON.stringify({
+						status: "error",
+						error: err?.message || String(err),
+						rollbackInfo,
+					}),
+				}),
+				id: input.changeId,
+			});
+			throw err;
+		}
 	}
 
 	/**
@@ -322,10 +536,57 @@ export class ChangeExecutionService {
 			throw new Error(`Cannot cancel change in status ${change.status}`);
 		}
 
+	const db = getCatalogDb();
+	db.prepare(
+		"UPDATE project_artifacts SET status = 'cancelled', updated_at = @now WHERE id = @id",
+	).run({ now: Date.now(), id: changeId });
+	}
+
+	/**
+	 * Roll back a completed change by restoring files from the backup stored
+	 * in rollbackInfo. Only completed changes can be rolled back.
+	 */
+	async rollbackChange(changeId: string): Promise<void> {
+		const change = this.getChange(changeId);
+		if (!change) throw new Error(`Change not found: ${changeId}`);
+		if (change.status !== "completed") {
+			throw new Error(`Cannot roll back change in status ${change.status}`);
+		}
+		if (!change.rollbackInfo) {
+			throw new Error(`No rollback information available for change ${changeId}`);
+		}
+
+		let rollbackData: { backupDir?: string; backedUpFiles?: string[] };
+		try {
+			rollbackData = JSON.parse(change.rollbackInfo);
+		} catch {
+			throw new Error(`Invalid rollback information for change ${changeId}`);
+		}
+
+		if (!rollbackData.backupDir) {
+			throw new Error(`No backup directory recorded for change ${changeId}`);
+		}
+
+		const restore = restoreBackup(rollbackData.backupDir);
+
 		const db = getCatalogDb();
 		db.prepare(
-			"UPDATE project_artifacts SET status = 'cancelled', updated_at = @now WHERE id = @id",
-		).run({ now: Date.now(), id: changeId });
+			"UPDATE project_artifacts SET status = 'rolled_back', updated_at = @now, content = @content WHERE id = @id",
+		).run({
+			now: Date.now(),
+			content: JSON.stringify({
+				rollbackRestored: restore.restored,
+				rollbackErrors: restore.errors,
+				rolledBackAt: Date.now(),
+			}),
+			id: changeId,
+		});
+
+		if (restore.errors.length > 0) {
+			throw new Error(
+				`Rollback completed with errors: ${restore.errors.join(", ")}`,
+			);
+		}
 	}
 
 	/**

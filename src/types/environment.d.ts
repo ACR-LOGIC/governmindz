@@ -56,7 +56,10 @@ declare module "node:fs" {
 		path: string,
 		callback: (err: any, data: any) => void,
 	): void;
-	export function readdirSync(path: string): string[];
+	export function readdirSync(
+		path: string,
+		options?: { withFileTypes?: boolean },
+	): any[];
 	export function statSync(path: string): { isDirectory(): boolean; size: number; [key: string]: any };
 	export function mkdirSync(
 		path: string,
@@ -72,6 +75,7 @@ declare module "node:fs" {
 	export function createReadStream(path: string): any;
 	export function renameSync(oldPath: string, newPath: string): void;
 	export function unlinkSync(path: string): void;
+	export function copyFileSync(src: string, dest: string): void;
 	export function realpathSync(path: string): string;
 	export function rmSync(
 		path: string,
@@ -99,6 +103,7 @@ declare module "node:path" {
 	export function resolve(...paths: string[]): string;
 	export function basename(p: string, ext?: string): string;
 	export function extname(p: string): string;
+	export function relative(from: string, to: string): string;
 	export const sep: string;
 }
 

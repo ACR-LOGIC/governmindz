@@ -36,3 +36,4 @@ logs/hmem*.db
 *-output*.txt
 test-output*.txt
 
+.governmindz-backups/
