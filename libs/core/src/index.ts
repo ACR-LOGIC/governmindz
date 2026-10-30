@@ -38,6 +38,7 @@ export * from "./engine/AuditChainVerifier";
 export * from "./integrations/syncEngine";
 export * from "./integrations/googleDocsProvider";
 export * from "./integrations/notionProvider";
+export * from "./integrations/githubAppClient";
 
 export * from "./kernel/Logger";
 export * from "./kernel/InterruptManager";

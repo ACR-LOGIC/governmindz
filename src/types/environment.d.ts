@@ -29,12 +29,24 @@ declare module "node:crypto" {
 	export function createHmac(
 		algorithm: string,
 		key: string,
-	): { update(data: string): { digest(encoding?: string): string } };
+	): { update(data: string | Uint8Array): { digest(encoding?: string): string } };
 	export function timingSafeEqual(a: any, b: any): boolean;
 	export function randomUUID(): string;
 	export function randomBytes(size: number): any;
 	export function createCipheriv(algorithm: string, key: any, iv: any): any;
 	export function createDecipheriv(algorithm: string, key: any, iv: any): any;
+	/**
+	 * GitHub App JWT signing (RSA-SHA256). Returns an object with .update() and
+	 * .sign(privateKey) -> Buffer (RSA-SHA256 signature).
+	 */
+	export function createSign(algorithm: string): {
+		update(data: string): { sign(key: string): Buffer };
+		sign(key: string): Buffer;
+	};
+	export function generateKeyPairSync(
+		type: string,
+		options: any,
+	): { publicKey: string; privateKey: string };
 }
 
 declare module "node:fs" {
@@ -64,6 +76,7 @@ declare module "node:fs" {
 		path: string,
 		options?: { recursive?: boolean; force?: boolean },
 	): void;
+	export function appendFileSync(path: string, data: string): void;
 }
 
 declare module "node:zlib" {
