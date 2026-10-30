@@ -21,6 +21,8 @@ import {
 	Palette,
 	Plus,
 	Send,
+	Loader2,
+	Mic,
 } from "lucide-react";
 import type { Conversation, HealthStatus } from "../../types";
 import { detectMeterless } from "../../services/api";
@@ -208,6 +210,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 	const [speakingSeat, setSpeakingSeat] = useState<string | null>(null);
 	const [voiceCatalog, setVoiceCatalog] = useState<Array<{ voiceId: string; name: string; category?: string }>>([]);
 	const [voiceProvider, setVoiceProvider] = useState<"ready" | "unavailable">("unavailable");
+	const [elevenLabsConnected, setElevenLabsConnected] = useState(false);
+	const [elevenLabsKeyInput, setElevenLabsKeyInput] = useState("");
+	const [elevenLabsConnecting, setElevenLabsConnecting] = useState(false);
 
 	useEffect(() => {
 		if (isOpen) {
@@ -218,13 +223,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 				.getElevenLabsStatus()
 				.then((ready) => {
 					setVoiceProvider(ready ? "ready" : "unavailable");
+					setElevenLabsConnected(ready);
 					if (!ready) return;
 					ttsService
 						.listElevenVoices()
 						.then(setVoiceCatalog)
 						.catch(() => setVoiceCatalog([]));
 				})
-				.catch(() => setVoiceProvider("unavailable"));
+				.catch(() => {
+					setVoiceProvider("unavailable");
+					setElevenLabsConnected(false);
+				});
 		}
 	}, [isOpen]);
 
@@ -276,6 +285,41 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 		setWhSecret("");
 		setWhEvents(["run.completed"]);
 		setSelectedWebhookId(null);
+	};
+
+	const handleConnectElevenLabs = async () => {
+		setElevenLabsConnecting(true);
+		try {
+			const resp = await fetch("/api/voice/configure", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ apiKey: elevenLabsKeyInput }),
+			});
+			const data = await resp.json();
+			if (resp.ok && data.success) {
+				setElevenLabsConnected(true);
+				setElevenLabsKeyInput("");
+				ttsService
+					.listElevenVoices()
+					.then(setVoiceCatalog)
+					.catch(() => setVoiceCatalog([]));
+				setVoiceProvider("ready");
+			} else {
+				notificationService.add({
+					type: "error",
+					title: "Connection failed",
+					body: data.error ?? "Unknown error",
+				});
+			}
+		} catch {
+			notificationService.add({
+				type: "error",
+				title: "Connection failed",
+				body: "Network error",
+			});
+		} finally {
+			setElevenLabsConnecting(false);
+		}
 	};
 
 	const handleDeleteWebhook = (id: string) => {
@@ -719,6 +763,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 								>
 									{voiceProvider === "ready" ? "ElevenLabs Studio Voices" : "Device Voices"}
 								</span>
+							</div>
+							<div className="mb-4">
+								{elevenLabsConnected ? (
+									<span className="text-[11px] font-mono px-2 py-0.5 rounded bg-green-950/60 border border-green-800 text-green-300">
+										ElevenLabs API connected
+									</span>
+								) : (
+									<div className="flex items-center gap-2">
+										<input
+											type="password"
+											value={elevenLabsKeyInput}
+											onChange={(e) => setElevenLabsKeyInput(e.target.value)}
+											placeholder="ELEVENLABS_API_KEY"
+											className="bg-[#18203a] border border-[#263254] rounded-lg px-2 py-1.5 text-[10px] text-slate-200 focus:outline-none focus:ring-1 focus:ring-teal-400/60 w-full max-w-xs"
+											disabled={elevenLabsConnecting}
+											aria-label="ElevenLabs API key"
+										/>
+										<button
+											type="button"
+											onClick={handleConnectElevenLabs}
+											disabled={elevenLabsConnecting}
+											className={`p-2 rounded-full transition-all ${
+												elevenLabsConnecting
+													? "bg-teal-500/20 border border-teal-500/50 text-teal-200 shadow-[0_0_10px_rgba(20,184,166,0.35)]"
+													: "text-slate-400 hover:text-slate-200 hover:bg-[#1a233c]"
+											}`}
+											title="Connect ElevenLabs API"
+										>
+											{elevenLabsConnecting ? (
+												<Loader2 className="w-4 h-4 animate-spin" />
+											) : (
+												<Mic className="w-4 h-4" />
+											)}
+										</button>
+									</div>
+								)}
 							</div>
 							<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 								<div className="p-3.5 rounded-xl bg-[#12182b] border border-[#1e2842] flex items-center justify-between">

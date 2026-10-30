@@ -1106,6 +1106,49 @@ function handleVoiceStatus(_req: http.IncomingMessage, res: http.ServerResponse)
 	sendJson(res, 200, { configured: voiceService.isConfigured() });
 }
 
+async function handleVoiceConfigure(req: http.IncomingMessage, res: http.ServerResponse) {
+	if (req.method !== "POST") {
+		sendJson(res, 405, { error: "Use POST to configure ElevenLabs." });
+		return;
+	}
+	let body = "";
+	req.on("data", (c: any) => (body += c));
+	req.on("end", async () => {
+		try {
+			const payload = JSON.parse(body || "{}");
+			const apiKey = String(payload.apiKey ?? "").trim();
+			if (!apiKey) {
+				sendJson(res, 400, { error: "API key is required." });
+				return;
+			}
+			// Persist to .env.local so it survives restarts
+			try {
+				const envContent = fs.readFileSync(".env.local", "utf-8");
+				const lines = envContent.split("\n");
+				const updatedLines = lines.map((line: string) => {
+					if (line.startsWith("ELEVENLABS_API_KEY=")) {
+						return `ELEVENLABS_API_KEY=${apiKey}`;
+					}
+					return line;
+				});
+				fs.writeFileSync(".env.local", updatedLines.join("\n") + "\n");
+			} catch {
+				// If .env.local doesn't exist, create it
+				try {
+					fs.writeFileSync(".env.local", `ELEVENLABS_API_KEY=${apiKey}\n`);
+				} catch {
+					// ignore; key still stored in memory below
+				}
+			}
+			// Also set in process env for immediate effect (no restart needed)
+			process.env.ELEVENLABS_API_KEY = apiKey;
+			sendJson(res, 200, { success: true, message: "ElevenLabs API key configured." });
+		} catch {
+			sendJson(res, 500, { error: "Failed to parse configuration." });
+		}
+	});
+}
+
 async function handleVoiceTts(req: http.IncomingMessage, res: http.ServerResponse) {
 	if (req.method !== "POST") {
 		sendJson(res, 405, { error: "Use POST to synthesize speech." });
@@ -1838,6 +1881,8 @@ const server = http.createServer((req, res) => {
 		void handleVoiceCatalog(req, res);
 	} else if (pathname === "/api/voice/scribe-token") {
 		void handleScribeToken(req, res);
+	} else if (pathname === "/api/voice/configure") {
+		void handleVoiceConfigure(req, res);
 	} else if (pathname === "/api/preferences") {
 		handlePreferences(req, res);
 	} else if (pathname === "/api/config") {
