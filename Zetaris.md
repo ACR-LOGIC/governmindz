@@ -4,7 +4,7 @@ This document explains what Zetaris does in GovernMindz, which demos use it,
 how the agents interact with it, how the connection is configured, and how to
 verify that the live read-only path is fully enabled.
 
-Zetaris is a hackathon sponsor and the federated evidence layer of the
+Zetaris is the federated evidence layer of the
 platform. It is not a decorative data source: every Zetaris result can become
 grounded evidence in the deliberation, and the exact dataset can be inspected
 after the run.

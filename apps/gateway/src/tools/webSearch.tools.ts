@@ -96,11 +96,11 @@ const TOPIC_KNOWLEDGE_BASE: Record<string, WebSearchResultItem[]> = {
 	],
 	default: [
 		{
-			title: "Open Agent Hackathon: Multi-Agent Consensus & Debate Standards",
+			title: "Multi-Agent Consensus & Debate Standards",
 			url: "https://openagent.dev/standards/consensus-verification",
 			snippet:
 				"Outlines calibrated confidence thresholds, adversarial challenger intervention mechanics, and tamper-evident cryptographic audit chains for autonomous AI councils.",
-			source: "Open Agent Standards Consortium",
+			source: "Consensus Standards Consortium",
 			publishedDate: "2026-02-14",
 			verificationStatus: "verified",
 		},

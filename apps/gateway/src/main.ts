@@ -23,7 +23,7 @@ interface ZetarisToolResult {
 }
 
 const DEFAULT_TOPIC =
-	"Assess the Zetaris data available to this agent and recommend a governance-safe debate workflow for the Open Agent Hackathon.";
+	"Assess the Zetaris data available to this agent and recommend a governance-safe debate workflow.";
 
 function hasFlag(flag: string): boolean {
 	return process.argv.includes(flag);

@@ -1,7 +1,7 @@
 # Track 03 — Reasoning Architecture: Complete Guided Demo
 
-This is a single-demo, start-to-finish walkthrough for the Open Agent Hackathon
-2026 Track 03 scenario: **Reasoning Architecture**. It explains what to click,
+This is a single-demo, start-to-finish walkthrough for the
+Track 03 scenario: **Reasoning Architecture**. It explains what to click,
 what you should see, and where every important artifact lives — the data query,
 the evidence, the teams, the conversation, the final outputs, the full records,
 and the Zetaris/Meterless setup required before switching to Live Mode.

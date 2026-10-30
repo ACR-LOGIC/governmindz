@@ -102,12 +102,12 @@ export const TOUR_STEPS: TourStep[] = [
 		id: "composer",
 		title: "Composer Controls, Ways to Upload & Model Routing",
 		description:
-			"The Message Composer at the bottom provides 3 selectable Hackathon Track cards, multi-format document/image uploads, research tool toggles, and live Nightshift model routing:",
+			"The Message Composer at the bottom provides 3 selectable Demo Track cards, multi-format document/image uploads, research tool toggles, and live Nightshift model routing:",
 		selector: "#tour-composer",
 		badge: "Step 4 of 10",
 		highlights: [
 			{
-				label: "3 Hackathon Track Cards & Demo Options Toggle",
+				label: "3 Demo Track Cards & Demo Options Toggle",
 				detail:
 					"Select Track 01, Track 02, or Track 03 to load its governance prompt, or collapse/re-open the cards via Demo Options.",
 			},
