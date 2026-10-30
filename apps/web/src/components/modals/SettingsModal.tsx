@@ -23,6 +23,7 @@ import {
 	Send,
 	Loader2,
 	Mic,
+	GitHub,
 } from "lucide-react";
 import type { Conversation, HealthStatus } from "../../types";
 import { detectMeterless } from "../../services/api";
@@ -447,8 +448,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 							{ id: "webhooks", label: "Webhooks", icon: Webhook },
 							{ id: "audio", label: "Voice & Audio", icon: Volume2 },
 							{ id: "models", label: "Models & Providers", icon: Cpu },
-							{ id: "data", label: "Privacy & Data", icon: ShieldCheck },
-							{ id: "appearance", label: "Appearance", icon: Palette },
+{ id: "data", label: "Privacy & Data", icon: ShieldCheck },
+						{ id: "github", label: "GitHub", icon: GitHub },
 							{ id: "about", label: "About GovernMindz", icon: Info },
 						].map((tab) => {
 							const Icon = tab.icon;
