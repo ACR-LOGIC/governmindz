@@ -266,12 +266,11 @@ Demo Mode ships exactly three scenarios. Open
 | **2 — The Agent That Can Explain Why** | 2. The Agent That Can Explain Why | Falsifies a pricing hypothesis with retention telemetry and explains the real churn driver with evidence and caveats. |
 | **3 — Reasoning Architecture** | 3. Reasoning Architecture | Applies policy rules, H-MEM precedents, and an auditable decision chain to clinic scheduling requests. |
 
-See [`JUDGE_DEMO_QUICK_REFERENCE.md`](JUDGE_DEMO_QUICK_REFERENCE.md) for the
-per-demo judge walkthrough and CLI commands. For the complete Track 03
-start-to-finish tutorial, including every evidence, record, and credential
-step, see [`TRACK_03_REASONING_GUIDED_DEMO.md`](TRACK_03_REASONING_GUIDED_DEMO.md).
-For the Zetaris architecture, data path, credential setup, live-connection
-verification, and explorer details, see [`Zetaris.md`](Zetaris.md).
+See [`DEMO_GUIDE.md`](DEMO_GUIDE.md) for a walkthrough of MCP server
+connections, AI provider registration, external client authorization, governed
+change execution, outgoing webhooks, local project connect, and founder
+decision templates. For Zetaris architecture, data path, credential setup, and
+live-connection verification, see [`Zetaris.md`](Zetaris.md).
 
 ---
 
