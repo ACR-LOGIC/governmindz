@@ -24,6 +24,7 @@ import {
 	Loader2,
 	Mic,
 	GitBranch,
+	Activity,
 } from "lucide-react";
 import type { Conversation, HealthStatus } from "../../types";
 import { detectMeterless } from "../../services/api";
@@ -54,6 +55,7 @@ type TabType =
 	| "data"
 	| "appearance"
 	| "github"
+	| "dashboard"
 	| "about";
 
 const CONFIG_PROMPTS = [
@@ -310,6 +312,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 	const [permLevel, setPermLevel] = useState("OBSERVE");
 	const [grantingPermission, setGrantingPermission] = useState(false);
 
+	/* ----------------------------------------------------------------
+	   Founder Dashboard state
+	----------------------------------------------------------------- */
+	const [dashboard, setDashboard] = useState<{
+		totalDebates: number;
+		completedDebates: number;
+		pendingApprovals: number;
+		preparedChanges: number;
+		executedChanges: number;
+		activeProviders: number;
+		webhookDeliveries: number;
+		webhookFailures: number;
+	} | null>(null);
+	const [dashboardLoading, setDashboardLoading] = useState(false);
+
 	useEffect(() => {
 		if (isOpen) {
 			setVoiceRegistry(ttsService.getVoiceRegistry());
@@ -338,6 +355,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 			void fetchProviders();
 			void fetchClients();
 			void fetchPermissions();
+			void fetchDashboard();
 		}
 	}, [isOpen]);
 
@@ -978,6 +996,64 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 		}
 	};
 
+	const fetchDashboard = async () => {
+		setDashboardLoading(true);
+		try {
+			const [conversationsResp, approvalsResp, artifactsResp, webhooksResp, providersResp] =
+				await Promise.all([
+					fetch("/api/conversations"),
+					fetch("/api/approvals"),
+					fetch("/api/project-artifacts"),
+					fetch("/api/webhooks"),
+					fetch("/api/ai-providers"),
+				]);
+
+			const conversations =
+				(conversationsResp.ok ? await conversationsResp.json() : {}) as any;
+			const approvals =
+				(approvalsResp.ok ? await approvalsResp.json() : {}) as any;
+			const artifacts =
+				(artifactsResp.ok ? await artifactsResp.json() : {}) as any;
+			const webhooks =
+				(webhooksResp.ok ? await webhooksResp.json() : {}) as any;
+			const providers =
+				(providersResp.ok ? await providersResp.json() : {}) as any;
+
+			const allConversations = conversations.conversations ?? [];
+			const pendingApprovals = approvals.approvals ?? [];
+			const allArtifacts = artifacts.artifacts ?? [];
+			const allWebhooks = webhooks.webhooks ?? [];
+			const allProviders = providers.providers ?? [];
+
+			setDashboard({
+				totalDebates: allConversations.length,
+				completedDebates: allConversations.filter(
+					(c: any) => c.status === "completed"
+				).length,
+				pendingApprovals: pendingApprovals.filter(
+					(a: any) => a.status === "pending"
+				).length,
+				preparedChanges: allArtifacts.filter(
+					(a: any) => a.status === "draft" || a.status === "submitted"
+				).length,
+				executedChanges: allArtifacts.filter(
+					(a: any) => a.status === "completed"
+				).length,
+				activeProviders: allProviders.filter(
+					(p: any) => p.status === "enabled"
+				).length,
+				webhookDeliveries: allWebhooks.filter(
+					(w: any) => w.enabled
+				).length,
+				webhookFailures: 0,
+			});
+		} catch {
+			// dashboard data may not be available yet
+		} finally {
+			setDashboardLoading(false);
+		}
+	};
+
 	const handleConnectElevenLabs = async () => {
 		setElevenLabsConnecting(true);
 		try {
@@ -1140,6 +1216,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 							{ id: "models", label: "Models & Providers", icon: Cpu },
 { id: "data", label: "Privacy & Data", icon: ShieldCheck },
 						{ id: "github", label: "GitHub", icon: GitBranch },
+						{ id: "dashboard", label: "Founder Dashboard", icon: Activity },
 							{ id: "about", label: "About GovernMindz", icon: Info },
 						].map((tab) => {
 							const Icon = tab.icon;
@@ -2576,6 +2653,207 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 								)}
 							</div>
 						</div>
+
+						{/* Founder Dashboard */}
+						{activeTab === "dashboard" && (
+							<div className="space-y-6">
+								<div className="flex items-center justify-between">
+									<div>
+										<h4 className="font-bold text-sm text-slate-100">
+											Founder Dashboard
+										</h4>
+										<p className="text-[11px] text-slate-400">
+											Project intelligence, governance metrics, and automation
+											status at a glance.
+										</p>
+									</div>
+									<button
+										type="button"
+										onClick={fetchDashboard}
+										disabled={dashboardLoading}
+										className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#18203a] hover:bg-[#252e4d] text-slate-200 font-semibold text-[10px] border border-[#2c385c] transition-colors disabled:opacity-50"
+									>
+										<RefreshCw className={`w-3 h-3 ${dashboardLoading ? "animate-spin" : ""}`} />
+										<span>Refresh</span>
+									</button>
+								</div>
+
+								{!dashboard && !dashboardLoading && (
+									<div className="text-[11px] text-slate-500 text-center py-8">
+										No data yet. Start a debate or connect a provider to see metrics.
+									</div>
+								)}
+
+								{dashboard && (
+									<>
+										<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+											<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842]">
+												<div className="text-[10px] text-slate-500 font-mono uppercase mb-2">
+													Total Debates
+												</div>
+												<div className="text-2xl font-bold text-slate-100">
+													{dashboard.totalDebates}
+												</div>
+												<div className="text-[10px] text-slate-500 mt-2">
+													{dashboard.completedDebates} completed
+												</div>
+											</div>
+											<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842]">
+												<div className="text-[10px] text-slate-500 font-mono uppercase mb-2">
+													Pending Approvals
+												</div>
+												<div className="text-2xl font-bold text-amber-300">
+													{dashboard.pendingApprovals}
+												</div>
+												<div className="text-[10px] text-slate-500 mt-2">
+													Awaiting your decision
+												</div>
+											</div>
+											<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842]">
+												<div className="text-[10px] text-slate-500 font-mono uppercase mb-2">
+													Prepared Changes
+												</div>
+												<div className="text-2xl font-bold text-slate-300">
+													{dashboard.preparedChanges}
+												</div>
+												<div className="text-[10px] text-slate-500 mt-2">
+													Awaiting review
+												</div>
+											</div>
+											<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842]">
+												<div className="text-[10px] text-slate-500 font-mono uppercase mb-2">
+													Executed Changes
+												</div>
+												<div className="text-2xl font-bold text-emerald-300">
+													{dashboard.executedChanges}
+												</div>
+												<div className="text-[10px] text-slate-500 mt-2">
+													Successfully applied
+												</div>
+											</div>
+										</div>
+
+										<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+											<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842]">
+												<div className="flex items-center justify-between mb-4">
+													<div>
+														<div className="text-[10px] text-slate-500 font-mono uppercase">
+															AI Providers
+														</div>
+														<div className="text-sm font-bold text-slate-100">
+															{dashboard.activeProviders} active
+														</div>
+													</div>
+													<span
+														className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+															dashboard.activeProviders > 0
+																? "bg-emerald-950/60 border-emerald-800 text-emerald-300"
+																: "bg-rose-950/60 border-rose-800/30 text-rose-400"
+														}`}
+													>
+														{dashboard.activeProviders > 0
+															? "Online"
+															: "None"}
+													</span>
+												</div>
+												<p className="text-[11px] text-slate-400">
+													Configure AI inference providers in the AI Providers
+													section above.
+												</p>
+											</div>
+											<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842]">
+												<div className="flex items-center justify-between mb-4">
+													<div>
+														<div className="text-[10px] text-slate-500 font-mono uppercase">
+															Webhooks
+														</div>
+														<div className="text-sm font-bold text-slate-100">
+															{dashboard.webhookDeliveries} active
+														</div>
+													</div>
+													<span
+														className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+															dashboard.webhookDeliveries > 0
+																? "bg-emerald-950/60 border-emerald-800 text-emerald-300"
+																: "bg-slate-950/60 border-slate-700 text-slate-400"
+														}`}
+													>
+														{dashboard.webhookDeliveries > 0
+															? "Active"
+															: "None"}
+													</span>
+												</div>
+												<p className="text-[11px] text-slate-400">
+													Outgoing webhooks push debate results to your
+													founder tools. Configure in the Webhooks section.
+												</p>
+											</div>
+										</div>
+
+										<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842]">
+											<div className="flex items-center justify-between mb-4">
+												<div className="text-[10px] text-slate-500 font-mono uppercase">
+													Recent Activity
+												</div>
+												<div className="text-xs font-mono text-slate-400">
+													Last updated: {new Date().toLocaleTimeString()}
+												</div>
+											</div>
+											<div className="space-y-3">
+												{dashboard.totalDebates > 0 ? (
+													<div className="p-3 rounded-lg bg-[#0a0e1a] border border-[#1e2842]">
+														<div className="flex items-center justify-between">
+															<div className="flex items-center gap-2">
+																<div className="w-8 h-8 rounded bg-teal-950/20 flex items-center justify-center">
+																	<Activity className="w-4 h-4 text-teal-400" />
+																</div>
+																<div className="min-w-0">
+																	<div className="font-bold text-slate-200 text-sm">
+																		Debate completed
+																	</div>
+																	<div className="text-[10px] text-slate-500">
+																		Multi-agent deliberation finished
+																	</div>
+																</div>
+															</div>
+															<div className="text-emerald-300 text-xs font-bold">
+																✓
+															</div>
+														</div>
+													</div>
+												) : (
+													<div className="text-[11px] text-slate-500 text-center py-6">
+														No debate activity yet.
+													</div>
+												)}
+												{dashboard.pendingApprovals > 0 ? (
+													<div className="p-3 rounded-lg bg-[#0a0e1a] border border-[#1e2842]">
+														<div className="flex items-center justify-between">
+															<div className="flex items-center gap-2">
+																<div className="w-8 h-8 rounded bg-amber-950/20 flex items-center justify-center">
+																	<RefreshCw className="w-4 h-4 text-amber-400" />
+																</div>
+																<div className="min-w-0">
+																	<div className="font-bold text-slate-200 text-sm">
+																		Pending approvals
+																	</div>
+																	<div className="text-[10px] text-slate-500">
+																		Changes awaiting your decision
+																	</div>
+																</div>
+															</div>
+															<div className="text-amber-300 text-xs font-bold">
+																⚠
+															</div>
+														</div>
+													</div>
+												) : null}
+											</div>
+										</div>
+									</>
+								)}
+							</div>
+						)}
 
 						{activeTab === "about" && (
 							<div className="space-y-4 leading-relaxed">
