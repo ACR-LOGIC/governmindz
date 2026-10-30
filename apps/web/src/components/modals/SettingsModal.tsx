@@ -251,6 +251,65 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 	const [localProjectsLoading, setLocalProjectsLoading] = useState(false);
 	const [localConnecting, setLocalConnecting] = useState(false);
 
+	/* ----------------------------------------------------------------
+	   AI Provider Registry state
+	----------------------------------------------------------------- */
+	const [providers, setProviders] = useState<Array<{
+		id: string;
+		name: string;
+		type: string;
+		endpoint?: string;
+		model?: string;
+		status: string;
+		createdAt?: number;
+		updatedAt?: number;
+	}>>([]);
+	const [providersLoading, setProvidersLoading] = useState(false);
+	const [newProviderType, setNewProviderType] = useState("openai");
+	const [newProviderName, setNewProviderName] = useState("");
+	const [newProviderEndpoint, setNewProviderEndpoint] = useState("");
+	const [newProviderApiKey, setNewProviderApiKey] = useState("");
+	const [newProviderModel, setNewProviderModel] = useState("");
+	const [creatingProvider, setCreatingProvider] = useState(false);
+
+	/* ----------------------------------------------------------------
+	   External Client Registry state
+	----------------------------------------------------------------- */
+	const [clients, setClients] = useState<Array<{
+		id: string;
+		name: string;
+		clientType: string;
+		userId: string;
+		status: string;
+		approvedAt?: number;
+		revokedAt?: number;
+		createdAt?: number;
+		updatedAt?: number;
+	}>>([]);
+	const [clientsLoading, setClientsLoading] = useState(false);
+	const [newClientName, setNewClientName] = useState("");
+	const [newClientType, setNewClientType] = useState("mcp");
+	const [newClientUserId, setNewClientUserId] = useState("");
+	const [creatingClient, setCreatingClient] = useState(false);
+
+	/* ----------------------------------------------------------------
+	   Client Permissions state
+	----------------------------------------------------------------- */
+	const [permissions, setPermissions] = useState<Array<{
+		id: string;
+		clientId: string;
+		projectId?: string;
+		permissionLevel: string;
+		grantedTools: string[];
+		createdAt?: number;
+		updatedAt?: number;
+	}>>([]);
+	const [permissionsLoading, setPermissionsLoading] = useState(false);
+	const [permClientId, setPermClientId] = useState("");
+	const [permProjectId, setPermProjectId] = useState("");
+	const [permLevel, setPermLevel] = useState("OBSERVE");
+	const [grantingPermission, setGrantingPermission] = useState(false);
+
 	useEffect(() => {
 		if (isOpen) {
 			setVoiceRegistry(ttsService.getVoiceRegistry());
@@ -276,6 +335,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 			void fetchGithubStatus();
 			void fetchCatalog();
 			void fetchLocalProjects();
+			void fetchProviders();
+			void fetchClients();
+			void fetchPermissions();
 		}
 	}, [isOpen]);
 
@@ -609,6 +671,310 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 				title: "Disconnect failed",
 				body: "Network error",
 			});
+		}
+	};
+
+	/* ----------------------------------------------------------------
+	   AI Provider Registry handlers
+	----------------------------------------------------------------- */
+
+	const fetchProviders = async () => {
+		setProvidersLoading(true);
+		try {
+			const resp = await fetch("/api/ai-providers");
+			const data = await resp.json();
+			if (data.providers) {
+				setProviders(data.providers);
+			}
+		} catch {
+			// provider endpoint may not be available yet
+		} finally {
+			setProvidersLoading(false);
+		}
+	};
+
+	const handleCreateProvider = async () => {
+		setCreatingProvider(true);
+		try {
+			const resp = await fetch("/api/ai-providers", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					name: newProviderName,
+					type: newProviderType,
+					endpoint: newProviderEndpoint || undefined,
+					apiKey: newProviderApiKey,
+					model: newProviderModel || undefined,
+					status: "enabled",
+				}),
+			});
+			const data = await resp.json();
+			if (resp.ok && data.provider) {
+				setNewProviderName("");
+				setNewProviderEndpoint("");
+				setNewProviderApiKey("");
+				setNewProviderModel("");
+				void fetchProviders();
+				notificationService.add({
+					type: "info",
+					title: "AI provider added",
+					body: `${data.provider.name} (${data.provider.type})`,
+				});
+			} else {
+				notificationService.add({
+					type: "error",
+					title: "Add provider failed",
+					body: data.error ?? "Unknown error",
+				});
+			}
+		} catch {
+			notificationService.add({
+				type: "error",
+				title: "Add provider failed",
+				body: "Network error",
+			});
+		} finally {
+			setCreatingProvider(false);
+		}
+	};
+
+	const handleUpdateProvider = async (id: string, updates: {
+		name?: string;
+		endpoint?: string;
+		model?: string;
+		status?: string;
+	}) => {
+		try {
+			const resp = await fetch(`/api/ai-providers/${id}`, {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(updates),
+			});
+			if (resp.ok) {
+				void fetchProviders();
+			} else {
+				notificationService.add({
+					type: "error",
+					title: "Update provider failed",
+					body: "Unknown error",
+				});
+			}
+		} catch {
+			notificationService.add({
+				type: "error",
+				title: "Update provider failed",
+				body: "Network error",
+			});
+		}
+	};
+
+	const handleDeleteProvider = async (id: string) => {
+		try {
+			const resp = await fetch(`/api/ai-providers/${id}`, {
+				method: "DELETE",
+			});
+			if (resp.ok) {
+				void fetchProviders();
+				notificationService.add({
+					type: "info",
+					title: "Provider removed",
+					body: "AI provider connection removed.",
+				});
+			} else {
+				notificationService.add({
+					type: "error",
+					title: "Delete provider failed",
+					body: "Unknown error",
+				});
+			}
+		} catch {
+			notificationService.add({
+				type: "error",
+				title: "Delete provider failed",
+				body: "Network error",
+			});
+		}
+	};
+
+	/* ----------------------------------------------------------------
+	   External Client Registry handlers
+	----------------------------------------------------------------- */
+
+	const fetchClients = async () => {
+		setClientsLoading(true);
+		try {
+			const resp = await fetch("/api/external-clients");
+			const data = await resp.json();
+			if (data.clients) {
+				setClients(data.clients);
+			}
+		} catch {
+			// client endpoint may not be available yet
+		} finally {
+			setClientsLoading(false);
+		}
+	};
+
+	const handleCreateClient = async () => {
+		setCreatingClient(true);
+		try {
+			const resp = await fetch("/api/external-clients", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					name: newClientName,
+					clientType: newClientType,
+					userId: newClientUserId,
+				}),
+			});
+			const data = await resp.json();
+			if (resp.ok && data.client) {
+				setNewClientName("");
+				setNewClientUserId("");
+				void fetchClients();
+				notificationService.add({
+					type: "info",
+					title: "External client added",
+					body: `${data.client.name} — pending your approval`,
+				});
+			} else {
+				notificationService.add({
+					type: "error",
+					title: "Add client failed",
+					body: data.error ?? "Unknown error",
+				});
+			}
+		} catch {
+			notificationService.add({
+				type: "error",
+				title: "Add client failed",
+				body: "Network error",
+			});
+		} finally {
+			setCreatingClient(false);
+		}
+	};
+
+	const handleApproveClient = async (id: string) => {
+		try {
+			const resp = await fetch(`/api/external-clients/${id}/approve`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ userId: "founder" }),
+			});
+			if (resp.ok) {
+				void fetchClients();
+				notificationService.add({
+					type: "info",
+					title: "Client approved",
+					body: "External client access granted.",
+				});
+			} else {
+				notificationService.add({
+					type: "error",
+					title: "Approve client failed",
+					body: "Unknown error",
+				});
+			}
+		} catch {
+			notificationService.add({
+				type: "error",
+				title: "Approve client failed",
+				body: "Network error",
+			});
+		}
+	};
+
+	const handleRevokeClient = async (id: string) => {
+		try {
+			const resp = await fetch(`/api/external-clients/${id}/revoke`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ userId: "founder" }),
+			});
+			if (resp.ok) {
+				void fetchClients();
+				notificationService.add({
+					type: "info",
+					title: "Client revoked",
+					body: "External client access removed.",
+				});
+			} else {
+				notificationService.add({
+					type: "error",
+					title: "Revoke client failed",
+					body: "Unknown error",
+				});
+			}
+		} catch {
+			notificationService.add({
+				type: "error",
+				title: "Revoke client failed",
+				body: "Network error",
+			});
+		}
+	};
+
+	/* ----------------------------------------------------------------
+	   Client Permissions handlers
+	----------------------------------------------------------------- */
+
+	const fetchPermissions = async () => {
+		setPermissionsLoading(true);
+		try {
+			const resp = await fetch("/api/client-permissions", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ clientId: permClientId }),
+			});
+			const data = await resp.json();
+			if (data.permissions) {
+				setPermissions(data.permissions);
+			}
+		} catch {
+			// permissions endpoint may not be available yet
+		} finally {
+			setPermissionsLoading(false);
+		}
+	};
+
+	const handleGrantPermission = async () => {
+		setGrantingPermission(true);
+		try {
+			const resp = await fetch("/api/client-permissions", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					clientId: permClientId,
+					projectId: permProjectId || undefined,
+					permissionLevel: permLevel,
+					grantedTools: [],
+				}),
+			});
+			if (resp.ok) {
+				setPermProjectId("");
+				setPermLevel("OBSERVE");
+				void fetchPermissions();
+				notificationService.add({
+					type: "info",
+					title: "Permission granted",
+					body: `Permission level ${permLevel} granted.`,
+				});
+			} else {
+				notificationService.add({
+					type: "error",
+					title: "Grant permission failed",
+					body: "Unknown error",
+				});
+			}
+		} catch {
+			notificationService.add({
+				type: "error",
+				title: "Grant permission failed",
+				body: "Network error",
+			});
+		} finally {
+			setGrantingPermission(false);
 		}
 	};
 
@@ -1825,6 +2191,392 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 								</div>
 							)}
 						</div>
+
+						{/* AI Provider Registry */}
+						<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842] space-y-4">
+							<div className="flex items-center justify-between">
+								<div className="font-semibold text-slate-200">
+									AI Providers
+								</div>
+								<span
+									className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+										providers.length > 0
+											? "bg-emerald-950/60 border-emerald-800 text-emerald-300"
+											: "bg-slate-950/60 border-slate-700 text-slate-400"
+									}`}
+								>
+									{providers.length} configured
+								</span>
+							</div>
+							<p className="text-[11px] text-slate-400 leading-relaxed">
+								Configure AI inference providers (OpenAI, Anthropic, Google,
+								OpenRouter, Meterless, custom). Configuring a provider stores
+								credentials securely — it does NOT connect any external app.
+							</p>
+							<div className="space-y-3">
+								<div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+									<input
+										type="text"
+										value={newProviderName}
+										onChange={(e) => setNewProviderName(e.target.value)}
+										placeholder="Provider name"
+										className="rounded-lg bg-[#0a0e1a] border border-[#263254] px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-teal-500/50"
+									/>
+									<select
+										value={newProviderType}
+										onChange={(e) => setNewProviderType(e.target.value)}
+										className="rounded-lg bg-[#0a0e1a] border border-[#263254] px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-teal-500/50"
+									>
+										<option value="openai">OpenAI</option>
+										<option value="anthropic">Anthropic</option>
+										<option value="google">Google</option>
+										<option value="openrouter">OpenRouter</option>
+										<option value="meterless">Meterless</option>
+										<option value="custom">Custom</option>
+									</select>
+									<input
+										type="password"
+										value={newProviderApiKey}
+										onChange={(e) => setNewProviderApiKey(e.target.value)}
+										placeholder="API key"
+										className="rounded-lg bg-[#0a0e1a] border border-[#263254] px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-teal-500/50"
+									/>
+								</div>
+								<div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+									<input
+										type="text"
+										value={newProviderEndpoint}
+										onChange={(e) => setNewProviderEndpoint(e.target.value)}
+										placeholder="Endpoint (optional)"
+										className="rounded-lg bg-[#0a0e1a] border border-[#263254] px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-teal-500/50"
+									/>
+									<input
+										type="text"
+										value={newProviderModel}
+										onChange={(e) => setNewProviderModel(e.target.value)}
+										placeholder="Model (optional)"
+										className="rounded-lg bg-[#0a0e1a] border border-[#263254] px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-teal-500/50"
+									/>
+									<button
+										type="button"
+										disabled={
+											creatingProvider ||
+											!newProviderName ||
+											!newProviderApiKey
+										}
+										onClick={handleCreateProvider}
+										className="rounded-lg bg-teal-600 hover:bg-teal-500 disabled:opacity-50 disabled:hover:bg-teal-600 px-3 py-2 text-xs font-semibold text-white transition-colors"
+									>
+										{creatingProvider ? (
+											<span>
+												<Loader2 className="w-3.5 h-3.5 animate-spin" />
+												Adding...
+											</span>
+										) : (
+											<span>Add provider</span>
+										)}
+									</button>
+								</div>
+								{providers.length > 0 && (
+									<div className="space-y-2">
+										{providers.map((p) => (
+											<div
+												key={p.id}
+												className="p-3 flex items-center justify-between hover:bg-[#12182b] transition-colors group"
+											>
+												<div className="flex items-center gap-3 min-w-0">
+													<div className="min-w-0">
+														<div className="flex items-center gap-2">
+															<span className="font-semibold text-slate-200 truncate">
+																{p.name}
+															</span>
+															<span
+																className={`px-1.5 py-0.5 rounded-md ${
+																	p.status === "enabled"
+																		? "bg-emerald-950/30 border border-emerald-800/30 text-emerald-400"
+																		: "bg-rose-950/30 border border-rose-800/30 text-rose-400"
+																} text-[9px] font-mono`}
+															>
+																{p.status}
+															</span>
+															{p.type && (
+																<span className="text-[10px] text-slate-500 font-mono">
+																	· {p.type}
+																</span>
+															)}
+														</div>
+														{p.endpoint && (
+															<div className="text-[10px] text-slate-500 truncate mt-0.5">
+																{p.endpoint}
+															</div>
+														)}
+														{p.model && (
+															<div className="text-[10px] text-slate-500 truncate mt-0.5">
+																Model: {p.model}
+															</div>
+														)}
+													</div>
+												</div>
+												<div className="flex items-center gap-2 shrink-0">
+													<button
+														type="button"
+														onClick={() =>
+															handleUpdateProvider(p.id, {
+																status:
+																	p.status === "enabled"
+																		? "disabled"
+																		: "enabled",
+															})
+														}
+														className="px-2.5 py-1 rounded-lg bg-[#18203a] hover:bg-[#252e4d] text-slate-200 font-semibold text-[10px] border border-[#2c385c] transition-colors"
+													>
+														{p.status === "enabled"
+															? "Disable"
+															: "Enable"}
+													</button>
+													<button
+														type="button"
+														onClick={() => handleDeleteProvider(p.id)}
+														className="px-2.5 py-1 rounded-lg bg-rose-950/30 hover:bg-rose-900/50 text-rose-300 border border-rose-800/40 text-[10px] font-semibold transition-colors"
+													>
+														Delete
+													</button>
+												</div>
+											</div>
+										))}
+									</div>
+								)}
+							</div>
+						</div>
+
+						{/* External Client Registry */}
+						<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842] space-y-4">
+							<div className="flex items-center justify-between">
+								<div className="font-semibold text-slate-200">
+									External AI Clients
+								</div>
+								<span
+									className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+										clients.length > 0
+											? "bg-emerald-950/60 border-emerald-800 text-emerald-300"
+											: "bg-slate-950/60 border-slate-700 text-slate-400"
+									}`}
+								>
+									{clients.length} connected
+								</span>
+							</div>
+							<p className="text-[11px] text-slate-400 leading-relaxed">
+								External AI applications (Claude Desktop, Cursor, VS Code)
+								connect via MCP. Each client must be approved before it can
+								access project data.
+							</p>
+							<div className="space-y-3">
+								<div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+									<input
+										type="text"
+										value={newClientName}
+										onChange={(e) => setNewClientName(e.target.value)}
+										placeholder="Client name"
+										className="rounded-lg bg-[#0a0e1a] border border-[#263254] px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-teal-500/50"
+									/>
+									<select
+										value={newClientType}
+										onChange={(e) => setNewClientType(e.target.value)}
+										className="rounded-lg bg-[#0a0e1a] border border-[#263254] px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-teal-500/50"
+									>
+										<option value="mcp">MCP Client</option>
+										<option value="custom_api">Custom API</option>
+										<option value="oauth">OAuth Client</option>
+									</select>
+									<input
+										type="text"
+										value={newClientUserId}
+										onChange={(e) => setNewClientUserId(e.target.value)}
+										placeholder="Your user ID"
+										className="rounded-lg bg-[#0a0e1a] border border-[#263254] px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-teal-500/50"
+									/>
+									<button
+										type="button"
+										disabled={
+											creatingClient ||
+											!newClientName ||
+											!newClientUserId
+										}
+										onClick={handleCreateClient}
+										className="rounded-lg bg-teal-600 hover:bg-teal-500 disabled:opacity-50 disabled:hover:bg-teal-600 px-3 py-2 text-xs font-semibold text-white transition-colors"
+									>
+										{creatingClient ? (
+											<span>
+												<Loader2 className="w-3.5 h-3.5 animate-spin" />
+												Adding...
+											</span>
+										) : (
+											<span>Add client</span>
+										)}
+									</button>
+								</div>
+								{clients.length > 0 && (
+									<div className="space-y-2">
+										{clients.map((c) => (
+											<div
+												key={c.id}
+												className="p-3 flex items-center justify-between hover:bg-[#12182b] transition-colors group"
+											>
+												<div className="flex items-center gap-3 min-w-0">
+													<div className="min-w-0">
+														<div className="flex items-center gap-2">
+															<span className="font-semibold text-slate-200 truncate">
+																{c.name}
+															</span>
+															<span
+																className={`px-1.5 py-0.5 rounded-md ${
+																	c.status === "approved"
+																		? "bg-emerald-950/30 border border-emerald-800/30 text-emerald-400"
+																		: c.status === "pending"
+																		? "bg-amber-950/30 border border-amber-800/30 text-amber-400"
+																		: "bg-rose-950/30 border border-rose-800/30 text-rose-400"
+																} text-[9px] font-mono`}
+															>
+																{c.status}
+															</span>
+														</div>
+														<div className="text-[10px] text-slate-500 truncate mt-0.5">
+															{c.clientType} · {c.userId}
+														</div>
+													</div>
+												</div>
+												<div className="flex items-center gap-2 shrink-0">
+													{c.status === "pending" ? (
+														<button
+															type="button"
+															onClick={() =>
+																handleApproveClient(c.id)
+															}
+															className="px-2.5 py-1 rounded-lg bg-emerald-950/30 hover:bg-emerald-800/50 text-emerald-300 border border-emerald-800/40 text-[10px] font-semibold transition-colors"
+														>
+															Approve
+														</button>
+													) : (
+														<button
+															type="button"
+															onClick={() =>
+																handleRevokeClient(c.id)
+															}
+															className="px-2.5 py-1 rounded-lg bg-rose-950/30 hover:bg-rose-900/50 text-rose-300 border border-rose-800/40 text-[10px] font-semibold transition-colors"
+														>
+															Revoke
+														</button>
+													)}
+												</div>
+											</div>
+										))}
+									</div>
+								)}
+							</div>
+						</div>
+
+						{/* Client Permissions */}
+						<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842] space-y-4">
+							<div className="font-semibold text-slate-200">
+								Client Permissions
+							</div>
+							<p className="text-[11px] text-slate-400 leading-relaxed">
+								Grant project access to approved clients. Permission levels:
+								OBSERVE (read-only), PROPOSE (ideas/plans), PREPARE (draft
+								changes), EXECUTE (apply approved changes).
+							</p>
+							<div className="space-y-3">
+								<div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+									<input
+										type="text"
+										value={permClientId}
+										onChange={(e) => setPermClientId(e.target.value)}
+										placeholder="Client ID"
+										className="rounded-lg bg-[#0a0e1a] border border-[#263254] px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-teal-500/50"
+									/>
+									<select
+										value={permLevel}
+										onChange={(e) => setPermLevel(e.target.value)}
+										className="rounded-lg bg-[#0a0e1a] border border-[#263254] px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-teal-500/50"
+									>
+										<option value="OBSERVE">OBSERVE</option>
+										<option value="PROPOSE">PROPOSE</option>
+										<option value="PREPARE">PREPARE</option>
+										<option value="EXECUTE">EXECUTE</option>
+									</select>
+									<input
+										type="text"
+										value={permProjectId}
+										onChange={(e) => setPermProjectId(e.target.value)}
+										placeholder="Project ID (optional)"
+										className="rounded-lg bg-[#0a0e1a] border border-[#263254] px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-teal-500/50"
+									/>
+									<button
+										type="button"
+										disabled={
+											grantingPermission ||
+											!permClientId ||
+											!permLevel
+										}
+										onClick={handleGrantPermission}
+										className="rounded-lg bg-teal-600 hover:bg-teal-500 disabled:opacity-50 disabled:hover:bg-teal-600 px-3 py-2 text-xs font-semibold text-white transition-colors"
+									>
+										{grantingPermission ? (
+											<span>
+												<Loader2 className="w-3.5 h-3.5 animate-spin" />
+												Granting...
+											</span>
+										) : (
+											<span>Grant</span>
+										)}
+									</button>
+								</div>
+								{permissions.length > 0 && (
+									<div className="space-y-2">
+										{permissions.map((p) => (
+											<div
+												key={p.id}
+												className="p-3 flex items-center justify-between hover:bg-[#12182b] transition-colors group"
+											>
+												<div className="min-w-0">
+													<div className="flex items-center gap-2">
+														<span className="font-semibold text-slate-200 truncate text-xs">
+															Client: {p.clientId.slice(0, 12)}...
+														</span>
+														<span
+															className={`px-1.5 py-0.5 rounded-md bg-[#18203a] border border-[#2c385c] text-[9px] text-slate-400 font-mono`}
+														>
+															{p.permissionLevel}
+														</span>
+													</div>
+													{p.projectId && (
+														<div className="text-[10px] text-slate-500 truncate mt-0.5">
+															Project: {p.projectId}
+														</div>
+													)}
+													{p.grantedTools &&
+														p.grantedTools.length > 0 && (
+															<div className="text-[10px] text-slate-500 truncate mt-0.5">
+																Tools: {p.grantedTools.join(
+																	", "
+																)}
+															</div>
+														)}
+												</div>
+												<button
+													type="button"
+													onClick={() => {}}
+													className="px-2.5 py-1 rounded-lg bg-rose-950/30 hover:bg-rose-900/50 text-rose-300 border border-rose-800/40 text-[10px] font-semibold transition-colors"
+												>
+													Revoke
+												</button>
+											</div>
+										))}
+									</div>
+								)}
+							</div>
+						</div>
+
 						{activeTab === "about" && (
 							<div className="space-y-4 leading-relaxed">
 								<div className="flex items-center gap-3">
