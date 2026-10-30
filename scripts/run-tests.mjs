@@ -46,6 +46,7 @@ const testFiles = [
 	"tests/crew_resilience.test.ts",
 	"tests/live_demo_ui_sync.test.ts",
 	"tests/phase1-services.test.ts",
+	"tests/founder_intelligence.test.ts",
 ];
 
 const result = spawnSync(

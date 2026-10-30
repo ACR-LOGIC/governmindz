@@ -21,7 +21,9 @@
 			"@governmindz/core/*": ["./libs/core/src/*"],
 			"@governmindz/mcp-core": ["./libs/mcp-core/src/index.ts"],
 			"@governmindz/mcp-core/*": ["./libs/mcp-core/src/*"],
-			"@governmindz/voice": ["./libs/voice/src/index.ts"]
+			"@governmindz/voice": ["./libs/voice/src/index.ts"],
+			"@governmindz/founder-intelligence": ["./libs/founder-intelligence/src/index.ts"],
+			"@governmindz/founder-intelligence/*": ["./libs/founder-intelligence/src/*"]
 		}
 	},
 	"include": [

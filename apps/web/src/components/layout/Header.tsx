@@ -19,6 +19,7 @@ import {
 	FileCode,
 	Layers,
 	Bell,
+	Sparkles,
 } from "lucide-react";
 import type { ActiveTab, HealthStatus, Conversation } from "../../types";
 import { ttsService } from "../../services/ttsService";
@@ -33,6 +34,13 @@ import { notificationService } from "../../services/notificationService";
 import { NotificationCenter } from "../common/NotificationCenter";
 
 type ExportPhase = "idle" | "working" | "success" | "error";
+
+const NAV_ACTIVE_COLORS: Record<string, string> = {
+	"teal-400": "text-teal-300",
+	"amber-400": "text-amber-300",
+	"emerald-400": "text-emerald-300",
+	"violet-400": "text-violet-300",
+};
 
 interface ExportUiState {
 	phase: ExportPhase;
@@ -280,7 +288,7 @@ export const Header: React.FC<HeaderProps> = ({
 				onClick={() => setActiveTab(tab)}
 				className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
 					active
-						? `bg-[#262632] text-${activeColor} shadow-sm shadow-black/40`
+						? `bg-[#262632] ${NAV_ACTIVE_COLORS[activeColor] ?? "text-teal-300"} shadow-sm shadow-black/40`
 						: "text-slate-400 hover:text-slate-200 hover:bg-[#1e1e26]"
 				}`}
 			>
@@ -321,7 +329,7 @@ export const Header: React.FC<HeaderProps> = ({
 				</div>
 			</div>
 
-			{/* Center: 3 Integrated Views Navigation */}
+			{/* Center: Integrated Views Navigation */}
 			<div id="tour-explorer" className="flex items-center bg-[#111114]/80 border border-[#262630] p-1.5 rounded-xl gap-1.5 backdrop-blur-sm shadow-lg">
 				{navItem(<MessageSquare className="w-3.5 h-3.5" />, "Conversation", "chat", "teal-400")}
 				{navItem(<Activity className="w-3.5 h-3.5" />, "Execution", "explorer", "amber-400")}
@@ -330,6 +338,12 @@ export const Header: React.FC<HeaderProps> = ({
 					"Trust & Evidence",
 					"evidence",
 					"emerald-400",
+				)}
+				{navItem(
+					<Sparkles className="w-3.5 h-3.5" />,
+					"Founder",
+					"founder",
+					"violet-400",
 				)}
 			</div>
 

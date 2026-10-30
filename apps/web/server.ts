@@ -43,6 +43,8 @@ import {
 	approvalService,
 } from "../gateway/src/services/ApprovalService.js";
 import { getConfigStatus, saveSecureConfig, loadLocalEnvIfPresent } from "../gateway/src/services/cryptoConfig.js";
+import { founderStore } from "../gateway/src/services/SqliteFounderStore.js";
+import { FounderIntelligenceService } from "@governmindz/founder-intelligence";
 loadLocalEnvIfPresent();
 
 function getEffectiveAuditSecret(secretOverride?: string): string {
@@ -3552,6 +3554,120 @@ function serveEvidencePage(req: http.IncomingMessage, res: http.ServerResponse, 
 	res.end(html);
 }
 
+/* ----------------------------------------------------------------
+   Founder Intelligence API
+----------------------------------------------------------------- */
+
+const founderIntelligence = new FounderIntelligenceService(founderStore);
+
+function founderOwnerId(req: http.IncomingMessage): string {
+	const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+	const candidate = (url.searchParams.get("ownerId") || "").trim();
+	return candidate.length > 0 && candidate.length <= 128 ? candidate : "founder";
+}
+
+async function handleFounderOnboarding(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+): Promise<void> {
+	if (req.method !== "GET") {
+		res.writeHead(405);
+		res.end();
+		return;
+	}
+	try {
+		const snapshot = founderIntelligence.getOnboarding(founderOwnerId(req));
+		sendJson(res, 200, snapshot);
+	} catch (err: any) {
+		sendJson(res, 500, { error: err?.message || "Failed to load founder onboarding." });
+	}
+}
+
+async function handleFounderAnswers(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+): Promise<void> {
+	if (req.method !== "POST") {
+		res.writeHead(405);
+		res.end();
+		return;
+	}
+	try {
+		const payload = await readJsonBody(req);
+		const { questionId, value } = payload as { questionId?: string; value?: any };
+		if (!questionId || typeof questionId !== "string") {
+			sendJson(res, 400, { error: "questionId is required." });
+			return;
+		}
+		const ownerId = founderOwnerId(req);
+		const result = founderIntelligence.saveAnswer(ownerId, questionId, value ?? null);
+		if (result.error) {
+			sendJson(res, 400, { error: result.error });
+			return;
+		}
+		sendJson(res, 200, founderIntelligence.getOnboarding(ownerId));
+	} catch (err: any) {
+		sendJson(res, 500, { error: err?.message || "Failed to save founder answer." });
+	}
+}
+
+async function handleFounderProject(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+): Promise<void> {
+	if (req.method !== "POST") {
+		res.writeHead(405);
+		res.end();
+		return;
+	}
+	try {
+		const payload = await readJsonBody(req);
+		const { project } = payload as { project?: any };
+		if (!project || typeof project !== "object") {
+			sendJson(res, 400, { error: "project is required." });
+			return;
+		}
+		const ownerId = founderOwnerId(req);
+		founderIntelligence.saveProject(ownerId, {
+			projectId:
+				typeof project.projectId === "string" ? project.projectId : undefined,
+			sourceType:
+				project.sourceType === "github_repository" || project.sourceType === "local_project"
+					? project.sourceType
+					: undefined,
+			repositoryUrl:
+				typeof project.repositoryUrl === "string" ? project.repositoryUrl : undefined,
+			localPath: typeof project.localPath === "string" ? project.localPath : undefined,
+		});
+		sendJson(res, 200, founderIntelligence.getOnboarding(ownerId));
+	} catch (err: any) {
+		sendJson(res, 500, { error: err?.message || "Failed to link founder project." });
+	}
+}
+
+async function handleFounderAssessment(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+): Promise<void> {
+	const ownerId = founderOwnerId(req);
+	try {
+		if (req.method === "GET") {
+			const assessment = founderIntelligence.getLatestAssessment(ownerId);
+			sendJson(res, 200, { assessment });
+			return;
+		}
+		if (req.method === "POST") {
+			const assessment = founderIntelligence.runAssessment(ownerId);
+			sendJson(res, 200, { assessment });
+			return;
+		}
+		res.writeHead(405);
+		res.end();
+	} catch (err: any) {
+		sendJson(res, 500, { error: err?.message || "Failed to compute founder assessment." });
+	}
+}
+
 const server = http.createServer((req, res) => {
 	const parsedUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 	const pathname = parsedUrl.pathname;
@@ -3667,6 +3783,14 @@ const server = http.createServer((req, res) => {
 	} else if (pathname.startsWith("/api/webhooks/")) {
 		const id = pathname.slice("/api/webhooks/".length);
 		void handleSingleWebhook(req, res, id);
+	} else if (pathname === "/api/founder/onboarding") {
+		void handleFounderOnboarding(req, res);
+	} else if (pathname === "/api/founder/onboarding/answers") {
+		void handleFounderAnswers(req, res);
+	} else if (pathname === "/api/founder/project") {
+		void handleFounderProject(req, res);
+	} else if (pathname === "/api/founder/assessment") {
+		void handleFounderAssessment(req, res);
 	} else if (pathname === "/api/catalog") {
 		handleCatalog(req, res);
 	} else if (pathname.startsWith("/api/catalog/")) {

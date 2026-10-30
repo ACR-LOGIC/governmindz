@@ -1,0 +1,14 @@
+{
+	"name": "@governmindz/founder-intelligence",
+	"private": true,
+	"version": "0.1.0",
+	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"scripts": {
+		"build": "tsc -p tsconfig.json",
+		"test": "node --test --import tsx test/*.test.ts",
+		"typecheck": "tsc -p tsconfig.json --noEmit"
+	},
+	"dependencies": {}
+}
