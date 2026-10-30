@@ -13,6 +13,7 @@ import { TourGuide } from "./components/common/TourGuide";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import { LiveModeConfirmModal } from "./components/modals/LiveModeConfirmModal";
 import { LiveConfigModal } from "./components/modals/LiveConfigModal";
+import { FounderWorkspace } from "./components/founder/FounderWorkspace";
 import {
 	fetchHealth,
 	fetchScenarios,
@@ -1506,7 +1507,9 @@ export const App: React.FC = () => {
 
 					{/* Center: Selected View */}
 					<main className="flex-1 flex flex-col min-w-0 bg-[#0a0e1a] overflow-hidden relative">
-						{activeConv ? (
+						{activeTab === "founder" ? (
+							<FounderWorkspace />
+						) : activeConv ? (
 							<>
 								{activeTab === "chat" && (
 									<>

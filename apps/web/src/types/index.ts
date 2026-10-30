@@ -293,7 +293,7 @@ export interface HealthStatus {
 	};
 }
 
-export type ActiveTab = "chat" | "explorer" | "evidence";
+export type ActiveTab = "chat" | "explorer" | "evidence" | "founder";
 
 export interface MessageFeedbackPayload {
 	conversationId: string;
@@ -415,5 +415,108 @@ export interface WebhookStats {
 	successfulDeliveries: number;
 	failedDeliveries: number;
 	lastDeliveryAt: number | null;
+}
+
+export interface FounderQuestionOption {
+	value: string;
+	label: string;
+	hint?: string;
+}
+
+export interface FounderQuestion {
+	id: string;
+	section: string;
+	prompt: string;
+	helpText?: string;
+	kind: string;
+	options?: FounderQuestionOption[];
+	required?: boolean;
+}
+
+export interface FounderSectionProgress {
+	section: string;
+	label: string;
+	answered: number;
+	total: number;
+	percent: number;
+}
+
+export interface FounderProgress {
+	answered: number;
+	total: number;
+	percent: number;
+	complete: boolean;
+	sections: FounderSectionProgress[];
+}
+
+export interface FounderOnboardingSnapshot {
+	questions: FounderQuestion[];
+	answers: Record<string, string | number | boolean | string[] | null>;
+	progress: FounderProgress;
+	nextQuestionId: string | null;
+	updatedAt: number;
+}
+
+export interface FounderEvidence {
+	id: string;
+	kind: string;
+	source: string;
+	detail?: string;
+	verificationStatus: string;
+}
+
+export interface FounderFinding {
+	id: string;
+	scoreId: string;
+	title: string;
+	detail: string;
+	status: string;
+	severity: string;
+	confidence: number;
+	evidence: FounderEvidence[];
+	missingEvidence?: string[];
+}
+
+export interface FounderScore {
+	id: string;
+	label: string;
+	score: number;
+	band: string;
+	confidence: number;
+	evidenceCoverage: number;
+	findings: FounderFinding[];
+	missingEvidence: string[];
+	weight: number;
+}
+
+export interface FounderStageEvaluation {
+	stage: string;
+	label: string;
+	confidence: number;
+	evidenceCoverage: number;
+	rationale: string;
+	signals: { id: string; label: string; present: boolean; weight: number; source: string }[];
+}
+
+export interface FounderStageComparison {
+	selfReported: string;
+	selfReportedLabel: string;
+	assessed: string;
+	assessedLabel: string;
+	matches: boolean;
+	gapInStages: number;
+	message: string;
+}
+
+export interface FounderAssessment {
+	id: string;
+	createdAt: number;
+	rulesetVersion: string;
+	selfReportedStage: string;
+	stageEvaluation: FounderStageEvaluation;
+	stageComparison: FounderStageComparison;
+	scores: FounderScore[];
+	overall: FounderScore;
+	weighting: { scoreId: string; weight: number; rationale: string }[];
 }
 

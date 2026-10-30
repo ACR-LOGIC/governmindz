@@ -6,6 +6,8 @@ import type {
 	AgentCredibilityRecord,
 	AuditVerificationReport,
 	AuditProofCertificate,
+	FounderAssessment,
+	FounderOnboardingSnapshot,
 } from "../types";
 
 const BASE_URL = "";
@@ -301,5 +303,49 @@ export async function fetchAuditCertificate(conversationId: string): Promise<Aud
 		throw new Error(err.error || `HTTP ${res.status}`);
 	}
 	return res.json();
+}
+
+export async function fetchFounderOnboarding(): Promise<FounderOnboardingSnapshot> {
+	const res = await fetchWithRetry(`${BASE_URL}/api/founder/onboarding`);
+	if (!res.ok) throw new Error("Failed to load founder onboarding");
+	return res.json();
+}
+
+export async function saveFounderAnswer(
+	questionId: string,
+	value: string | number | boolean | string[] | null,
+): Promise<FounderOnboardingSnapshot> {
+	const res = await fetch(`${BASE_URL}/api/founder/onboarding/answers`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ questionId, value }),
+	});
+	if (!res.ok) {
+		const err = await res.json().catch(() => ({ error: "Failed to save answer" }));
+		throw new Error(err.error || `HTTP ${res.status}`);
+	}
+	return res.json();
+}
+
+export async function runFounderAssessment(): Promise<FounderAssessment> {
+	const res = await fetch(`${BASE_URL}/api/founder/assessment`, { method: "POST" });
+	if (!res.ok) {
+		const err = await res.json().catch(() => ({ error: "Failed to compute assessment" }));
+		throw new Error(err.error || `HTTP ${res.status}`);
+	}
+	const payload = await res.json();
+	return payload.assessment as FounderAssessment;
+}
+
+export async function fetchFounderAssessment(): Promise<FounderAssessment | null> {
+	try {
+		const res = await fetch(`${BASE_URL}/api/founder/assessment`);
+		if (!res.ok) return null;
+		const payload = await res.json();
+		return (payload.assessment ?? null) as FounderAssessment | null;
+	} catch (e) {
+		console.warn("Failed to fetch founder assessment:", e);
+		return null;
+	}
 }
 
