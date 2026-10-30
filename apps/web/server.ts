@@ -24,6 +24,7 @@ import {
 } from "@governmindz/core/exports/ConversationExport";
 import { zetarisQueryHandler } from "../gateway/src/tools/zetaris.tools.js";
 import { sharedResilientZetarisClient } from "@governmindz/core/integrations/ResilientZetarisClient";
+import { GitHubAppClient } from "@governmindz/core/integrations/githubAppClient";
 import { executeWebSearch } from "../gateway/src/tools/webSearch.tools.js";
 import { voiceService } from "@governmindz/voice";
 import { getConfigStatus, saveSecureConfig, loadLocalEnvIfPresent } from "../gateway/src/services/cryptoConfig.js";
@@ -126,6 +127,27 @@ db.exec(`
 		is_synthetic INTEGER NOT NULL DEFAULT 0,
 		content_hash TEXT NOT NULL,
 		created_at INTEGER NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS project_catalog (
+		id TEXT PRIMARY KEY,
+		source_id TEXT NOT NULL,
+		source_type TEXT NOT NULL,
+		provider TEXT NOT NULL,
+		name TEXT NOT NULL,
+		owner TEXT NOT NULL,
+		full_name TEXT NOT NULL,
+		description TEXT,
+		visibility TEXT,
+		html_url TEXT,
+		readme TEXT,
+		languages TEXT,
+		status TEXT NOT NULL,
+		selected INTEGER NOT NULL DEFAULT 0,
+		last_synced_at INTEGER,
+		data_json TEXT NOT NULL,
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL
 	);
 `);
 
@@ -1106,6 +1128,49 @@ function handleVoiceStatus(_req: http.IncomingMessage, res: http.ServerResponse)
 	sendJson(res, 200, { configured: voiceService.isConfigured() });
 }
 
+async function handleVoiceConfigure(req: http.IncomingMessage, res: http.ServerResponse) {
+	if (req.method !== "POST") {
+		sendJson(res, 405, { error: "Use POST to configure ElevenLabs." });
+		return;
+	}
+	let body = "";
+	req.on("data", (c: any) => (body += c));
+	req.on("end", async () => {
+		try {
+			const payload = JSON.parse(body || "{}");
+			const apiKey = String(payload.apiKey ?? "").trim();
+			if (!apiKey) {
+				sendJson(res, 400, { error: "API key is required." });
+				return;
+			}
+			// Persist to .env.local so it survives restarts
+			try {
+				const envContent = fs.readFileSync(".env.local", "utf-8");
+				const lines = envContent.split("\n");
+				const updatedLines = lines.map((line: string) => {
+					if (line.startsWith("ELEVENLABS_API_KEY=")) {
+						return `ELEVENLABS_API_KEY=${apiKey}`;
+					}
+					return line;
+				});
+				fs.writeFileSync(".env.local", updatedLines.join("\n") + "\n");
+			} catch {
+				// If .env.local doesn't exist, create it
+				try {
+					fs.writeFileSync(".env.local", `ELEVENLABS_API_KEY=${apiKey}\n`);
+				} catch {
+					// ignore; key still stored in memory below
+				}
+			}
+			// Also set in process env for immediate effect (no restart needed)
+			process.env.ELEVENLABS_API_KEY = apiKey;
+			sendJson(res, 200, { success: true, message: "ElevenLabs API key configured." });
+		} catch {
+			sendJson(res, 500, { error: "Failed to parse configuration." });
+		}
+	});
+}
+
 async function handleVoiceTts(req: http.IncomingMessage, res: http.ServerResponse) {
 	if (req.method !== "POST") {
 		sendJson(res, 405, { error: "Use POST to synthesize speech." });
@@ -1178,6 +1243,529 @@ async function handleScribeToken(_req: http.IncomingMessage, res: http.ServerRes
 	} catch (err: any) {
 		sendJson(res, 502, { error: err?.message || "Failed to create a scribe token." });
 	}
+}
+
+/* -------------------------------------------------------------------------- */
+/* GitHub App integration                                                     */
+/* -------------------------------------------------------------------------- */
+
+const GITHUB_ENV_KEYS = [
+	"GITHUB_APP_ID",
+	"GITHUB_APP_CLIENT_ID",
+	"GITHUB_APP_SLUG",
+	"GITHUB_APP_PRIVATE_KEY_B64",
+	"GITHUB_WEBHOOK_SECRET",
+	"GITHUB_INSTALLATION_ID",
+	"GITHUB_INSTALLATION_ACCOUNT",
+	"GITHUB_INSTALLATION_ACCOUNT_TYPE",
+];
+
+function readEnvLocalFile(): string {
+	try {
+		return fs.existsSync(".env.local") ? fs.readFileSync(".env.local", "utf-8") : "";
+	} catch {
+		return "";
+	}
+}
+
+function writeEnvLocalFile(content: string): void {
+	try {
+		fs.writeFileSync(".env.local", content, "utf-8");
+	} catch (err) {
+		console.warn("[GovernMindz] Failed to write .env.local:", err);
+	}
+}
+
+function setEnvLocal(key: string, value: string): void {
+	let lines = readEnvLocalFile() ? readEnvLocalFile().split(/\r?\n/) : [];
+	lines = lines.filter((line) => {
+		const trimmed = line.trim();
+		return (
+			!trimmed ||
+			trimmed.startsWith("#") ||
+			!trimmed.startsWith(`${key}=`)
+		);
+	});
+	lines.push(`${key}=${value}`);
+	writeEnvLocalFile(lines.join("\n") + "\n");
+	process.env[key] = value;
+}
+
+function removeEnvLocal(key: string): void {
+	let lines = readEnvLocalFile() ? readEnvLocalFile().split(/\r?\n/) : [];
+	lines = lines.filter((line) => {
+		const trimmed = line.trim();
+		return (
+			!trimmed ||
+			trimmed.startsWith("#") ||
+			!trimmed.startsWith(`${key}=`)
+		);
+	});
+	writeEnvLocalFile(lines.join("\n") + "\n");
+	delete process.env[key];
+}
+
+function clientFromEnv(): GitHubAppClient | null {
+	const cfg = {
+		appId: process.env.GITHUB_APP_ID,
+		clientId: process.env.GITHUB_APP_CLIENT_ID,
+		slug: process.env.GITHUB_APP_SLUG,
+		privateKey: process.env.GITHUB_APP_PRIVATE_KEY_B64
+			? Buffer.from(process.env.GITHUB_APP_PRIVATE_KEY_B64, "base64").toString("utf8")
+			: undefined,
+		webhookSecret: process.env.GITHUB_WEBHOOK_SECRET,
+		installationId: process.env.GITHUB_INSTALLATION_ID,
+		accountLogin: process.env.GITHUB_INSTALLATION_ACCOUNT,
+		accountType: process.env.GITHUB_INSTALLATION_ACCOUNT_TYPE,
+	};
+	if (!cfg.appId && !cfg.clientId) return null;
+	if (!cfg.slug || !cfg.privateKey) return null;
+	return new GitHubAppClient(cfg);
+}
+
+async function handleGitHubAppConfig(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+): Promise<void> {
+	if (req.method === "GET") {
+		const cfg = clientFromEnv();
+		const installed = Boolean(process.env.GITHUB_INSTALLATION_ID?.trim());
+		const configured = Boolean(clientFromEnv());
+		sendJson(res, 200, {
+			configured,
+			installed,
+			account: process.env.GITHUB_INSTALLATION_ACCOUNT
+				? {
+						login: process.env.GITHUB_INSTALLATION_ACCOUNT,
+						type: (process.env.GITHUB_INSTALLATION_ACCOUNT_TYPE as
+							| "User"
+							| "Organization") ?? "User",
+				  }
+				: null,
+			slug: process.env.GITHUB_APP_SLUG || null,
+			appId: process.env.GITHUB_APP_ID || null,
+			clientId: process.env.GITHUB_APP_CLIENT_ID || null,
+		});
+		return;
+	}
+
+	if (req.method !== "POST") {
+		sendJson(res, 405, { error: "Use GET or POST." });
+		return;
+	}
+
+	let body = "";
+	req.on("data", (c: any) => (body += c));
+	req.on("end", async () => {
+		try {
+			const payload = JSON.parse(body || "{}");
+			const {
+				appId,
+				clientId,
+				slug,
+				privateKey,
+				webhookSecret,
+			} = payload as Record<string, string>;
+			if (!slug || !privateKey || !(appId || clientId)) {
+				sendJson(res, 400, {
+					error:
+						"appId/clientId, slug, and privateKey are required.",
+				});
+				return;
+			}
+			const client = new GitHubAppClient({
+				appId,
+				clientId,
+				slug,
+				privateKey,
+				webhookSecret,
+			});
+			try {
+				await client.validateApp();
+			} catch (err: any) {
+				sendJson(res, 400, {
+					error: `Invalid GitHub App credentials: ${err?.message ?? "validation failed"}`,
+				});
+				return;
+			}
+			// Persist app credentials to .env.local (private key base64-encoded).
+			if (appId) setEnvLocal("GITHUB_APP_ID", appId);
+			if (clientId) setEnvLocal("GITHUB_APP_CLIENT_ID", clientId);
+			setEnvLocal("GITHUB_APP_SLUG", slug);
+			setEnvLocal(
+				"GITHUB_APP_PRIVATE_KEY_B64",
+				Buffer.from(privateKey, "utf8").toString("base64"),
+			);
+			if (webhookSecret) setEnvLocal("GITHUB_WEBHOOK_SECRET", webhookSecret);
+			// Reload env so the in-memory client picks up the new keys.
+			loadLocalEnvIfPresent();
+			sendJson(res, 200, {
+				success: true,
+				configured: true,
+				message: "GitHub App credentials saved.",
+			});
+		} catch (err) {
+			sendJson(res, 500, {
+				error: err instanceof Error ? err.message : "Failed to configure GitHub App.",
+			});
+		}
+	});
+}
+
+async function handleGitHubInstallUrl(
+	_req: http.IncomingMessage,
+	res: http.ServerResponse,
+): Promise<void> {
+	const client = clientFromEnv();
+	if (!client) {
+		sendJson(res, 400, {
+			error: "GitHub App is not configured. Add App credentials first.",
+		});
+		return;
+	}
+	try {
+		const { authorizationUrl, state, expiresAt } = client.beginAuthorization();
+		sendJson(res, 200, { authorizationUrl, state, expiresAt });
+	} catch (err: any) {
+		sendJson(res, 500, {
+			error: err instanceof Error ? err.message : "Failed to build installation URL.",
+		});
+	}
+}
+
+async function handleGitHubCallback(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+): Promise<void> {
+	if (req.method !== "GET") {
+		sendJson(res, 405, { error: "Use GET for the GitHub callback." });
+		return;
+	}
+	const parsedUrl = new URL(req.url || "/", "http://localhost");
+	const installationId = parsedUrl.searchParams.get("installation_id");
+	const setupAction = parsedUrl.searchParams.get("setup_action");
+	const state = parsedUrl.searchParams.get("state");
+
+	const client = clientFromEnv();
+	if (!client || !installationId || !state) {
+		res.writeHead(302, { Location: "/?github=error" });
+		res.end();
+		return;
+	}
+	if (!client.consumeState(state)) {
+		res.writeHead(302, { Location: "/?github=error" });
+		res.end();
+		return;
+	}
+
+		try {
+			const tokenResult = await client.exchangeInstallationToken(
+				Number(installationId),
+			);
+			const account = await client.getInstallation(tokenResult.token);
+		setEnvLocal("GITHUB_INSTALLATION_ID", String(account.installationId));
+		setEnvLocal("GITHUB_INSTALLATION_ACCOUNT", account.account.login);
+		setEnvLocal(
+			"GITHUB_INSTALLATION_ACCOUNT_TYPE",
+			account.account.type,
+		);
+		loadLocalEnvIfPresent();
+		// Redirect the browser back to the app after a successful install.
+		res.writeHead(302, { Location: `/?github=connected&setup=${encodeURIComponent(setupAction ?? "")}` });
+		res.end();
+	} catch (err: any) {
+		res.writeHead(302, { Location: "/?github=error" });
+		res.end();
+	}
+}
+
+async function handleGitHubStatus(
+	_req: http.IncomingMessage,
+	res: http.ServerResponse,
+): Promise<void> {
+	const client = clientFromEnv();
+	const installed = Boolean(process.env.GITHUB_INSTALLATION_ID?.trim());
+	let repositoriesCount = 0;
+	let tokenValid = false;
+	if (client && installed) {
+		try {
+			const token = await client.installationToken();
+			const { totalCount } = await client.listInstallationRepositories(token);
+			repositoriesCount = totalCount;
+			tokenValid = true;
+		} catch {
+			// Token may be expired/mint-failed; still report installed.
+		}
+	}
+	sendJson(res, 200, {
+		configured: Boolean(client),
+		installed,
+		account: process.env.GITHUB_INSTALLATION_ACCOUNT
+			? {
+					login: process.env.GITHUB_INSTALLATION_ACCOUNT,
+					type: (process.env.GITHUB_INSTALLATION_ACCOUNT_TYPE as
+						| "User"
+						| "Organization") ?? "User",
+			  }
+			: null,
+		installationId: process.env.GITHUB_INSTALLATION_ID || null,
+		repositoryCount: repositoriesCount,
+		tokenValid,
+	});
+}
+
+async function handleGitHubRepositories(
+	_req: http.IncomingMessage,
+	res: http.ServerResponse,
+): Promise<void> {
+	const client = clientFromEnv();
+	if (!client || !process.env.GITHUB_INSTALLATION_ID) {
+		sendJson(res, 200, {
+			repositories: [],
+			repositoryCount: 0,
+			status: "not_installed",
+		});
+		return;
+	}
+	try {
+		const token = await client.installationToken();
+		const result = await client.listInstallationRepositories(token);
+		sendJson(res, 200, {
+			repositories: result.repositories,
+			repositoryCount: result.totalCount,
+			repositorySelection: result.repositorySelection,
+			status: "connected",
+		});
+	} catch (err: any) {
+		sendJson(res, 502, {
+			repositories: [],
+			status: "error",
+			message: err?.message || "Failed to list repositories.",
+		});
+	}
+}
+
+async function handleGitHubSelectRepositories(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+): Promise<void> {
+	if (req.method !== "POST") {
+		sendJson(res, 405, { error: "Use POST." });
+		return;
+	}
+	const client = clientFromEnv();
+	if (!client || !process.env.GITHUB_INSTALLATION_ID) {
+		sendJson(res, 400, { error: "GitHub App is not installed." });
+		return;
+	}
+	let body = "";
+	req.on("data", (c: any) => (body += c));
+	req.on("end", async () => {
+		try {
+			const payload = JSON.parse(body || "{}");
+			const { repositoryIds } = payload as { repositoryIds?: number[] };
+			if (!Array.isArray(repositoryIds) || repositoryIds.length === 0) {
+				sendJson(res, 400, {
+					error: "repositoryIds (non-empty array) is required.",
+				});
+				return;
+			}
+			const token = await client.installationToken();
+			const now = Date.now();
+			const upsert = db.prepare(`
+				INSERT INTO project_catalog
+					(id, source_id, source_type, provider, name, owner, full_name,
+					 description, visibility, html_url, readme, languages, status,
+					 selected, last_synced_at, data_json, created_at, updated_at)
+				VALUES
+					(@id, @source_id, @source_type, @provider, @name, @owner, @full_name,
+					 @description, @visibility, @html_url, @readme, @languages, @status,
+					 @selected, @last_synced_at, @data_json, @created_at, @updated_at)
+				ON CONFLICT(id) DO UPDATE SET
+					name = excluded.name,
+					owner = excluded.owner,
+					full_name = excluded.full_name,
+					description = excluded.description,
+					visibility = excluded.visibility,
+					html_url = excluded.html_url,
+					readme = excluded.readme,
+					languages = excluded.languages,
+					status = excluded.status,
+					selected = excluded.selected,
+					last_synced_at = excluded.last_synced_at,
+					data_json = excluded.data_json,
+					updated_at = excluded.updated_at
+			`);
+			const selectAll = db.prepare(
+				"UPDATE project_catalog SET selected = 0 WHERE provider = 'github'",
+			);
+			selectAll.run();
+			for (const repoId of repositoryIds) {
+				try {
+					const repo = await (async () => {
+						// Re-fetch full list to find this repo (simple, correct).
+						const t = await client.installationToken();
+						const result = await client.listInstallationRepositories(t);
+						return result.repositories.find((r) => r.id === repoId);
+					})();
+					if (!repo) continue;
+					const readme = await client.getRepositoryReadme(
+						token,
+						repo.owner,
+						repo.name,
+					);
+					const readmeText =
+						readme && typeof readme.content === "string"
+							? Buffer.from(readme.content, "base64").toString("utf8")
+							: null;
+					const id = `gh:${repo.id}`;
+					upsert.run({
+						id,
+						source_id: String(repo.id),
+						source_type: "github_repository",
+						provider: "github",
+						name: repo.name,
+						owner: repo.owner,
+						full_name: repo.fullName,
+						description: repo.description ?? null,
+						visibility: repo.visibility,
+						html_url: repo.htmlUrl,
+						readme: readmeText ?? null,
+						languages: null,
+						status: "active",
+						selected: 1,
+						last_synced_at: now,
+						data_json: JSON.stringify({
+							archived: repo.archived,
+							disabled: repo.disabled,
+							fork: repo.fork,
+							pushed_at: repo.pushedAt,
+							updated_at: repo.updatedAt,
+							default_branch: repo.defaultBranch,
+						}),
+						created_at: now,
+						updated_at: now,
+					});
+				} catch (repoErr) {
+					console.warn(
+						`[GovernMindz] Failed to sync repo ${repoId}:`,
+						repoErr,
+					);
+				}
+			}
+			sendJson(res, 200, {
+				success: true,
+				selected: repositoryIds.length,
+				message: "Repositories selected and synced to the project catalog.",
+			});
+		} catch (err) {
+			sendJson(res, 500, {
+				error: err instanceof Error ? err.message : "Failed to select repositories.",
+			});
+		}
+	});
+}
+
+async function handleGitHubDisconnect(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+): Promise<void> {
+	if (req.method !== "POST") {
+		sendJson(res, 405, { error: "Use POST." });
+		return;
+	}
+	const client = clientFromEnv();
+	if (client && process.env.GITHUB_INSTALLATION_ID) {
+		try {
+			const token = await client.installationToken();
+			await client.revokeInstallationToken(token);
+		} catch {
+			// Revocation is best-effort; proceed to clear local state regardless.
+		}
+	}
+	for (const key of [
+		"GITHUB_INSTALLATION_ID",
+		"GITHUB_INSTALLATION_ACCOUNT",
+		"GITHUB_INSTALLATION_ACCOUNT_TYPE",
+	]) {
+		removeEnvLocal(key);
+	}
+	db.prepare("DELETE FROM project_catalog WHERE provider = 'github'").run();
+	loadLocalEnvIfPresent();
+	sendJson(res, 200, {
+		success: true,
+		message: "GitHub integration disconnected.",
+	});
+}
+
+async function handleGitHubSearch(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+): Promise<void> {
+	const client = clientFromEnv();
+	if (!client || !process.env.GITHUB_INSTALLATION_ID) {
+		sendJson(res, 200, {
+			results: [],
+			totalCount: 0,
+			status: "not_installed",
+		});
+		return;
+	}
+	const parsedUrl = new URL(req.url || "/", "http://localhost");
+	const query = parsedUrl.searchParams.get("q") || "";
+	if (!query) {
+		sendJson(res, 400, { error: "Query parameter 'q' is required." });
+		return;
+	}
+	try {
+		const token = await client.installationToken();
+		// Search across repositories the installation can access.
+		const searchQuery = `${query} ${process.env.GITHUB_INSTALLATION_ACCOUNT ? `user:${process.env.GITHUB_INSTALLATION_ACCOUNT}` : ""}`;
+		const result = await client.searchCode(token, searchQuery);
+		sendJson(res, 200, {
+			results: result.items,
+			totalCount: result.total_count,
+			status: "connected",
+		});
+	} catch (err: any) {
+		sendJson(res, 502, {
+			results: [],
+			totalCount: 0,
+			status: "error",
+			message: err?.message || "GitHub code search failed.",
+		});
+	}
+}
+
+function handleCatalog(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+): void {
+	if (req.method === "GET") {
+		const rows = db
+			.prepare(
+				"SELECT * FROM project_catalog ORDER BY selected DESC, updated_at DESC",
+			)
+			.all() as any[];
+		sendJson(res, 200, { sources: rows });
+		return;
+	}
+	res.writeHead(405);
+	res.end();
+}
+
+function handleSingleCatalog(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+	id: string,
+): void {
+	if (req.method === "DELETE") {
+		db.prepare("DELETE FROM project_catalog WHERE id = ?").run(id);
+		sendJson(res, 200, { success: true });
+		return;
+	}
+	res.writeHead(405);
+	res.end();
 }
 
 function handleScenarios(_req: http.IncomingMessage, res: http.ServerResponse) {
@@ -1838,6 +2426,29 @@ const server = http.createServer((req, res) => {
 		void handleVoiceCatalog(req, res);
 	} else if (pathname === "/api/voice/scribe-token") {
 		void handleScribeToken(req, res);
+	} else if (pathname === "/api/voice/configure") {
+		void handleVoiceConfigure(req, res);
+	} else if (pathname === "/api/github/app-config") {
+		void handleGitHubAppConfig(req, res);
+	} else if (pathname === "/api/github/install-url") {
+		void handleGitHubInstallUrl(req, res);
+	} else if (pathname === "/api/github/callback") {
+		void handleGitHubCallback(req, res);
+	} else if (pathname === "/api/github/status") {
+		void handleGitHubStatus(req, res);
+	} else if (pathname === "/api/github/repositories") {
+		void handleGitHubRepositories(req, res);
+	} else if (pathname === "/api/github/select-repositories") {
+		void handleGitHubSelectRepositories(req, res);
+	} else if (pathname === "/api/github/disconnect") {
+		void handleGitHubDisconnect(req, res);
+	} else if (pathname === "/api/github/search") {
+		void handleGitHubSearch(req, res);
+	} else if (pathname === "/api/catalog") {
+		handleCatalog(req, res);
+	} else if (pathname.startsWith("/api/catalog/")) {
+		const id = pathname.slice("/api/catalog/".length);
+		handleSingleCatalog(req, res, id);
 	} else if (pathname === "/api/preferences") {
 		handlePreferences(req, res);
 	} else if (pathname === "/api/config") {

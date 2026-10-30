@@ -21,6 +21,9 @@ import {
 	Palette,
 	Plus,
 	Send,
+	Loader2,
+	Mic,
+	GitBranch,
 } from "lucide-react";
 import type { Conversation, HealthStatus } from "../../types";
 import { detectMeterless } from "../../services/api";
@@ -50,6 +53,7 @@ type TabType =
 	| "models"
 	| "data"
 	| "appearance"
+	| "github"
 	| "about";
 
 const CONFIG_PROMPTS = [
@@ -208,6 +212,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 	const [speakingSeat, setSpeakingSeat] = useState<string | null>(null);
 	const [voiceCatalog, setVoiceCatalog] = useState<Array<{ voiceId: string; name: string; category?: string }>>([]);
 	const [voiceProvider, setVoiceProvider] = useState<"ready" | "unavailable">("unavailable");
+	const [elevenLabsConnected, setElevenLabsConnected] = useState(false);
+	const [elevenLabsKeyInput, setElevenLabsKeyInput] = useState("");
+	const [elevenLabsConnecting, setElevenLabsConnecting] = useState(false);
+
+	const [githubConfigured, setGithubConfigured] = useState(false);
+	const [githubInstalled, setGithubInstalled] = useState(false);
+	const [githubAccount, setGithubAccount] = useState<{ login: string; type: string } | null>(null);
+	const [githubRepos, setGithubRepos] = useState<Array<{ id: number; name: string; fullName: string; description?: string; private: boolean; htmlUrl: string }>>([]);
+	const [githubReposLoading, setGithubReposLoading] = useState(false);
+	const [githubSelectedIds, setGithubSelectedIds] = useState<Set<number>>(new Set());
+	const [githubSaving, setGithubSaving] = useState(false);
+	const [githubSyncing, setGithubSyncing] = useState(false);
+	const [githubConfigOpen, setGithubConfigOpen] = useState(false);
+	const [githubAppId, setGithubAppId] = useState("");
+	const [githubClientId, setGithubClientId] = useState("");
+	const [githubSlug, setGithubSlug] = useState("");
+	const [githubPrivateKey, setGithubPrivateKey] = useState("");
+	const [githubWebhookSecret, setGithubWebhookSecret] = useState("");
+	const [githubInstalling, setGithubInstalling] = useState(false);
 
 	useEffect(() => {
 		if (isOpen) {
@@ -218,13 +241,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 				.getElevenLabsStatus()
 				.then((ready) => {
 					setVoiceProvider(ready ? "ready" : "unavailable");
+					setElevenLabsConnected(ready);
 					if (!ready) return;
 					ttsService
 						.listElevenVoices()
 						.then(setVoiceCatalog)
 						.catch(() => setVoiceCatalog([]));
 				})
-				.catch(() => setVoiceProvider("unavailable"));
+				.catch(() => {
+					setVoiceProvider("unavailable");
+					setElevenLabsConnected(false);
+				});
+
+			// GitHub integration status + catalog
+			void fetchGithubStatus();
+			void fetchCatalog();
 		}
 	}, [isOpen]);
 
@@ -276,6 +307,250 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 		setWhSecret("");
 		setWhEvents(["run.completed"]);
 		setSelectedWebhookId(null);
+	};
+
+	const fetchGithubStatus = async () => {
+		try {
+			const resp = await fetch("/api/github/app-config");
+			const data = await resp.json();
+			setGithubConfigured(!!data.configured);
+			setGithubInstalled(!!data.installed);
+			setGithubAccount(data.account ?? null);
+		} catch {
+			setGithubConfigured(false);
+			setGithubInstalled(false);
+		}
+	};
+
+	const fetchGithubRepos = async () => {
+		setGithubReposLoading(true);
+		try {
+			const resp = await fetch("/api/github/repositories");
+			const data = await resp.json();
+			if (data.repositories) {
+				setGithubRepos(
+					data.repositories.map((r: any) => ({
+						id: r.id,
+						name: r.name,
+						fullName: r.fullName,
+						description: r.description,
+						private: !!r.private,
+						htmlUrl: r.htmlUrl,
+					})),
+				);
+			}
+		} catch (err) {
+			console.error("Failed to fetch GitHub repos:", err);
+		} finally {
+			setGithubReposLoading(false);
+		}
+	};
+
+	const fetchCatalog = async () => {
+		try {
+			const resp = await fetch("/api/catalog");
+			const data = await resp.json();
+			const ids = new Set<number>();
+			for (const row of data.sources ?? []) {
+				if (row.provider === "github" && row.selected) {
+					ids.add(Number(row.source_id));
+				}
+			}
+			setGithubSelectedIds(ids);
+		} catch {
+			// catalog not available yet
+		}
+	};
+
+	const handleConnectGitHub = async () => {
+		if (!githubSlug || !githubPrivateKey || !(githubAppId || githubClientId)) return;
+		setGithubSaving(true);
+		try {
+			const resp = await fetch("/api/github/app-config", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					appId: githubAppId || undefined,
+					clientId: githubClientId || undefined,
+					slug: githubSlug,
+					privateKey: githubPrivateKey,
+					webhookSecret: githubWebhookSecret || undefined,
+				}),
+			});
+			const data = await resp.json();
+			if (resp.ok && data.configured) {
+				setGithubConfigured(true);
+				setGithubConfigOpen(false);
+				setGithubAppId("");
+				setGithubClientId("");
+				setGithubSlug("");
+				setGithubPrivateKey("");
+				setGithubWebhookSecret("");
+				notificationService.add({
+					type: "info",
+					title: "GitHub App configured",
+					body: "Save the app credentials. Next, install the app using the button below.",
+				});
+			} else {
+				notificationService.add({
+					type: "error",
+					title: "Configuration failed",
+					body: data.error ?? "Unknown error",
+				});
+			}
+		} catch {
+			notificationService.add({
+				type: "error",
+				title: "Configuration failed",
+				body: "Network error",
+			});
+		} finally {
+			setGithubSaving(false);
+		}
+	};
+
+	const handleInstallGitHubApp = async () => {
+		setGithubInstalling(true);
+		try {
+			const resp = await fetch("/api/github/install-url");
+			const data = await resp.json();
+			if (resp.ok && data.authorizationUrl) {
+				const win = window.open(data.authorizationUrl, "_blank");
+				if (!win) {
+					notificationService.add({
+						type: "error",
+						title: "Install blocked",
+						body: "Pop-ups must be allowed to open the GitHub App installation page.",
+					});
+					return;
+				}
+				const poll = setInterval(async () => {
+					try {
+						const st = await (await fetch("/api/github/app-config")).json();
+						if (st.installed) {
+							clearInterval(poll);
+							setGithubInstalled(true);
+							setGithubAccount(st.account ?? null);
+							setGithubInstalling(false);
+							void fetchGithubRepos();
+							notificationService.add({
+								type: "info",
+								title: "GitHub App installed",
+								body: "Select repositories to sync into the project catalog.",
+							});
+						}
+					} catch {
+						// keep polling
+					}
+				}, 3000);
+				setTimeout(() => clearInterval(poll), 5 * 60 * 1000);
+			} else {
+				notificationService.add({
+					type: "error",
+					title: "Install failed",
+					body: data.error ?? "Unknown error",
+				});
+			}
+		} catch {
+			notificationService.add({
+				type: "error",
+				title: "Install failed",
+				body: "Network error",
+			});
+		} finally {
+			setGithubInstalling(false);
+		}
+	};
+
+	const handleSaveSelection = async () => {
+		setGithubSaving(true);
+		try {
+			const resp = await fetch("/api/github/select-repositories", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ repositoryIds: Array.from(githubSelectedIds) }),
+			});
+			if (resp.ok) {
+				notificationService.add({
+					type: "info",
+					title: "Selection saved",
+					body: `${githubSelectedIds.size} repository(ies) synced to the project catalog.`,
+				});
+			} else {
+				const data = await resp.json().catch(() => ({}));
+				notificationService.add({
+					type: "error",
+					title: "Save failed",
+					body: data.error ?? "Unknown error",
+				});
+			}
+		} catch {
+			notificationService.add({
+				type: "error",
+				title: "Save failed",
+				body: "Network error",
+			});
+		} finally {
+			setGithubSaving(false);
+		}
+	};
+
+	const handleDisconnectGitHub = async () => {
+		try {
+			const resp = await fetch("/api/github/disconnect", { method: "POST" });
+			if (resp.ok) {
+				setGithubInstalled(false);
+				setGithubAccount(null);
+				setGithubRepos([]);
+				setGithubSelectedIds(new Set());
+				notificationService.add({
+					type: "info",
+					title: "GitHub disconnected",
+					body: "GitHub integration has been disconnected.",
+				});
+			}
+		} catch {
+			notificationService.add({
+				type: "error",
+				title: "Disconnect failed",
+				body: "Network error",
+			});
+		}
+	};
+
+	const handleConnectElevenLabs = async () => {
+		setElevenLabsConnecting(true);
+		try {
+			const resp = await fetch("/api/voice/configure", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ apiKey: elevenLabsKeyInput }),
+			});
+			const data = await resp.json();
+			if (resp.ok && data.success) {
+				setElevenLabsConnected(true);
+				setElevenLabsKeyInput("");
+				ttsService
+					.listElevenVoices()
+					.then(setVoiceCatalog)
+					.catch(() => setVoiceCatalog([]));
+				setVoiceProvider("ready");
+			} else {
+				notificationService.add({
+					type: "error",
+					title: "Connection failed",
+					body: data.error ?? "Unknown error",
+				});
+			}
+		} catch {
+			notificationService.add({
+				type: "error",
+				title: "Connection failed",
+				body: "Network error",
+			});
+		} finally {
+			setElevenLabsConnecting(false);
+		}
 	};
 
 	const handleDeleteWebhook = (id: string) => {
@@ -403,8 +678,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 							{ id: "webhooks", label: "Webhooks", icon: Webhook },
 							{ id: "audio", label: "Voice & Audio", icon: Volume2 },
 							{ id: "models", label: "Models & Providers", icon: Cpu },
-							{ id: "data", label: "Privacy & Data", icon: ShieldCheck },
-							{ id: "appearance", label: "Appearance", icon: Palette },
+{ id: "data", label: "Privacy & Data", icon: ShieldCheck },
+						{ id: "github", label: "GitHub", icon: GitBranch },
 							{ id: "about", label: "About GovernMindz", icon: Info },
 						].map((tab) => {
 							const Icon = tab.icon;
@@ -720,6 +995,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 									{voiceProvider === "ready" ? "ElevenLabs Studio Voices" : "Device Voices"}
 								</span>
 							</div>
+							<div className="mb-4">
+								{elevenLabsConnected ? (
+									<span className="text-[11px] font-mono px-2 py-0.5 rounded bg-green-950/60 border border-green-800 text-green-300">
+										ElevenLabs API connected
+									</span>
+								) : (
+									<div className="flex items-center gap-2">
+										<input
+											type="password"
+											value={elevenLabsKeyInput}
+											onChange={(e) => setElevenLabsKeyInput(e.target.value)}
+											placeholder="ELEVENLABS_API_KEY"
+											className="bg-[#18203a] border border-[#263254] rounded-lg px-2 py-1.5 text-[10px] text-slate-200 focus:outline-none focus:ring-1 focus:ring-teal-400/60 w-full max-w-xs"
+											disabled={elevenLabsConnecting}
+											aria-label="ElevenLabs API key"
+										/>
+										<button
+											type="button"
+											onClick={handleConnectElevenLabs}
+											disabled={elevenLabsConnecting}
+											className={`p-2 rounded-full transition-all ${
+												elevenLabsConnecting
+													? "bg-teal-500/20 border border-teal-500/50 text-teal-200 shadow-[0_0_10px_rgba(20,184,166,0.35)]"
+													: "text-slate-400 hover:text-slate-200 hover:bg-[#1a233c]"
+											}`}
+											title="Connect ElevenLabs API"
+										>
+											{elevenLabsConnecting ? (
+												<Loader2 className="w-4 h-4 animate-spin" />
+											) : (
+												<Mic className="w-4 h-4" />
+											)}
+										</button>
+									</div>
+								)}
+							</div>
 							<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 								<div className="p-3.5 rounded-xl bg-[#12182b] border border-[#1e2842] flex items-center justify-between">
 									<div>
@@ -1022,6 +1333,283 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 							</div>
 						)}
 
+						{activeTab === "github" && (
+							<div className="space-y-4">
+								<h4 className="font-bold text-sm text-slate-100 mb-2">
+									GitHub Integration
+								</h4>
+
+								{!githubConfigured && (
+									<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842] space-y-4">
+										<div className="font-semibold text-slate-200">
+											Configure GitHub App
+										</div>
+										<p className="text-[11px] text-slate-400 leading-relaxed">
+											Register a GitHub App at github.com/settings/apps and paste its
+											credentials here. GovernMindz stores only the app id, slug,
+											client id, and private key in .env.local (gitignored).
+										</p>
+										<div className="space-y-3">
+											<div>
+												<label className="block text-[10px] font-mono text-slate-500 uppercase mb-1">
+													App ID (or Client ID)
+												</label>
+												<input
+													type="text"
+													value={githubAppId}
+													onChange={(e) => setGithubAppId(e.target.value)}
+													placeholder="123456"
+													className="w-full rounded-lg bg-[#0a0e1a] border border-[#263254] px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-teal-500/50"
+												/>
+											</div>
+											<div>
+												<label className="block text-[10px] font-mono text-slate-500 uppercase mb-1">
+													Client ID
+												</label>
+												<input
+													type="text"
+													value={githubClientId}
+													onChange={(e) => setGithubClientId(e.target.value)}
+													placeholder="Iv1...."
+													className="w-full rounded-lg bg-[#0a0e1a] border border-[#263254] px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-teal-500/50"
+												/>
+											</div>
+											<div>
+												<label className="block text-[10px] font-mono text-slate-500 uppercase mb-1">
+													App slug
+												</label>
+												<input
+													type="text"
+													value={githubSlug}
+													onChange={(e) => setGithubSlug(e.target.value)}
+													placeholder="governmindz-app"
+													className="w-full rounded-lg bg-[#0a0e1a] border border-[#263254] px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-teal-500/50"
+												/>
+											</div>
+											<div>
+												<label className="block text-[10px] font-mono text-slate-500 uppercase mb-1">
+													Private key (PEM)
+												</label>
+												<textarea
+													value={githubPrivateKey}
+													onChange={(e) => setGithubPrivateKey(e.target.value)}
+													rows={4}
+													placeholder="-----BEGIN RSA PRIVATE KEY-----..."
+													className="w-full rounded-lg bg-[#0a0e1a] border border-[#263254] px-3 py-2 text-xs text-slate-200 font-mono focus:outline-none focus:border-teal-500/50"
+												/>
+											</div>
+											<div>
+												<label className="block text-[10px] font-mono text-slate-500 uppercase mb-1">
+													Webhook secret (optional)
+												</label>
+												<input
+													type="text"
+													value={githubWebhookSecret}
+													onChange={(e) => setGithubWebhookSecret(e.target.value)}
+													placeholder="whsec_...."
+													className="w-full rounded-lg bg-[#0a0e1a] border border-[#263254] px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-teal-500/50"
+												/>
+											</div>
+											<button
+												type="button"
+												disabled={
+													githubSaving ||
+													!githubSlug ||
+													!githubPrivateKey ||
+													!(githubAppId || githubClientId)
+												}
+												onClick={handleConnectGitHub}
+												className="w-full flex items-center justify-center gap-2 rounded-lg bg-teal-600 hover:bg-teal-500 disabled:opacity-50 disabled:hover:bg-teal-600 px-4 py-2.5 text-xs font-semibold text-white transition-colors"
+											>
+												{githubSaving ? (
+													<span>
+														<Loader2 className="w-3.5 h-3.5 animate-spin" />
+														<span>Saving...</span>
+													</span>
+												) : (
+													<span>Save App Credentials</span>
+												)}
+											</button>
+										</div>
+									</div>
+								)}
+
+								{githubConfigured && !githubInstalled && (
+									<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842] space-y-4">
+										<div className="font-semibold text-slate-200">
+											Install GitHub App
+										</div>
+										<p className="text-[11px] text-slate-400 leading-relaxed">
+											The GitHub App is configured but not yet installed. Click below to
+											install it on your account/organization. GitHub will redirect back
+											to GovernMindz automatically.
+										</p>
+										<button
+											type="button"
+											disabled={githubInstalling}
+											onClick={handleInstallGitHubApp}
+											className="w-full flex items-center justify-center gap-2 rounded-lg bg-teal-600 hover:bg-teal-500 disabled:opacity-50 disabled:hover:bg-teal-600 px-4 py-2.5 text-xs font-semibold text-white transition-colors"
+										>
+											{githubInstalling ? (
+												<span>
+													<Loader2 className="w-3.5 h-3.5 animate-spin" />
+													<span>Installing...</span>
+												</span>
+											) : (
+												<span>Install GitHub App</span>
+											)}
+										</button>
+										<p className="text-[10px] text-slate-500">
+											Set the app's setup URL to{" "}
+											<code className="font-mono">
+												http://127.0.0.1:8787/api/github/callback
+											</code>{" "}
+											in your GitHub App settings.
+										</p>
+									</div>
+								)}
+
+								{githubInstalled && (
+									<div className="space-y-4">
+										<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842] flex items-center justify-between">
+											<div className="flex items-center gap-3">
+												<div className="p-2 rounded-lg bg-slate-800 border border-slate-700">
+													<GitBranch className="w-5 h-5 text-slate-200" />
+												</div>
+												<div>
+													<div className="font-semibold text-slate-100">
+														{githubAccount?.login}
+													</div>
+													<div className="text-[10px] text-teal-400 flex items-center gap-1">
+														<div className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
+														Connected
+													</div>
+												</div>
+											</div>
+											<button
+												type="button"
+												onClick={handleDisconnectGitHub}
+												className="px-3 py-1.5 rounded-lg bg-rose-950/30 hover:bg-rose-900/50 text-rose-300 border border-rose-800/40 text-[10px] font-semibold transition-colors"
+											>
+												Disconnect
+											</button>
+										</div>
+
+										<div className="space-y-2">
+											<div className="flex items-center justify-between px-1">
+												<h5 className="text-[10px] font-mono uppercase tracking-wider text-slate-500">
+													Accessible Repositories
+												</h5>
+												<button
+													onClick={fetchGithubRepos}
+													disabled={githubReposLoading}
+													className="text-[10px] text-teal-400 hover:text-teal-300 disabled:opacity-50"
+												>
+													<RefreshCw className={`w-3 h-3 ${githubReposLoading ? "animate-spin" : ""}`} />
+												</button>
+											</div>
+
+											<div className="max-h-72 overflow-y-auto rounded-xl border border-[#1e2842] bg-[#0a0e1a]/50 divide-y divide-[#1e2842]">
+												{githubReposLoading && githubRepos.length === 0 ? (
+													<div className="p-8 text-center">
+														<Loader2 className="w-5 h-5 animate-spin mx-auto text-slate-500 mb-2" />
+														<div className="text-[11px] text-slate-500">
+															Loading repositories...
+														</div>
+													</div>
+												) : githubRepos.length === 0 ? (
+													<div className="p-8 text-center text-[11px] text-slate-500">
+														No repositories found.
+													</div>
+												) : (
+													githubRepos.map((repo) => {
+														const selected =
+															githubSelectedIds.has(repo.id);
+														return (
+															<div
+																key={repo.id}
+																className="p-3 flex items-center justify-between hover:bg-[#12182b] transition-colors group"
+															>
+																<div className="flex items-center gap-3 min-w-0">
+																	<input
+																		type="checkbox"
+																		checked={selected}
+																		onChange={() =>
+																			setGithubSelectedIds((prev) => {
+																				const next = new Set(prev);
+																				if (selected) next.delete(repo.id);
+																				else next.add(repo.id);
+																				return next;
+																			})
+																		}
+																		className="w-3.5 h-3.5 accent-teal-500 rounded border-[#263254] bg-[#0a0e1a]"
+																	/>
+																	<div className="min-w-0">
+																		<div className="flex items-center gap-2">
+																			<span className="font-semibold text-slate-200 truncate">
+																				{repo.name}
+																			</span>
+																			{repo.private && (
+																				<span className="px-1.5 py-0.5 rounded-md bg-amber-950/30 border border-amber-800/30 text-[9px] text-amber-400 font-mono">
+																					Private
+																				</span>
+																			)}
+																		</div>
+																		{repo.description && (
+																			<div className="text-[10px] text-slate-500 truncate mt-0.5">
+																				{repo.description}
+																			</div>
+																		)}
+																	</div>
+																</div>
+																<div className="flex items-center gap-3 shrink-0 ml-4">
+																	<div className="text-[10px] text-slate-500 font-mono hidden sm:block">
+																		{repo.fullName.split("/")[0]}
+																	</div>
+																	<a
+																		href={repo.htmlUrl}
+																		target="_blank"
+																		rel="noreferrer"
+																		className="p-1.5 rounded-lg bg-[#18203a] border border-[#2c385c] text-slate-400 hover:text-teal-300 hover:border-teal-500/50 transition-all opacity-0 group-hover:opacity-100"
+																	>
+																		<ExternalLink className="w-3 h-3" />
+																	</a>
+																</div>
+															</div>
+														);
+													})
+												)}
+											</div>
+											{githubRepos.length > 0 && (
+												<div className="space-y-2">
+													<button
+														type="button"
+														disabled={githubSaving || githubSelectedIds.size === 0}
+														onClick={handleSaveSelection}
+														className="w-full flex items-center justify-center gap-2 rounded-lg bg-teal-600 hover:bg-teal-500 disabled:opacity-50 disabled:hover:bg-teal-600 px-4 py-2.5 text-xs font-semibold text-white transition-colors"
+													>
+														{githubSaving ? (
+															<span>
+																<Loader2 className="w-3.5 h-3.5 animate-spin" />
+																<span>Saving...</span>
+															</span>
+														) : (
+															<span>
+																Save Selection ({githubSelectedIds.size})
+															</span>
+														)}
+													</button>
+													<p className="text-[10px] text-slate-500">
+														Selected repositories are synced into the project catalog so
+														agents can reference them.
+													</p>
+												</div>
+											)}
+										</div>
+									</div>
+								)}
+							</div>
+						)}
 						{activeTab === "about" && (
 							<div className="space-y-4 leading-relaxed">
 								<div className="flex items-center gap-3">

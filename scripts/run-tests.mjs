@@ -13,6 +13,7 @@ const testFiles = [
 	"libs/core/test/gravity.test.ts",
 	"libs/core/test/meterless.test.ts",
 	"libs/core/test/zetaris.test.ts",
+	"libs/core/test/githubAppClient.test.ts",
 	// "libs/core/test/workflow.test.ts", // skipped on CI due to env-specific failures
 	"libs/core/test/scheduler.test.ts",
 	"libs/core/test/convergence.test.ts",
