@@ -53,6 +53,7 @@ type TabType =
 	| "models"
 	| "data"
 	| "appearance"
+	| "github"
 	| "about";
 
 const CONFIG_PROMPTS = [
@@ -1103,6 +1104,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 							</div>
 						)}
 
+						{activeTab === "github" && (
+							<div className="space-y-4">
+								<h4 className="font-bold text-sm text-slate-100 mb-2">GitHub Integration</h4>
+								<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842]">
+									<div className="font-semibold text-slate-200">GitHub App Integration</div>
+									<p className="text-[11px] text-slate-400">
+										Connect your GitHub account to access repositories, issues, pull requests, and more.
+									</p>
+									<div className="mt-4">
+										<span className="text-[10px] font-mono text-slate-500">Status: </span>
+										<span id="github-status" className="font-medium text-slate-400">Disconnected</span>
+									</div>
+									<div className="mt-4">
+										<button
+											type="button"
+											onClick={() => {
+												// Placeholder for GitHub connection flow
+												alert('GitHub connection will be implemented');
+											}}
+											className="w-full rounded-lg bg-[#18203a] border border-[#263254] px-4 py-2.5 text-[10px] text-slate-200 hover:bg-[#1d2642] transition-colors"
+										>
+											Connect GitHub App
+										</button>
+									</div>
+								</div>
+							</div>
+						)}
 						{activeTab === "about" && (
 							<div className="space-y-4 leading-relaxed">
 								<div className="flex items-center gap-3">
