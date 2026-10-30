@@ -72,6 +72,7 @@ declare module "node:fs" {
 	export function createReadStream(path: string): any;
 	export function renameSync(oldPath: string, newPath: string): void;
 	export function unlinkSync(path: string): void;
+	export function realpathSync(path: string): string;
 	export function rmSync(
 		path: string,
 		options?: { recursive?: boolean; force?: boolean },
@@ -212,4 +213,9 @@ declare module "node:child_process" {
 		command: string,
 		callback?: (error: any, stdout: string, stderr: string) => void,
 	): any;
+	export function execFileSync(
+		command: string,
+		args?: string[],
+		options?: any,
+	): string;
 }

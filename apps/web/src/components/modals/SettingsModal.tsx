@@ -232,6 +232,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 	const [githubWebhookSecret, setGithubWebhookSecret] = useState("");
 	const [githubInstalling, setGithubInstalling] = useState(false);
 
+	const [localProjectPath, setLocalProjectPath] = useState("");
+	const [localProjects, setLocalProjects] = useState<Array<{
+		id: string;
+		name: string;
+		fullName: string;
+		description?: string;
+		status: string;
+		branch?: string;
+		ahead?: number;
+		behind?: number;
+		workingTreeClean?: boolean;
+		remoteUrl?: string;
+		canonicalPath?: string;
+		lastSyncedAt?: number;
+		updatedAt?: number;
+	}>>([]);
+	const [localProjectsLoading, setLocalProjectsLoading] = useState(false);
+	const [localConnecting, setLocalConnecting] = useState(false);
+
 	useEffect(() => {
 		if (isOpen) {
 			setVoiceRegistry(ttsService.getVoiceRegistry());
@@ -256,6 +275,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 			// GitHub integration status + catalog
 			void fetchGithubStatus();
 			void fetchCatalog();
+			void fetchLocalProjects();
 		}
 	}, [isOpen]);
 
@@ -507,6 +527,80 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 					type: "info",
 					title: "GitHub disconnected",
 					body: "GitHub integration has been disconnected.",
+				});
+			}
+		} catch {
+			notificationService.add({
+				type: "error",
+				title: "Disconnect failed",
+				body: "Network error",
+			});
+		}
+	};
+
+	const fetchLocalProjects = async () => {
+		setLocalProjectsLoading(true);
+		try {
+			const resp = await fetch("/api/github/local-projects");
+			const data = await resp.json();
+			if (data.projects) {
+				setLocalProjects(data.projects);
+			}
+		} catch {
+			// local projects endpoint may not be available yet
+		} finally {
+			setLocalProjectsLoading(false);
+		}
+	};
+
+	const handleConnectLocalProject = async () => {
+		const p = localProjectPath.trim();
+		if (!p) return;
+		setLocalConnecting(true);
+		try {
+			const resp = await fetch("/api/github/connect-local-project", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ localPath: p }),
+			});
+			const data = await resp.json();
+			if (resp.ok && data.success) {
+				setLocalProjectPath("");
+				void fetchLocalProjects();
+				notificationService.add({
+					type: "info",
+					title: "Local project connected",
+					body: `Connected to ${data.name} (${data.status}).`,
+				});
+			} else {
+				notificationService.add({
+					type: "error",
+					title: "Connect failed",
+					body: data.error ?? "Unknown error",
+				});
+			}
+		} catch {
+			notificationService.add({
+				type: "error",
+				title: "Connect failed",
+				body: "Network error",
+			});
+		} finally {
+			setLocalConnecting(false);
+		}
+	};
+
+	const handleDisconnectLocalProject = async (id: string) => {
+		try {
+			const resp = await fetch(`/api/github/local-projects/${id}`, {
+				method: "DELETE",
+			});
+			if (resp.ok) {
+				void fetchLocalProjects();
+				notificationService.add({
+					type: "info",
+					title: "Local project disconnected",
+					body: "Local project connection removed.",
 				});
 			}
 		} catch {
@@ -1610,6 +1704,127 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 								)}
 							</div>
 						)}
+
+						{/* Connect Local Project (read-only git metadata) */}
+						<div className="p-4 rounded-xl bg-[#12182b] border border-[#1e2842] space-y-4">
+							<div className="font-semibold text-slate-200">
+								Connect Local Project
+							</div>
+							<p className="text-[11px] text-slate-400 leading-relaxed">
+								Point GovernMindz at a local git repository on this machine.
+								Read-only: GovernMindz reads git status, branch, and remote
+								metadata only — it never clones, pulls, pushes, or writes to
+								your local filesystem.
+							</p>
+							<div className="space-y-3">
+								<div className="flex items-center gap-2">
+									<input
+										type="text"
+										value={localProjectPath}
+										onChange={(e) => setLocalProjectPath(e.target.value)}
+										placeholder="/absolute/path/to/local/repo"
+										className="flex-1 rounded-lg bg-[#0a0e1a] border border-[#263254] px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-teal-500/50"
+									/>
+									<button
+										type="button"
+										disabled={localConnecting || !localProjectPath.trim()}
+										onClick={handleConnectLocalProject}
+										className="rounded-lg bg-teal-600 hover:bg-teal-500 disabled:opacity-50 disabled:hover:bg-teal-600 px-3 py-2 text-xs font-semibold text-white transition-colors"
+									>
+										{localConnecting ? (
+											<span>
+												<Loader2 className="w-3.5 h-3.5 animate-spin" />
+												Connecting...
+											</span>
+										) : (
+											<span>Connect</span>
+										)}
+									</button>
+								</div>
+								<p className="text-[10px] text-slate-500">
+									Enter an absolute path. Path must be inside this machine's
+									GovernMindz directory and be a git repository.
+								</p>
+							</div>
+
+							{localProjects.length > 0 && (
+								<div className="space-y-2">
+									<div className="flex items-center justify-between px-1">
+										<h5 className="text-[10px] font-mono uppercase tracking-wider text-slate-500">
+											Connected Local Projects
+										</h5>
+										<button
+											onClick={fetchLocalProjects}
+											disabled={localProjectsLoading}
+											className="text-[10px] text-teal-400 hover:text-teal-300 disabled:opacity-50"
+										>
+											<RefreshCw className={`w-3 h-3 ${localProjectsLoading ? "animate-spin" : ""}`} />
+										</button>
+									</div>
+									<div className="max-h-64 overflow-y-auto rounded-xl border border-[#1e2842] bg-[#0a0e1a]/50 divide-y divide-[#1e2842]">
+										{localProjectsLoading && localProjects.length === 0 ? (
+											<div className="p-8 text-center">
+												<Loader2 className="w-5 h-5 animate-spin mx-auto text-slate-500 mb-2" />
+												<div className="text-[11px] text-slate-500">
+													Loading local projects...
+												</div>
+											</div>
+										) : (
+											localProjects.map((proj) => (
+												<div
+													key={proj.id}
+													className="p-3 flex items-center justify-between hover:bg-[#12182b] transition-colors group"
+												>
+													<div className="flex items-center gap-3 min-w-0">
+														<div className="min-w-0">
+															<div className="flex items-center gap-2">
+																<span className="font-semibold text-slate-200 truncate">
+																	{proj.name}
+																</span>
+																{proj.workingTreeClean ? (
+																	<span className="px-1.5 py-0.5 rounded-md bg-emerald-950/30 border border-emerald-800/30 text-[9px] text-emerald-400 font-mono">
+																	Working tree: clean
+																	</span>
+																) : (
+																	<span className="px-1.5 py-0.5 rounded-md bg-rose-950/30 border border-rose-800/30 text-[9px] text-rose-400 font-mono">
+																	Working tree: dirty
+																	</span>
+																)}
+															</div>
+															<div className="text-[10px] text-slate-500 truncate mt-0.5">
+																{proj.branch ? `Branch: ${proj.branch}` : ""}{" "}
+																{proj.remoteUrl ? `· Remote: ${proj.remoteUrl}` : ""}
+															</div>
+															{(proj.ahead !== undefined || proj.behind !== undefined) && (
+																<div className="text-[10px] text-slate-400 font-mono mt-0.5">
+																	{proj.ahead !== undefined && proj.ahead > 0 ? `↑${proj.ahead}` : ""}{" "}
+																	{proj.behind !== undefined && proj.behind > 0 ? `↓${proj.behind}` : ""}{" "}
+																	{proj.ahead === 0 && proj.behind === 0 ? "Up to date" : ""}
+																</div>
+															)}
+														</div>
+													</div>
+													<div className="flex items-center gap-2 shrink-0">
+														<button
+															type="button"
+															onClick={() => handleDisconnectLocalProject(proj.id)}
+															className="px-2.5 py-1 rounded-lg bg-rose-950/30 hover:bg-rose-900/50 text-rose-300 border border-rose-800/40 text-[10px] font-semibold transition-colors"
+														>
+															Disconnect
+														</button>
+													</div>
+												</div>
+											))
+										)}
+									</div>
+									<p className="text-[10px] text-slate-500">
+										Local project metadata is stored in the project catalog so
+										agents can reference it during debates. Refresh re-reads
+										git status on each open.
+									</p>
+								</div>
+							)}
+						</div>
 						{activeTab === "about" && (
 							<div className="space-y-4 leading-relaxed">
 								<div className="flex items-center gap-3">

@@ -2,6 +2,7 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { Readable } from "node:stream";
 import { randomUUID, createHash } from "node:crypto";
 import Database from "better-sqlite3";
@@ -1698,6 +1699,235 @@ async function handleGitHubDisconnect(
 	});
 }
 
+/* ----------------------------------------------------------------
+   Read-only local project connection (Option A — no clone, no write)
+   Reads git metadata from a local folder via fixed git subcommands only.
+   Never clones, pulls, pushes, or writes to the local filesystem.
+----------------------------------------------------------------- */
+
+const ALLOWED_ROOT = fs.realpathSync(process.cwd());
+
+function isPathAllowed(canonicalPath: string): boolean {
+	return canonicalPath === ALLOWED_ROOT || canonicalPath.startsWith(ALLOWED_ROOT + path.sep);
+}
+
+function runGit(canonicalPath: string, args: string[]): string {
+	try {
+		return execFileSync("git", ["-C", canonicalPath, ...args], {
+			encoding: "utf8",
+			maxBuffer: 1024 * 1024,
+			windowsHide: true,
+		}).trim();
+	} catch {
+		return "";
+	}
+}
+
+function readLocalGitMetadata(localPath: string) {
+	const canonicalPath = fs.realpathSync(localPath);
+	if (!isPathAllowed(canonicalPath)) {
+		throw new Error("Local project path is outside the allowed root.");
+	}
+	const stat = fs.statSync(canonicalPath);
+	if (!stat.isDirectory()) {
+		throw new Error("Path is not a directory.");
+	}
+	// Confirm it is a git repository.
+	if (!runGit(canonicalPath, ["rev-parse", "--is-inside-work-tree"])) {
+		throw new Error("Not a git repository.");
+	}
+
+	const remoteUrls = runGit(canonicalPath, ["remote", "-v"]);
+	const originMatch = remoteUrls.match(/origin\t(.+)\s+\(fetch\)/);
+	const branch = runGit(canonicalPath, ["rev-parse", "--abbrev-ref", "HEAD"]) || "HEAD";
+	const porcelain = runGit(canonicalPath, ["status", "--porcelain"]);
+	const workingTreeClean = porcelain.length === 0;
+
+	let ahead = 0;
+	let behind = 0;
+	try {
+		const aheadStr = runGit(canonicalPath, ["rev-list", "--count", "HEAD..@{upstream}"]);
+		const behindStr = runGit(canonicalPath, ["rev-list", "--count", "@{upstream}..HEAD"]);
+		ahead = Number(aheadStr) || 0;
+		behind = Number(behindStr) || 0;
+	} catch {
+		// No upstream configured: ahead/behind unavailable.
+	}
+
+	const dirName = path.basename(canonicalPath);
+	const remoteUrl = originMatch ? originMatch[1].trim() : undefined;
+
+	return {
+		canonicalPath,
+		name: dirName,
+		fullName: remoteUrl ? dirName : dirName,
+		owner: "local",
+		description: remoteUrl ? `Local project — ${remoteUrl}` : "Local project (no remote)",
+		visibility: "private",
+		htmlUrl: remoteUrl,
+		status: workingTreeClean ? "clean" : "dirty",
+		branch,
+		ahead,
+		behind,
+		workingTreeClean,
+		lastSyncedAt: Date.now(),
+	};
+}
+
+async function handleConnectLocalProject(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+): Promise<void> {
+	let body = "";
+	req.on("data", (c: any) => (body += c));
+	req.on("end", async () => {
+		try {
+			const payload = JSON.parse(body || "{}");
+			const { localPath } = payload as { localPath?: string };
+			if (typeof localPath !== "string" || !localPath.trim()) {
+				sendJson(res, 400, { error: "localPath is required." });
+				return;
+			}
+			const meta = readLocalGitMetadata(localPath.trim());
+			const now = Date.now();
+			const id = `local:${createHash("sha256").update(meta.canonicalPath).digest("hex").slice(0, 24)}`;
+			const upsert = db.prepare(`
+				INSERT INTO project_catalog
+					(id, source_id, source_type, provider, name, owner, full_name,
+					 description, visibility, html_url, readme, languages, status,
+					 selected, last_synced_at, data_json, created_at, updated_at)
+				VALUES
+					(@id, @source_id, @source_type, @provider, @name, @owner, @full_name,
+					 @description, @visibility, @html_url, @readme, @languages, @status,
+					 @selected, @last_synced_at, @data_json, @created_at, @updated_at)
+				ON CONFLICT(id) DO UPDATE SET
+					name = excluded.name,
+					owner = excluded.owner,
+					full_name = excluded.full_name,
+					description = excluded.description,
+					visibility = excluded.visibility,
+					html_url = excluded.html_url,
+					readme = excluded.readme,
+					languages = excluded.languages,
+					status = excluded.status,
+					last_synced_at = excluded.last_synced_at,
+					data_json = excluded.data_json,
+					updated_at = excluded.updated_at
+			`);
+			upsert.run({
+				id,
+				source_id: meta.canonicalPath,
+				source_type: "local_project",
+				provider: "local",
+				name: meta.name,
+				owner: meta.owner,
+				full_name: meta.fullName,
+				description: meta.description,
+				visibility: meta.visibility,
+				html_url: meta.htmlUrl,
+				readme: null,
+				languages: null,
+				status: meta.status,
+				selected: 1,
+				last_synced_at: meta.lastSyncedAt,
+				data_json: JSON.stringify({
+					branch: meta.branch,
+					ahead: meta.ahead,
+					behind: meta.behind,
+					workingTreeClean: meta.workingTreeClean,
+					canonicalPath: meta.canonicalPath,
+					remoteUrl: meta.htmlUrl,
+				}),
+				created_at: now,
+				updated_at: now,
+			});
+			sendJson(res, 200, {
+				success: true,
+				id,
+				name: meta.name,
+				status: meta.status,
+				branch: meta.branch,
+				ahead: meta.ahead,
+				behind: meta.behind,
+				workingTreeClean: meta.workingTreeClean,
+				remoteUrl: meta.htmlUrl,
+			});
+		} catch (err: any) {
+			sendJson(res, 400, {
+				error: err?.message || "Failed to connect local project.",
+			});
+		}
+	});
+}
+
+async function handleListLocalProjects(
+	_req: http.IncomingMessage,
+	res: http.ServerResponse,
+): Promise<void> {
+	try {
+		const rows = db
+			.prepare(
+				"SELECT * FROM project_catalog WHERE provider = 'local' ORDER BY updated_at DESC",
+			)
+			.all() as any[];
+		const projects = rows.map((row) => {
+			let data: Record<string, unknown> = {};
+			try {
+				data = row.data_json ? JSON.parse(row.data_json) : {};
+			} catch {
+				data = {};
+			}
+			return {
+				id: row.id,
+				name: row.name,
+				fullName: row.full_name,
+				description: row.description,
+				status: row.status,
+				branch: data.branch,
+				ahead: data.ahead,
+				behind: data.behind,
+				workingTreeClean: data.workingTreeClean,
+				remoteUrl: row.html_url,
+				canonicalPath: row.source_id,
+				lastSyncedAt: row.last_synced_at,
+				updatedAt: row.updated_at,
+			};
+		});
+		sendJson(res, 200, { projects });
+	} catch (err: any) {
+		sendJson(res, 500, {
+			error: err?.message || "Failed to list local projects.",
+		});
+	}
+}
+
+async function handleDisconnectLocalProject(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+	id: string,
+): Promise<void> {
+	if (req.method !== "DELETE") {
+		res.writeHead(405);
+		res.end();
+		return;
+	}
+	try {
+		const row = db
+			.prepare("SELECT id, provider FROM project_catalog WHERE id = ?")
+			.get(id) as { id: string; provider: string } | undefined;
+		if (!row || row.provider !== "local") {
+			sendJson(res, 404, { error: "Local project not found." });
+			return;
+		}
+		db.prepare("DELETE FROM project_catalog WHERE id = ?").run(id);
+		sendJson(res, 200, { success: true });
+	} catch (err: any) {
+		sendJson(res, 500, {
+			error: err?.message || "Failed to disconnect local project.",
+		});
+	}
+}
+
 async function handleGitHubSearch(
 	req: http.IncomingMessage,
 	res: http.ServerResponse,
@@ -2442,6 +2672,13 @@ const server = http.createServer((req, res) => {
 		void handleGitHubSelectRepositories(req, res);
 	} else if (pathname === "/api/github/disconnect") {
 		void handleGitHubDisconnect(req, res);
+	} else if (pathname === "/api/github/connect-local-project") {
+		void handleConnectLocalProject(req, res);
+	} else if (pathname === "/api/github/local-projects") {
+		void handleListLocalProjects(req, res);
+	} else if (pathname.startsWith("/api/github/local-projects/")) {
+		const id = pathname.slice("/api/github/local-projects/".length);
+		void handleDisconnectLocalProject(req, res, id);
 	} else if (pathname === "/api/github/search") {
 		void handleGitHubSearch(req, res);
 	} else if (pathname === "/api/catalog") {
