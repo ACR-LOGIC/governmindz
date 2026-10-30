@@ -1,0 +1,32 @@
+{
+	"id": "technical-debt-review",
+	"topic": "Prioritize technical debt remediation for the next quarter.",
+	"description": "Assess technical debt across the codebase and create a prioritized remediation plan.",
+	"deliverableType": "report",
+	"investigationInstructions": [
+		"Catalog technical debt items: code quality, documentation, testing, dependencies, infrastructure.",
+		"Assess impact of each item (user experience, team velocity, system reliability).",
+		"Estimate effort to remediate each item.",
+		"Identify debt that blocks feature development or causes incidents.",
+		"Group related debt items into remediation themes.",
+		"Create a quarterly remediation roadmap with capacity allocation.",
+		"Define metrics to track debt reduction."
+	],
+	"zetarisQuery": null,
+	"evidenceRequirements": [
+		"Code quality metrics (if available)",
+		"Test coverage reports",
+		"Dependency update notifications",
+		"Incident postmortems and root causes",
+		"Team velocity and feature delivery data",
+		"Code review findings and comments"
+	],
+	"expectedOutputStructure": [
+		"Executive summary with debt distribution by category",
+		"Technical debt inventory (item, impact, effort, owner)",
+		"Impact vs effort prioritization matrix",
+		"Quarterly remediation roadmap",
+		"Capacity allocation recommendation (e.g., 20% debt, 80% features)",
+		"Success metrics and tracking approach"
+	]
+}

@@ -14,6 +14,8 @@ import { Server } from "@modelcontextprotocol/sdk/server";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
 	CallToolRequestSchema,
+	GetPromptRequestSchema,
+	ListPromptsRequestSchema,
 	ListResourcesRequestSchema,
 	ListToolsRequestSchema,
 	ReadResourceRequestSchema,
@@ -80,6 +82,7 @@ const server = new Server(
 		capabilities: {
 			resources: {},
 			tools: {},
+			prompts: {},
 		},
 	},
 );
@@ -473,6 +476,322 @@ server.setRequestHandler(
 			};
 		}
 		throw new Error(`Unknown resource URI: ${u}`);
+	},
+);
+
+/* ----------------------------------------------------------------
+   Prompts
+----------------------------------------------------------------- */
+
+server.setRequestHandler(
+	ListPromptsRequestSchema,
+	async () => ({
+		prompts: [
+			{
+				name: "architecture-review",
+				title: "Architecture Review",
+				description:
+					"Review the current project architecture, identify risks, " +
+					"and recommend improvements.",
+				arguments: [
+					{
+						name: "projectId",
+						description: "The project identifier to review",
+						required: true,
+					},
+					{
+						name: "focus",
+						description:
+							"Optional focus area (scalability, security, cost, reliability)",
+						required: false,
+					},
+				],
+			},
+			{
+				name: "bug-investigation",
+				title: "Bug Investigation",
+				description:
+					"Guide a structured investigation of a reported bug or incident.",
+				arguments: [
+					{
+						name: "description",
+						description: "Description of the bug or incident",
+						required: true,
+					},
+					{
+						name: "severity",
+						description: "Severity level (low, medium, high, critical)",
+						required: false,
+					},
+				],
+			},
+			{
+				name: "feature-planning",
+				title: "Feature Planning",
+				description:
+					"Plan a new feature: scope, requirements, milestones, and risks.",
+				arguments: [
+					{
+						name: "feature",
+						description: "Feature name or description",
+						required: true,
+					},
+					{
+						name: "projectId",
+						description: "The project identifier",
+						required: true,
+					},
+				],
+			},
+			{
+				name: "tech-debt-assessment",
+				title: "Technical Debt Assessment",
+				description:
+					"Assess technical debt in the project and prioritize remediation.",
+				arguments: [
+					{
+						name: "projectId",
+						description: "The project identifier",
+						required: true,
+					},
+				],
+			},
+			{
+				name: "vendor-selection",
+				title: "Vendor Selection",
+				description:
+					"Evaluate and select a vendor using weighted decision criteria.",
+				arguments: [
+					{
+						name: "category",
+						description: "Service or product category",
+						required: true,
+					},
+					{
+						name: "criteria",
+						description:
+							"Optional comma-separated criteria (price, security, support, etc.)",
+						required: false,
+					},
+				],
+			},
+			{
+				name: "build-vs-buy",
+				title: "Build Versus Buy",
+				description:
+					"Decide whether to build a feature in-house or buy a SaaS solution.",
+				arguments: [
+					{
+						name: "feature",
+						description: "Feature description",
+						required: true,
+					},
+				],
+			},
+		],
+	}),
+);
+
+server.setRequestHandler(
+	GetPromptRequestSchema,
+	async (request) => {
+		const { name, arguments: args } = request.params;
+		const promptArgs = args ?? {};
+
+		const systemPrompt =
+			"You are GovernMindz, an independent project intelligence and governance " +
+			"workspace. You help solo developers and founders make decisions about " +
+			"their projects while keeping project knowledge, permissions, and " +
+			"execution under their control. Always cite evidence where available " +
+			"and distinguish between recommendations and decisions.";
+
+		switch (name) {
+			case "architecture-review": {
+				const projectId = String(promptArgs.projectId ?? "");
+				const focus = String(promptArgs.focus ?? "general");
+				return {
+					description: `Architecture review for project ${projectId}`,
+					messages: [
+						{ role: "system", content: systemPrompt },
+						{
+							role: "user",
+							content: [
+								`Review the architecture of project "${projectId}".`,
+								`Focus area: ${focus}.`,
+								"",
+								"Steps:",
+								"1. Use project://{projectId}/context to retrieve current project context.",
+								"2. Use project://{projectId}/architecture to review architecture details.",
+								"3. Use project://{projectId}/decisions to review recorded decisions.",
+								"4. Use project_catalog_search to find related repositories and documentation.",
+								"5. Use zetaris_query if project data is stored in Zetaris.",
+								"",
+								"Report on:",
+								"- Strengths of the current architecture",
+								"- Risks and weaknesses (focus: " + focus + ")",
+								"- Recommended improvements",
+								"- Next steps with owners and timelines",
+							].join("\n"),
+						},
+					],
+				};
+			}
+			case "bug-investigation": {
+				const description = String(promptArgs.description ?? "");
+				const severity = String(promptArgs.severity ?? "medium");
+				return {
+					description: `Bug investigation: ${description}`,
+					messages: [
+						{ role: "system", content: systemPrompt },
+						{
+							role: "user",
+							content: [
+								"Investigate the following bug or incident:",
+								"",
+								"Description: " + description,
+								"Severity: " + severity,
+								"",
+								"Steps:",
+								"1. Gather evidence from project context and catalog.",
+								"2. Use web_search to find related issues, CVEs, or documentation.",
+								"3. Use zetaris_query to query relevant telemetry or logs.",
+								"4. Use debate_start to request a multi-agent investigation if needed.",
+								"5. Document root cause, impact, and remediation steps.",
+								"",
+								"Report on:",
+								"- Root cause hypothesis",
+								"- Supporting evidence",
+								"- Recommended fix",
+								"- Prevention measures",
+							].join("\n"),
+						},
+					],
+				};
+			}
+			case "feature-planning": {
+				const feature = String(promptArgs.feature ?? "");
+				const projectId = String(promptArgs.projectId ?? "");
+				return {
+					description: `Feature planning: ${feature}`,
+					messages: [
+						{ role: "system", content: systemPrompt },
+						{
+							role: "user",
+							content: [
+								`Plan the feature "${feature}" for project "${projectId}".`,
+								"",
+								"Steps:",
+								"1. Use project://{projectId}/context to understand current state.",
+								"2. Use project_catalog_search to find related code and docs.",
+								"3. Define scope, requirements, and acceptance criteria.",
+								"4. Break into milestones with dependencies and owners.",
+								"5. Identify risks and mitigation strategies.",
+								"6. Optionally use debate_start to request architecture review.",
+								"",
+								"Report on:",
+								"- Feature summary and objectives",
+								"- Scope and out-of-scope items",
+								"- Milestones with timeline estimates",
+								"- Dependencies and risks",
+								"- Acceptance criteria",
+							].join("\n"),
+						},
+					],
+				};
+			}
+			case "tech-debt-assessment": {
+				const projectId = String(promptArgs.projectId ?? "");
+				return {
+					description: `Technical debt assessment for project ${projectId}`,
+					messages: [
+						{ role: "system", content: systemPrompt },
+						{
+							role: "user",
+							content: [
+								`Assess technical debt in project "${projectId}".`,
+								"",
+								"Steps:",
+								"1. Use project://{projectId}/context to review project state.",
+								"2. Use project_catalog_search to find repositories with debt indicators.",
+								"3. Use debate_start to request a code health review if needed.",
+								"4. Categorize debt: code quality, documentation, testing, dependencies, infrastructure.",
+								"5. Prioritize by impact and effort.",
+								"",
+								"Report on:",
+								"- Debt inventory by category",
+								"- Impact assessment (user, team, system)",
+								"- Prioritized remediation backlog",
+								"- Estimated effort per item",
+							].join("\n"),
+						},
+					],
+				};
+			}
+			case "vendor-selection": {
+				const category = String(promptArgs.category ?? "");
+				const criteria = String(promptArgs.criteria ?? "price, security, support, compliance");
+				return {
+					description: `Vendor selection for category: ${category}`,
+					messages: [
+						{ role: "system", content: systemPrompt },
+						{
+							role: "user",
+							content: [
+								`Select a vendor for category: "${category}".`,
+								`Evaluation criteria: ${criteria}.`,
+								"",
+								"Steps:",
+								"1. Use web_search to identify candidate vendors.",
+								"2. Use project_catalog_search to check for existing integrations.",
+								"3. Build a weighted decision matrix using the criteria.",
+								"4. Assess security, compliance, and data residency.",
+								"5. Estimate migration/onboarding effort.",
+								"6. Recommend a vendor with rationale.",
+								"",
+								"Report on:",
+								"- Candidate vendors shortlist",
+								"- Weighted scores per criterion",
+								"- Recommendation and rationale",
+								"- Risks and migration plan",
+							].join("\n"),
+						},
+					],
+				};
+			}
+			case "build-vs-buy": {
+				const feature = String(promptArgs.feature ?? "");
+				return {
+					description: `Build vs. buy decision: ${feature}`,
+					messages: [
+						{ role: "system", content: systemPrompt },
+						{
+							role: "user",
+							content: [
+								`Decide whether to build or buy: "${feature}".`,
+								"",
+								"Steps:",
+								"1. Define feature requirements (must-have vs. nice-to-have).",
+								"2. Estimate build cost (engineering time, infrastructure, maintenance).",
+								"3. Estimate buy cost (subscription, implementation, integration).",
+								"4. Compare time-to-market for both options.",
+								"5. Assess strategic value and differentiation.",
+								"6. Evaluate vendor lock-in and exit strategy.",
+								"7. Use debate_start for a multi-agent review if the decision is high-stakes.",
+								"",
+								"Report on:",
+								"- Recommendation (build vs. buy)",
+								"- Cost comparison table",
+								"- Timeline comparison",
+								"- Risk assessment",
+								"- Implementation plan",
+							].join("\n"),
+						},
+					],
+				};
+			}
+			default:
+				throw new Error(`Unknown prompt: ${name}`);
+		}
 	},
 );
 

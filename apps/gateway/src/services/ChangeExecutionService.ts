@@ -212,8 +212,10 @@ export class ChangeExecutionService {
 	}> {
 		const change = this.getChange(input.changeId);
 		if (!change) throw new Error(`Change not found: ${input.changeId}`);
-		if (change.status !== "approved") {
-			throw new Error(`Change is not approved (current: ${change.status})`);
+		if (change.status !== "submitted" && change.status !== "approved") {
+			throw new Error(
+				`Change is not ready for execution (current: ${change.status})`,
+			);
 		}
 
 		// Revalidate authorization: the executor must be authorized at EXECUTE level
@@ -245,6 +247,11 @@ export class ChangeExecutionService {
 
 		const now = Date.now();
 		const db = getCatalogDb();
+
+		// Mark change as in_progress before execution
+		db.prepare(
+			"UPDATE project_artifacts SET status = 'in_progress', updated_at = @now WHERE id = @id",
+		).run({ now, id: input.changeId });
 
 		// Execute the change (placeholder — actual file system changes
 		// would be implemented here with rollback capability)
