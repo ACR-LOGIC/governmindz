@@ -4,9 +4,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { Readable } from "node:stream";
-import { randomUUID, createHash } from "node:crypto";
+import { randomUUID, createHash, createHmac } from "node:crypto";
 import Database from "better-sqlite3";
 import { runDebate } from "../gateway/src/debateRunner.js";
+
+const CATALOG_DB_PATH = path.resolve(process.cwd(), "data", "conversations.db");
 import { RunDebateApplicationService } from "../gateway/src/application/RunDebateApplicationService.js";
 import { auditTrail } from "@governmindz/core/engine/AuditTrailEmitter";
 import { AuditChainVerifier } from "@governmindz/core/engine/AuditChainVerifier";
@@ -28,6 +30,18 @@ import { sharedResilientZetarisClient } from "@governmindz/core/integrations/Res
 import { GitHubAppClient } from "@governmindz/core/integrations/githubAppClient";
 import { executeWebSearch } from "../gateway/src/tools/webSearch.tools.js";
 import { voiceService } from "@governmindz/voice";
+import {
+	aiProviderRegistry,
+} from "../gateway/src/services/AIProviderRegistry.js";
+import {
+	externalClientRegistry,
+} from "../gateway/src/services/ExternalClientRegistry.js";
+import {
+	permissionPolicyEngine,
+} from "../gateway/src/services/PermissionPolicyEngine.js";
+import {
+	approvalService,
+} from "../gateway/src/services/ApprovalService.js";
 import { getConfigStatus, saveSecureConfig, loadLocalEnvIfPresent } from "../gateway/src/services/cryptoConfig.js";
 loadLocalEnvIfPresent();
 
@@ -149,6 +163,96 @@ db.exec(`
 		data_json TEXT NOT NULL,
 		created_at INTEGER NOT NULL,
 		updated_at INTEGER NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS ai_providers (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		type TEXT NOT NULL,
+		endpoint TEXT,
+		api_key_encrypted TEXT NOT NULL,
+		model TEXT,
+		enabled INTEGER NOT NULL DEFAULT 1,
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS external_clients (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		client_type TEXT NOT NULL,
+		user_id TEXT NOT NULL,
+		status TEXT NOT NULL DEFAULT 'pending',
+		approved_at INTEGER,
+		revoked_at INTEGER,
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS client_permissions (
+		id TEXT PRIMARY KEY,
+		client_id TEXT NOT NULL,
+		project_id TEXT,
+		permission_level TEXT NOT NULL,
+		granted_tools TEXT NOT NULL DEFAULT '[]',
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL,
+		FOREIGN KEY (client_id) REFERENCES external_clients(id)
+	);
+
+	CREATE TABLE IF NOT EXISTS approval_records (
+		id TEXT PRIMARY KEY,
+		client_id TEXT NOT NULL,
+		change_hash TEXT NOT NULL,
+		change_description TEXT NOT NULL,
+		project_id TEXT,
+		status TEXT NOT NULL DEFAULT 'pending',
+		approved_by TEXT,
+		approved_at INTEGER,
+		expires_at INTEGER,
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL,
+		FOREIGN KEY (client_id) REFERENCES external_clients(id)
+	);
+
+	CREATE TABLE IF NOT EXISTS project_artifacts (
+		id TEXT PRIMARY KEY,
+		project_id TEXT NOT NULL,
+		type TEXT NOT NULL,
+		title TEXT NOT NULL,
+		content TEXT,
+		status TEXT NOT NULL DEFAULT 'draft',
+		originating_client TEXT,
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL,
+		approved_by TEXT,
+		approved_at INTEGER
+	);
+
+	CREATE TABLE IF NOT EXISTS webhook_configs (
+		id TEXT PRIMARY KEY,
+		target_url TEXT NOT NULL,
+		secret TEXT NOT NULL DEFAULT '',
+		events TEXT NOT NULL DEFAULT '[]',
+		enabled INTEGER NOT NULL DEFAULT 1,
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS webhook_deliveries (
+		id TEXT PRIMARY KEY,
+		webhook_id TEXT NOT NULL,
+		event_type TEXT NOT NULL,
+		payload TEXT NOT NULL,
+		signature TEXT NOT NULL,
+		idempotency_key TEXT NOT NULL,
+		attempt INTEGER NOT NULL DEFAULT 0,
+		status TEXT NOT NULL DEFAULT 'pending',
+		http_status INTEGER,
+		error_message TEXT,
+		delivered_at INTEGER,
+		created_at INTEGER NOT NULL,
+		FOREIGN KEY (webhook_id) REFERENCES webhook_configs(id)
 	);
 `);
 
@@ -561,6 +665,20 @@ let activeRun: string | null = null;
 function sendJson(res: http.ServerResponse, status: number, data: any) {
 	res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
 	res.end(JSON.stringify(data));
+}
+
+let serverCatalogDb: Database.Database | null = null;
+
+function getCatalogDbForServer(): Database.Database {
+	if (!serverCatalogDb) {
+		serverCatalogDb = new Database(CATALOG_DB_PATH, { readonly: false });
+		serverCatalogDb.pragma("journal_mode = WAL");
+	}
+	return serverCatalogDb;
+}
+
+function createHashForServer(input: string): string {
+	return createHash("sha256").update(input).digest("hex");
 }
 
 const EXPORT_BODY_LIMIT_BYTES = 15 * 1024 * 1024;
@@ -978,6 +1096,23 @@ async function handleRun(req: http.IncomingMessage, res: http.ServerResponse) {
 				});
 				run.result = out;
 				run.done = true;
+
+				// Outgoing webhooks on debate completion
+				void deliverWebhookEvent("debate.completed", {
+					runId,
+					result: out.result,
+					supervisorDecision: out.supervisorDecision,
+					contract: out.contract,
+					timestamp: Date.now(),
+				});
+				if (out.supervisorDecision === "APPROVED") {
+					void deliverWebhookEvent("deliverable.approved", {
+						runId,
+						primaryArtifact: out.primaryArtifact,
+						supervisorResponse: out.supervisorResponse,
+						timestamp: Date.now(),
+					});
+				}
 
 				const completeEv = {
 					type: "complete",
@@ -1928,6 +2063,807 @@ async function handleDisconnectLocalProject(
 	}
 }
 
+/* ----------------------------------------------------------------
+   AI Provider Registry API
+----------------------------------------------------------------- */
+
+async function handleAIProviders(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+): Promise<void> {
+	if (req.method === "GET") {
+		const providers = aiProviderRegistry.listProviders();
+		sendJson(res, 200, { providers });
+		return;
+	}
+	if (req.method === "POST") {
+		try {
+			const payload = await readJsonBody(req);
+			const { name, type, endpoint, apiKey, model, status } = payload as {
+				name?: string;
+				type?: string;
+				endpoint?: string;
+				apiKey?: string;
+				model?: string;
+				status?: string;
+			};
+			if (!name || !type || !apiKey) {
+				sendJson(res, 400, {
+					error: "name, type, and apiKey are required.",
+				});
+				return;
+			}
+			const provider = await aiProviderRegistry.createProvider({
+				name,
+				type: type as any,
+				endpoint,
+				apiKey,
+				model,
+				status: status as any,
+			});
+			sendJson(res, 201, { provider });
+		} catch (err: any) {
+			sendJson(res, 500, { error: err?.message || "Failed to create provider." });
+		}
+		return;
+	}
+	res.writeHead(405);
+	res.end();
+}
+
+async function handleSingleAIProvider(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+	id: string,
+): Promise<void> {
+	if (req.method === "GET") {
+		const provider = aiProviderRegistry.getProvider(id);
+		if (!provider) {
+			sendJson(res, 404, { error: "AI provider not found." });
+			return;
+		}
+		sendJson(res, 200, { provider });
+		return;
+	}
+	if (req.method === "PATCH") {
+		try {
+			const payload = await readJsonBody(req);
+			const provider = await aiProviderRegistry.updateProvider(id, payload as any);
+			sendJson(res, 200, { provider });
+		} catch (err: any) {
+			sendJson(res, 500, { error: err?.message || "Failed to update provider." });
+		}
+		return;
+	}
+	if (req.method === "DELETE") {
+		try {
+			const deleted = aiProviderRegistry.deleteProvider(id);
+			if (!deleted) {
+				sendJson(res, 404, { error: "AI provider not found." });
+				return;
+			}
+			sendJson(res, 200, { success: true });
+		} catch (err: any) {
+			sendJson(res, 500, { error: err?.message || "Failed to delete provider." });
+		}
+		return;
+	}
+	res.writeHead(405);
+	res.end();
+}
+
+/* ----------------------------------------------------------------
+   External Client Registry API
+----------------------------------------------------------------- */
+
+async function handleExternalClients(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+): Promise<void> {
+	if (req.method === "GET") {
+		const clients = externalClientRegistry.listClients();
+		sendJson(res, 200, { clients });
+		return;
+	}
+	if (req.method === "POST") {
+		try {
+			const payload = await readJsonBody(req);
+			const { name, clientType, userId } = payload as {
+				name?: string;
+				clientType?: string;
+				userId?: string;
+			};
+			if (!name || !clientType || !userId) {
+				sendJson(res, 400, {
+					error: "name, clientType, and userId are required.",
+				});
+				return;
+			}
+			const client = await externalClientRegistry.createClient({
+				name,
+				clientType: clientType as any,
+				userId,
+			});
+			sendJson(res, 201, { client });
+		} catch (err: any) {
+			sendJson(res, 500, { error: err?.message || "Failed to create client." });
+		}
+		return;
+	}
+	res.writeHead(405);
+	res.end();
+}
+
+async function handleSingleExternalClient(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+	id: string,
+): Promise<void> {
+	if (req.method === "GET") {
+		const client = externalClientRegistry.getClient(id);
+		if (!client) {
+			sendJson(res, 404, { error: "External client not found." });
+			return;
+		}
+		sendJson(res, 200, { client });
+		return;
+	}
+	if (req.method === "DELETE") {
+		try {
+			const payload = await readJsonBody(req);
+			const { userId } = payload as { userId?: string };
+			if (!userId) {
+				sendJson(res, 400, { error: "userId is required." });
+				return;
+			}
+			await externalClientRegistry.revokeClient(id, userId);
+			sendJson(res, 200, { success: true });
+		} catch (err: any) {
+			sendJson(res, 500, { error: err?.message || "Failed to revoke client." });
+		}
+		return;
+	}
+	res.writeHead(405);
+	res.end();
+}
+
+async function handleApproveExternalClient(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+	id: string,
+): Promise<void> {
+	if (req.method !== "POST") {
+		res.writeHead(405);
+		res.end();
+		return;
+	}
+	try {
+		const payload = await readJsonBody(req);
+		const { userId } = payload as { userId?: string };
+		if (!userId) {
+			sendJson(res, 400, { error: "userId is required." });
+			return;
+		}
+		const client = await externalClientRegistry.approveClient(id, userId);
+		sendJson(res, 200, { client });
+	} catch (err: any) {
+		sendJson(res, 500, { error: err?.message || "Failed to approve client." });
+	}
+}
+
+async function handleRevokeExternalClient(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+	id: string,
+): Promise<void> {
+	if (req.method !== "POST") {
+		res.writeHead(405);
+		res.end();
+		return;
+	}
+	try {
+		const payload = await readJsonBody(req);
+		const { userId } = payload as { userId?: string };
+		if (!userId) {
+			sendJson(res, 400, { error: "userId is required." });
+			return;
+		}
+		await externalClientRegistry.revokeClient(id, userId);
+		sendJson(res, 200, { success: true });
+	} catch (err: any) {
+		sendJson(res, 500, { error: err?.message || "Failed to revoke client." });
+	}
+}
+
+/* ----------------------------------------------------------------
+   Client Permissions API
+----------------------------------------------------------------- */
+
+async function handleClientPermissions(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+): Promise<void> {
+	if (req.method === "GET") {
+		const payload = await readJsonBody(req);
+		const { clientId } = payload as { clientId?: string };
+		if (!clientId) {
+			sendJson(res, 400, { error: "clientId is required." });
+			return;
+		}
+		const permissions = permissionPolicyEngine.listPermissionsForClient(clientId);
+		sendJson(res, 200, { permissions });
+		return;
+	}
+	if (req.method === "POST") {
+		try {
+			const payload = await readJsonBody(req);
+			const { clientId, projectId, permissionLevel, grantedTools } = payload as {
+				clientId?: string;
+				projectId?: string;
+				permissionLevel?: string;
+				grantedTools?: string[];
+			};
+			if (!clientId || !permissionLevel) {
+				sendJson(res, 400, {
+					error: "clientId and permissionLevel are required.",
+				});
+				return;
+			}
+			await permissionPolicyEngine.grantPermission(
+				clientId,
+				projectId,
+				permissionLevel as any,
+				grantedTools,
+			);
+			sendJson(res, 201, { success: true });
+		} catch (err: any) {
+			sendJson(res, 500, { error: err?.message || "Failed to grant permission." });
+		}
+		return;
+	}
+	res.writeHead(405);
+	res.end();
+}
+
+async function handleSingleClientPermission(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+	id: string,
+): Promise<void> {
+	if (req.method !== "DELETE") {
+		res.writeHead(405);
+		res.end();
+		return;
+	}
+	try {
+		const db = getCatalogDbForServer();
+		const result = db
+			.prepare("DELETE FROM client_permissions WHERE id = ?")
+			.run(id);
+		if (result.changes === 0) {
+			sendJson(res, 404, { error: "Permission not found." });
+			return;
+		}
+		sendJson(res, 200, { success: true });
+	} catch (err: any) {
+		sendJson(res, 500, { error: err?.message || "Failed to delete permission." });
+	}
+}
+
+/* ----------------------------------------------------------------
+   Approval Records API
+----------------------------------------------------------------- */
+
+async function handleApprovals(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+): Promise<void> {
+	if (req.method === "GET") {
+		const approvals = approvalService.listPendingApprovals();
+		sendJson(res, 200, { approvals });
+		return;
+	}
+	res.writeHead(405);
+	res.end();
+}
+
+async function handleSingleApproval(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+	id: string,
+): Promise<void> {
+	if (req.method === "GET") {
+		const approval = approvalService.getApproval(id);
+		if (!approval) {
+			sendJson(res, 404, { error: "Approval not found." });
+			return;
+		}
+		sendJson(res, 200, { approval });
+		return;
+	}
+	res.writeHead(405);
+	res.end();
+}
+
+async function handleApproveApproval(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+	id: string,
+): Promise<void> {
+	if (req.method !== "POST") {
+		res.writeHead(405);
+		res.end();
+		return;
+	}
+	try {
+		const payload = await readJsonBody(req);
+		const { approvedBy } = payload as { approvedBy?: string };
+		if (!approvedBy) {
+			sendJson(res, 400, { error: "approvedBy is required." });
+			return;
+		}
+		const approval = await approvalService.approve(id, approvedBy);
+		sendJson(res, 200, { approval });
+	} catch (err: any) {
+		sendJson(res, 500, { error: err?.message || "Failed to approve." });
+	}
+}
+
+async function handleRejectApproval(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+	id: string,
+): Promise<void> {
+	if (req.method !== "POST") {
+		res.writeHead(405);
+		res.end();
+		return;
+	}
+	try {
+		const payload = await readJsonBody(req);
+		const { approvedBy } = payload as { approvedBy?: string };
+		if (!approvedBy) {
+			sendJson(res, 400, { error: "approvedBy is required." });
+			return;
+		}
+		const approval = await approvalService.reject(id, approvedBy);
+		sendJson(res, 200, { approval });
+	} catch (err: any) {
+		sendJson(res, 500, { error: err?.message || "Failed to reject." });
+	}
+}
+
+/* ----------------------------------------------------------------
+   Project Artifacts API
+----------------------------------------------------------------- */
+
+async function handleProjectArtifacts(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+): Promise<void> {
+	if (req.method === "GET") {
+		const db = getCatalogDbForServer();
+		const rows = db
+			.prepare("SELECT * FROM project_artifacts ORDER BY updated_at DESC")
+			.all() as any[];
+		sendJson(res, 200, { artifacts: rows });
+		return;
+	}
+	if (req.method === "POST") {
+		try {
+			const payload = await readJsonBody(req);
+			const { projectId, type, title, content, status, originatingClient } = payload as {
+				projectId?: string;
+				type?: string;
+				title?: string;
+				content?: string;
+				status?: string;
+				originatingClient?: string;
+			};
+			if (!projectId || !type || !title) {
+				sendJson(res, 400, {
+					error: "projectId, type, and title are required.",
+				});
+				return;
+			}
+			const id = `artifact:${createHashForServer(`${projectId}:${title}:${Date.now()}`).slice(0, 24)}`;
+			const now = Date.now();
+			db.prepare(`
+				INSERT INTO project_artifacts (id, project_id, type, title, content, status, originating_client, created_at, updated_at)
+				VALUES (@id, @project_id, @type, @title, @content, @status, @originating_client, @created_at, @updated_at)
+			`).run({
+				id,
+				project_id: projectId,
+				type,
+				title,
+				content: content ?? null,
+				status: status ?? "draft",
+				originating_client: originatingClient ?? null,
+				created_at: now,
+				updated_at: now,
+			});
+			sendJson(res, 201, { success: true, id });
+		} catch (err: any) {
+			sendJson(res, 500, { error: err?.message || "Failed to create artifact." });
+		}
+		return;
+	}
+	res.writeHead(405);
+	res.end();
+}
+
+async function handleSingleProjectArtifact(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+	id: string,
+): Promise<void> {
+	const db = getCatalogDbForServer();
+	if (req.method === "GET") {
+		const row = db
+			.prepare("SELECT * FROM project_artifacts WHERE id = ?")
+			.get(id) as any | undefined;
+		if (!row) {
+			sendJson(res, 404, { error: "Artifact not found." });
+			return;
+		}
+		sendJson(res, 200, { artifact: row });
+		return;
+	}
+	if (req.method === "PATCH") {
+		try {
+			const payload = await readJsonBody(req);
+			const { status, approvedBy } = payload as {
+				status?: string;
+				approvedBy?: string;
+			};
+			const fields: string[] = [];
+			const params: Record<string, unknown> = { id };
+			if (status !== undefined) {
+				fields.push("status = @status");
+				params.status = status;
+			}
+			if (approvedBy !== undefined) {
+				fields.push("approved_by = @approvedBy, approved_at = @now");
+				params.approvedBy = approvedBy;
+				params.now = Date.now();
+			}
+			params.updated_at = Date.now();
+			fields.push("updated_at = @updated_at");
+			db.prepare(`UPDATE project_artifacts SET ${fields.join(", ")} WHERE id = @id`).run(params);
+			sendJson(res, 200, { success: true });
+		} catch (err: any) {
+			sendJson(res, 500, { error: err?.message || "Failed to update artifact." });
+		}
+		return;
+	}
+	if (req.method === "DELETE") {
+		try {
+			const result = db.prepare("DELETE FROM project_artifacts WHERE id = ?").run(id);
+			if (result.changes === 0) {
+				sendJson(res, 404, { error: "Artifact not found." });
+				return;
+			}
+			sendJson(res, 200, { success: true });
+		} catch (err: any) {
+			sendJson(res, 500, { error: err?.message || "Failed to delete artifact." });
+		}
+		return;
+	}
+	res.writeHead(405);
+	res.end();
+}
+
+/* ----------------------------------------------------------------
+   Outgoing Webhooks API
+----------------------------------------------------------------- */
+
+async function handleWebhooks(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+): Promise<void> {
+	if (req.method === "GET") {
+		const db = getCatalogDbForServer();
+		const rows = db
+			.prepare("SELECT * FROM webhook_configs ORDER BY updated_at DESC")
+			.all() as any[];
+		sendJson(res, 200, { webhooks: rows });
+		return;
+	}
+	if (req.method === "POST") {
+		try {
+			const payload = await readJsonBody(req);
+			const { targetUrl, secret, events, enabled } = payload as {
+				targetUrl?: string;
+				secret?: string;
+				events?: string[];
+				enabled?: boolean;
+			};
+			if (!targetUrl) {
+				sendJson(res, 400, { error: "targetUrl is required." });
+				return;
+			}
+			// SSRF protection: block localhost and private ranges
+			try {
+				const url = new URL(targetUrl);
+				const host = url.hostname;
+				if (
+					host === "localhost" ||
+					host === "127.0.0.1" ||
+					host === "::1" ||
+					host.endsWith(".local") ||
+					host.match(/^10\./) ||
+					host.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\./) ||
+					host.match(/^192\.168\./) ||
+					host.match(/^169\.254\./) ||
+					url.protocol !== "https:"
+				) {
+					sendJson(res, 400, {
+						error: "Webhook target must be a public HTTPS URL.",
+					});
+					return;
+				}
+			} catch {
+				sendJson(res, 400, { error: "Invalid targetUrl." });
+				return;
+			}
+
+			const id = `webhook:${createHashForServer(`${targetUrl}:${Date.now()}`).slice(0, 24)}`;
+			const now = Date.now();
+			db.prepare(`
+				INSERT INTO webhook_configs (id, target_url, secret, events, enabled, created_at, updated_at)
+				VALUES (@id, @target_url, @secret, @events, @enabled, @created_at, @updated_at)
+			`).run({
+				id,
+				target_url: targetUrl,
+				secret: secret ?? "",
+				events: JSON.stringify(events ?? ["debate.completed"]),
+				enabled: enabled !== false ? 1 : 0,
+				created_at: now,
+				updated_at: now,
+			});
+			sendJson(res, 201, { success: true, id });
+		} catch (err: any) {
+			sendJson(res, 500, { error: err?.message || "Failed to create webhook." });
+		}
+		return;
+	}
+	res.writeHead(405);
+	res.end();
+}
+
+async function handleSingleWebhook(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+	id: string,
+): Promise<void> {
+	const db = getCatalogDbForServer();
+	if (req.method === "GET") {
+		const row = db
+			.prepare("SELECT * FROM webhook_configs WHERE id = ?")
+			.get(id) as any | undefined;
+		if (!row) {
+			sendJson(res, 404, { error: "Webhook not found." });
+			return;
+		}
+		sendJson(res, 200, { webhook: row });
+		return;
+	}
+	if (req.method === "PATCH") {
+		try {
+			const payload = await readJsonBody(req);
+			const { secret, events, enabled } = payload as {
+				secret?: string;
+				events?: string[];
+				enabled?: boolean;
+			};
+			const fields: string[] = [];
+			const params: Record<string, unknown> = { id };
+			if (secret !== undefined) {
+				fields.push("secret = @secret");
+				params.secret = secret;
+			}
+			if (events !== undefined) {
+				fields.push("events = @events");
+				params.events = JSON.stringify(events);
+			}
+			if (enabled !== undefined) {
+				fields.push("enabled = @enabled");
+				params.enabled = enabled ? 1 : 0;
+			}
+			params.updated_at = Date.now();
+			fields.push("updated_at = @updated_at");
+			db.prepare(`UPDATE webhook_configs SET ${fields.join(", ")} WHERE id = @id`).run(params);
+			sendJson(res, 200, { success: true });
+		} catch (err: any) {
+			sendJson(res, 500, { error: err?.message || "Failed to update webhook." });
+		}
+		return;
+	}
+	if (req.method === "DELETE") {
+		try {
+			const result = db.prepare("DELETE FROM webhook_configs WHERE id = ?").run(id);
+			if (result.changes === 0) {
+				sendJson(res, 404, { error: "Webhook not found." });
+				return;
+			}
+			sendJson(res, 200, { success: true });
+		} catch (err: any) {
+			sendJson(res, 500, { error: err?.message || "Failed to delete webhook." });
+		}
+		return;
+	}
+	res.writeHead(405);
+	res.end();
+}
+
+/* ----------------------------------------------------------------
+   Outgoing webhook delivery
+----------------------------------------------------------------- */
+
+function signWebhookPayload(secret: string, payload: string): string {
+	return createHmac("sha256", secret).update(payload).digest("hex");
+}
+
+async function deliverWebhookEvent(
+	eventType: string,
+	payload: Record<string, unknown>,
+): Promise<void> {
+	const db = getCatalogDbForServer();
+	const webhooks = db
+		.prepare(
+			"SELECT * FROM webhook_configs WHERE enabled = 1",
+		)
+		.all() as any[];
+
+	const now = Date.now();
+	const idempotencyKey = `wh:${createHash("sha256")
+		.update(`${eventType}:${JSON.stringify(payload)}:${now}`)
+		.digest("hex")
+		.slice(0, 24)}`;
+
+	for (const wh of webhooks) {
+		try {
+			const events = JSON.parse(wh.events || "[]");
+			if (!events.includes(eventType)) continue;
+
+			const secret = wh.secret || "";
+			const payloadStr = JSON.stringify(payload);
+			const signature = signWebhookPayload(secret, payloadStr);
+
+			// Re-validate the stored URL at the point of use to break any
+			// taint chain from the original user input. Only public HTTPS
+			// URLs are permitted — localhost, private ranges, and metadata
+			// endpoints are rejected.
+			let targetUrl: string | null = null;
+			try {
+				const parsed = new URL(wh.target_url);
+				const host = parsed.hostname;
+				if (
+					parsed.protocol !== "https:" ||
+					host === "localhost" ||
+					host === "127.0.0.1" ||
+					host === "::1" ||
+					host.endsWith(".local") ||
+					host.match(/^10\./) ||
+					host.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\./) ||
+					host.match(/^192\.168\./) ||
+					host.match(/^169\.254\./)
+				) {
+					console.warn(
+						`[GovernMindz] Webhook ${wh.id} target rejected: ${wh.target_url}`,
+					);
+					continue;
+				}
+				targetUrl = parsed.toString();
+			} catch {
+				console.warn(
+					`[GovernMindz] Webhook ${wh.id} has invalid target URL: ${wh.target_url}`,
+				);
+				continue;
+			}
+
+			let delivered = false;
+			let lastError: string | null = null;
+			let httpStatus: number | null = null;
+
+			for (let attempt = 1; attempt <= 3; attempt++) {
+				const deliveryId = `wh_del:${createHash("sha256")
+					.update(`${wh.id}:${eventType}:${attempt}:${now}`)
+					.digest("hex")
+					.slice(0, 24)}`;
+
+				try {
+					const controller = new AbortController();
+					const timeout = setTimeout(
+						() => controller.abort(),
+						10000,
+					);
+					const resp = await fetch(targetUrl!, {
+						method: "POST",
+						headers: {
+							"Content-Type": "application/json",
+							"X-GovernMindz-Signature": signature,
+							"X-GovernMindz-Event": eventType,
+							"X-GovernMindz-Idempotency-Key": idempotencyKey,
+							"X-GovernMindz-Delivery-Id": deliveryId,
+							"X-GovernMindz-Timestamp": String(now),
+						},
+						body: payloadStr,
+						signal: controller.signal,
+					});
+					clearTimeout(timeout);
+					httpStatus = resp.status;
+
+					if (resp.status >= 200 && resp.status < 300) {
+						delivered = true;
+						break;
+					}
+					lastError = `HTTP ${resp.status}`;
+				} catch (err: any) {
+					lastError = err?.message || String(err);
+				}
+
+				// Record delivery attempt
+				db.prepare(`
+					INSERT INTO webhook_deliveries (id, webhook_id, event_type, payload, signature, idempotency_key, attempt, status, http_status, error_message, created_at)
+					VALUES (@id, @webhook_id, @event_type, @payload, @signature, @idempotency_key, @attempt, @status, @http_status, @error_message, @created_at)
+				`).run({
+					id: deliveryId,
+					webhook_id: wh.id,
+					event_type: eventType,
+					payload: payloadStr,
+					signature,
+					idempotency_key: idempotencyKey,
+					attempt,
+					status: delivered ? "delivered" : "pending",
+					http_status: httpStatus ?? null,
+					error_message: lastError ?? null,
+					created_at: now,
+				});
+
+				if (!delivered && attempt < 3) {
+					// Exponential backoff: 1s, 2s, 4s
+					await new Promise((r) =>
+						setTimeout(r, Math.pow(2, attempt - 1) * 1000),
+					);
+				}
+			}
+
+			// Final delivery record
+			const finalStatus = delivered ? "delivered" : "failed";
+			db.prepare(`
+				INSERT INTO webhook_deliveries (id, webhook_id, event_type, payload, signature, idempotency_key, attempt, status, http_status, error_message, delivered_at, created_at)
+				VALUES (@id, @webhook_id, @event_type, @payload, @signature, @idempotency_key, 3, @status, @http_status, @error_message, @delivered_at, @created_at)
+			`).run({
+				id: `wh_final:${createHash("sha256")
+					.update(`${wh.id}:${eventType}:${now}`)
+					.digest("hex")
+					.slice(0, 24)}`,
+				webhook_id: wh.id,
+				event_type: eventType,
+				payload: payloadStr,
+				signature,
+				idempotency_key: idempotencyKey,
+				status: finalStatus,
+				http_status: httpStatus ?? null,
+				error_message: delivered ? null : lastError ?? "All attempts failed",
+				delivered_at: delivered ? now : null,
+				created_at: now,
+			});
+
+			if (!delivered) {
+				console.warn(
+					`[GovernMindz] Webhook delivery failed after 3 attempts: ${wh.target_url} for event ${eventType}`,
+				);
+			}
+		} catch (err: any) {
+			console.warn(
+				`[GovernMindz] Webhook delivery error: ${err?.message || String(err)}`,
+			);
+		}
+	}
+}
+
 async function handleGitHubSearch(
 	req: http.IncomingMessage,
 	res: http.ServerResponse,
@@ -2681,6 +3617,54 @@ const server = http.createServer((req, res) => {
 		void handleDisconnectLocalProject(req, res, id);
 	} else if (pathname === "/api/github/search") {
 		void handleGitHubSearch(req, res);
+	} else if (pathname === "/api/ai-providers") {
+		void handleAIProviders(req, res);
+	} else if (pathname.startsWith("/api/ai-providers/")) {
+		const id = pathname.slice("/api/ai-providers/".length);
+		void handleSingleAIProvider(req, res, id);
+	} else if (pathname === "/api/external-clients") {
+		void handleExternalClients(req, res);
+	} else if (pathname.startsWith("/api/external-clients/")) {
+		const rest = pathname.slice("/api/external-clients/".length);
+		if (rest.endsWith("/approve")) {
+			const id = rest.slice(0, -"/approve".length);
+			void handleApproveExternalClient(req, res, id);
+		} else if (rest.endsWith("/revoke")) {
+			const id = rest.slice(0, -"/revoke".length);
+			void handleRevokeExternalClient(req, res, id);
+		} else {
+			const id = rest;
+			void handleSingleExternalClient(req, res, id);
+		}
+	} else if (pathname === "/api/client-permissions") {
+		void handleClientPermissions(req, res);
+	} else if (pathname.startsWith("/api/client-permissions/")) {
+		const id = pathname.slice("/api/client-permissions/".length);
+		void handleSingleClientPermission(req, res, id);
+	} else if (pathname === "/api/approvals") {
+		void handleApprovals(req, res);
+	} else if (pathname.startsWith("/api/approvals/")) {
+		const rest = pathname.slice("/api/approvals/".length);
+		if (rest.endsWith("/approve")) {
+			const id = rest.slice(0, -"/approve".length);
+			void handleApproveApproval(req, res, id);
+		} else if (rest.endsWith("/reject")) {
+			const id = rest.slice(0, -"/reject".length);
+			void handleRejectApproval(req, res, id);
+		} else {
+			const id = rest;
+			void handleSingleApproval(req, res, id);
+		}
+	} else if (pathname === "/api/project-artifacts") {
+		void handleProjectArtifacts(req, res);
+	} else if (pathname.startsWith("/api/project-artifacts/")) {
+		const id = pathname.slice("/api/project-artifacts/".length);
+		void handleSingleProjectArtifact(req, res, id);
+	} else if (pathname === "/api/webhooks") {
+		void handleWebhooks(req, res);
+	} else if (pathname.startsWith("/api/webhooks/")) {
+		const id = pathname.slice("/api/webhooks/".length);
+		void handleSingleWebhook(req, res, id);
 	} else if (pathname === "/api/catalog") {
 		handleCatalog(req, res);
 	} else if (pathname.startsWith("/api/catalog/")) {

@@ -1,0 +1,32 @@
+{
+	"id": "vendor-selection",
+	"topic": "Which vendor should we select for [service/category], and what criteria should drive the decision?",
+	"description": "Evaluate and select a vendor for a specific service or product category, weighing cost, features, reliability, support, and strategic fit.",
+	"deliverableType": "report",
+	"investigationInstructions": [
+		"Define selection criteria: price, features, reliability, support, security, compliance, integration ease.",
+		"Identify 3-5 candidate vendors for the service category.",
+		"Gather pricing models, contract terms, and hidden costs for each vendor.",
+		"Assess vendor track record: uptime, customer reviews, case studies.",
+		"Evaluate security and compliance posture (SOC 2, GDPR, data residency).",
+		"Consider integration complexity with existing stack.",
+		"Plan migration/onboarding effort and timeline."
+	],
+	"zetarisQuery": null,
+	"evidenceRequirements": [
+		"Vendor shortlist with pricing and feature matrices",
+		"Security/compliance documentation from each vendor",
+		"Customer references or case studies",
+		"Integration requirements with current infrastructure",
+		"Budget constraints and approval thresholds"
+	],
+	"expectedOutputStructure": [
+		"Executive summary with vendor recommendation",
+		"Weighted decision matrix scoring each vendor",
+		"Pricing comparison (list price, negotiated, TCO over 3 years)",
+		"Feature gap analysis vs. requirements",
+		"Risk assessment per vendor (security, lock-in, viability)",
+		"Implementation and migration plan",
+		"Contract negotiation points"
+	]
+}
