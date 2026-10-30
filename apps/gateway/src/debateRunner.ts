@@ -33,6 +33,8 @@ import { emitCouncilAssignments } from "./application/CouncilAssignmentEmitter.j
 import { buildWebCitationContext } from "./application/WebCitationContextBuilder.js";
 import { DebateSeatFactory } from "./services/DebateSeatFactory.js";
 import { DocumentEvidenceIngestionService } from "./services/DocumentEvidenceIngestionService.js";
+import { ExternalModelSeatClient } from "./services/ExternalModelSeatClient.js";
+import { aiProviderRegistry } from "./services/AIProviderRegistry.js";
 import { DebateSupportAgentFactory } from "./services/DebateSupportAgentFactory.js";
 import {
 	ZetarisEvidencePreparationService,
@@ -97,6 +99,7 @@ const debateSeatFactory = new DebateSeatFactory({
 	loadPrompt: (name) => PromptRegistry.load(name),
 	createSampleClient: (seatId, replies, delayMs) => new SampleSeatClient(seatId, replies, delayMs),
 	createMeterlessClient: (provider, model) => new MeterlessSeatClient(provider, model),
+	createExternalModelClient: (config) => new ExternalModelSeatClient(config),
 });
 
 const documentEvidenceIngestionService = new DocumentEvidenceIngestionService({
@@ -411,11 +414,45 @@ export async function runDebate(params: RunParams): Promise<RunOutput> {
 		}
 	}
 
+	// Build external model seats from enabled AI providers for AI Roundtable participation
+	const externalSeats = aiProviderRegistry
+		.listProviders()
+		.filter((p) => p.status === "enabled" && p.type !== "meterless")
+		.map((p) => {
+			const apiKey = aiProviderRegistry.getProviderApiKey(p.id);
+			if (!apiKey) return null;
+			const providerType = p.type as
+				| "openai"
+				| "anthropic"
+				| "google"
+				| "openrouter"
+				| "custom";
+			const client = new ExternalModelSeatClient({
+				providerType,
+				endpoint: p.endpoint ?? "https://api.openai.com/v1",
+				apiKey,
+				model: p.model ?? "gpt-4",
+			});
+			return {
+				seatId: `external_${providerType}_${p.id.slice(0, 8)}`,
+				role: `external_${providerType}`,
+				systemPrompt:
+					"You are an external AI assistant participating in a GovernMindz multi-agent debate. " +
+					"Provide your analysis as a JSON object with position, confidence_self, " +
+					"confidence_expert_agreement, evidence, caveats, dissents_from, supports, " +
+					"and raw_reasoning fields. Ground your claims in evidence and reference " +
+					"the shared debate context when responding to other seats.",
+				client,
+			};
+		})
+		.filter((s): s is NonNullable<typeof s> => s !== null);
+
 	const seats = debateSeatFactory.create({
 		provider,
 		scenario,
 		seatModel: process.env.METERLESS_SEAT_MODEL?.trim() || undefined,
 		sampleDelayMs: process.env.NODE_ENV === "test" ? 0 : 2000,
+		externalSeats,
 	});
 
 	const { rivalChallenger, thinkerAgent } = debateSupportAgentFactory.create({

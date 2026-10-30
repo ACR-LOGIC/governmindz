@@ -30,7 +30,7 @@ You MUST respond ONLY with a valid JSON object matching this exact schema. No ma
 export interface SeatConfig {
 	seatId: string;
 	role: string;
-	provider: "meterless" | "google" | "gemini" | "vertex";
+	provider: "meterless" | "google" | "gemini" | "vertex" | "external";
 	systemPrompt: string;
 	/**
 	 * Optional pre-fetched user context block from MemoryService.getUserContextBlock().

@@ -1,11 +1,27 @@
 import { AgentSeat, type ILLMClient, type SeatConfig } from "@governmindz/core/debate/AgentSeat";
 import type { MeterlessProvider } from "@governmindz/core/providers/MeterlessProvider";
 import type { SampleReply, SampleScenario } from "../sampleScenario.js";
+import type { ExternalProviderType } from "./ExternalModelSeatClient.js";
 
 export interface DebateSeatFactoryDependencies {
 	loadPrompt(name: string): string;
 	createSampleClient(seatId: string, replies: SampleReply[], delayMs: number): ILLMClient;
 	createMeterlessClient(provider: MeterlessProvider, model?: string): ILLMClient;
+	createExternalModelClient(config: {
+		providerType: ExternalProviderType;
+		endpoint: string;
+		apiKey: string;
+		model: string;
+		temperature?: number;
+		maxTokens?: number;
+	}): ILLMClient;
+}
+
+export interface ExternalSeatConfig {
+	seatId: string;
+	role: string;
+	systemPrompt: string;
+	client: ILLMClient;
 }
 
 export interface DebateSeatFactoryOptions {
@@ -13,6 +29,7 @@ export interface DebateSeatFactoryOptions {
 	scenario?: SampleScenario;
 	seatModel?: string;
 	sampleDelayMs: number;
+	externalSeats?: ExternalSeatConfig[];
 }
 
 export class DebateSeatFactory {
@@ -25,7 +42,7 @@ export class DebateSeatFactory {
 			{ seatId: "Synthesizer", role: "synthesizer", provider: "meterless", systemPrompt: this.dependencies.loadPrompt("synthesizer") },
 		];
 
-		return configs.map((config) => {
+		const internalSeats = configs.map((config) => {
 			if (options.scenario) {
 				return new AgentSeat(
 					config,
@@ -37,8 +54,26 @@ export class DebateSeatFactory {
 				);
 			}
 
-			if (!options.provider) throw new Error("Meterless provider is required outside sample mode.");
-			return new AgentSeat(config, this.dependencies.createMeterlessClient(options.provider, options.seatModel));
+			if (!options.provider)
+				throw new Error("Meterless provider is required outside sample mode.");
+			return new AgentSeat(
+				config,
+				this.dependencies.createMeterlessClient(options.provider, options.seatModel),
+			);
 		});
+
+		const externalSeats = (options.externalSeats ?? []).map(
+			(config) => new AgentSeat(
+				{
+					seatId: config.seatId,
+					role: config.role,
+					provider: "external",
+					systemPrompt: config.systemPrompt,
+				},
+				config.client,
+			),
+		);
+
+		return [...internalSeats, ...externalSeats];
 	}
 }
