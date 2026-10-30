@@ -2594,6 +2594,7 @@ async function handleWebhooks(
 					host.match(/^10\./) ||
 					host.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\./) ||
 					host.match(/^192\.168\./) ||
+					host.match(/^169\.254\./) ||
 					url.protocol !== "https:"
 				) {
 					sendJson(res, 400, {
@@ -2729,6 +2730,38 @@ async function deliverWebhookEvent(
 			const payloadStr = JSON.stringify(payload);
 			const signature = signWebhookPayload(secret, payloadStr);
 
+			// Re-validate the stored URL at the point of use to break any
+			// taint chain from the original user input. Only public HTTPS
+			// URLs are permitted — localhost, private ranges, and metadata
+			// endpoints are rejected.
+			let targetUrl: string | null = null;
+			try {
+				const parsed = new URL(wh.target_url);
+				const host = parsed.hostname;
+				if (
+					parsed.protocol !== "https:" ||
+					host === "localhost" ||
+					host === "127.0.0.1" ||
+					host === "::1" ||
+					host.endsWith(".local") ||
+					host.match(/^10\./) ||
+					host.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\./) ||
+					host.match(/^192\.168\./) ||
+					host.match(/^169\.254\./)
+				) {
+					console.warn(
+						`[GovernMindz] Webhook ${wh.id} target rejected: ${wh.target_url}`,
+					);
+					continue;
+				}
+				targetUrl = parsed.toString();
+			} catch {
+				console.warn(
+					`[GovernMindz] Webhook ${wh.id} has invalid target URL: ${wh.target_url}`,
+				);
+				continue;
+			}
+
 			let delivered = false;
 			let lastError: string | null = null;
 			let httpStatus: number | null = null;
@@ -2745,7 +2778,7 @@ async function deliverWebhookEvent(
 						() => controller.abort(),
 						10000,
 					);
-					const resp = await fetch(wh.target_url, {
+					const resp = await fetch(targetUrl!, {
 						method: "POST",
 						headers: {
 							"Content-Type": "application/json",
